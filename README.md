@@ -36,6 +36,13 @@ Lệnh này chạy máy chủ web tĩnh tại `http://127.0.0.1:8000/web/` và m
 
 Mở thẳng một kịch bản: `http://127.0.0.1:8000/web/#S4-advanced`.
 
+Triển khai cho cả lớp: bật GitHub Pages (hoặc chép cả kho lên một máy chủ web tĩnh bất kỳ) rồi mở đường dẫn `…/web/`.
+Không cần máy chủ ứng dụng: toàn bộ mô phỏng chạy trong trình duyệt của học viên.
+
+Muốn gửi một file duy nhất (LMS, email): `npm install --no-save esbuild` rồi
+`node tools/build_single_page.mjs dist/tram-bom-st01.html` (Three.js tải từ CDN), hoặc thêm `--local` và chép kèm
+`web/vendor/` để chạy không cần Internet.
+
 ### Mô phỏng Python (không giao diện)
 
 ```bash
@@ -67,6 +74,24 @@ mọi kịch bản, mẫu bài học viên, và đối chiếu Python–JavaScri
 | (d) Cảnh báo và dừng an toàn | Độ đục/clo/pH vượt QCVN → dừng bơm, đóng van đầu ra, chờ đặt lại; áp cao → giới hạn tần số, áp rất cao → cắt bơm; chống chạy khô | S4, S5, S6, S7, S8, S9 |
 
 ## Kết quả chính (từ `python -m trambom compare`)
+
+<!-- KQ-START -->
+Một tuần vận hành bình thường (kịch bản S10, cùng nhu cầu cho cả ba phương án):
+
+| Chỉ số | Lịch cố định | Thông minh – cơ bản | Thông minh – nâng cao |
+|---|---:|---:|---:|
+| Điện năng tiêu thụ (kWh/tuần) | 527,4 | 317,1 | 307,5 |
+| Suất điện năng (kWh/m³) | 0,174 | 0,105 | 0,102 |
+| Áp lực ngoài dải (phút/tuần) | 5292 | 1 | 0 |
+|   · điểm bất lợi < 1,4 bar | 3631 | 1 | 0 |
+|   · đầu ra > 4,0 bar | 1661 | 0 | 0 |
+| Thời gian đạt dải áp (%) | 47,5 | 100,0 | 100,0 |
+| Số lần vi phạm chất lượng nước | 0 | 0 | 0 |
+| Số lần khởi động bơm | 21 | 15 | 18 |
+| Rò rỉ trên mạng lưới (m³) | 311 | 267 | 257 |
+| Áp đầu ra lớn nhất (bar) | 4,39 | 3,68 | 3,73 |
+| Tiết kiệm điện so với lịch cố định | – | 39,9 % | 41,7 % |
+<!-- KQ-END -->
 
 Bảng đầy đủ cho từng kịch bản: [docs/ket-qua/README.md](docs/ket-qua/README.md). Tóm tắt và phân tích:
 [docs/06-so-sanh-dien-nang-chat-luong.md](docs/06-so-sanh-dien-nang-chat-luong.md).

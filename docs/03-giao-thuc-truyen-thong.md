@@ -129,7 +129,8 @@ kết quả phụ thuộc vào ai bấm sau và đồng hồ của ai chạy nha
 3. Hết 10 phút tốt → `committed`.
 
 Giới hạn: tiêu chí này chỉ thấy lỗi biểu hiện trong 10 phút. Một kịch bản làm sai áp ở điểm bất lợi (gateway không đo được)
-hoặc chỉ lỗi ở giờ cao điểm sẽ lọt qua nếu phát hành lúc nhu cầu ổn định – xem phần thảo luận độ tin cậy.
+hoặc chỉ lỗi ở giờ cao điểm sẽ lọt qua nếu phát hành lúc nhu cầu ổn định; ở mức nâng cao của S3b, bù trước còn che lỗi PI
+trong suốt 10 phút giám sát – xem phần thảo luận độ tin cậy.
 
 ## 7. REST API của máy chủ điều hành (cho bảng điều khiển và tích hợp)
 

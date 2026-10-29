@@ -107,8 +107,8 @@ def cmd_compare(args):
             results[(sc_id, level)] = r
             print("  xong %s/%s sau %.0f s" % (sc_id, level, time.time() - t0))
     md = ["# Kết quả so sánh: lịch cố định và điều khiển thông minh", "",
-          "Tệp này được sinh tự động bởi `python -m trambom compare` (dt = %s s, hạt giống ngẫu nhiên %d). "
-          "Ba phương án chạy song song với **cùng một chuỗi nhu cầu, nguồn nước và sự cố**." % (args.dt or load_config()["sim"]["dt_s"], load_config()["sim"]["seed"]), ""]
+          "Tệp này được sinh tự động bởi `python -m trambom compare` (bước thời gian %s s, hạt giống ngẫu nhiên %d). "
+          "Ba phương án chạy song song với **cùng một chuỗi nhu cầu, nguồn nước và sự cố**." % (str(args.dt or load_config()["sim"]["dt_s"]).replace(".", ","), load_config()["sim"]["seed"]), ""]
     summary = {}
     for sc_id in ids:
         sc = scs[sc_id]

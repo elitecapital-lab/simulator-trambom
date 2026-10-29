@@ -83,9 +83,9 @@
       "name": "S3b · Kịch bản mới bị lỗi – tự động quay lui",
       "modes": ["a", "c"],
       "duration_h": 12,
-      "summary": "06:15 trung tâm phát hành kịch bản v4 với hệ số PI quá nhỏ (chưa kiểm thử). Gateway áp dụng có giám sát 10 phút; khi nhu cầu tăng buổi sáng, áp lực lệch xa điểm đặt và gateway tự quay lui phiên bản cũ.",
+      "summary": "06:15 trung tâm phát hành kịch bản v4 với hệ số PI quá nhỏ (chưa kiểm thử). Gateway áp dụng có giám sát 10 phút. Mức cơ bản: áp lệch xa điểm đặt khi nhu cầu tăng, gateway tự quay lui. Mức nâng cao: bù trước che lỗi trong 10 phút nên kịch bản được xác nhận, rồi gây quá áp khi ghép bơm lúc 06:40 – minh họa giới hạn của tiêu chí giám sát.",
       "questions": [
-        "Tiêu chí nào khiến gateway quay lui? Nếu kịch bản này được phát hành lúc 03:00 (nhu cầu ổn định) thì 10 phút giám sát có phát hiện được lỗi không? Hãy thử bằng cách sửa t_h.",
+        "Vì sao cùng một kịch bản lỗi bị quay lui ở mức cơ bản nhưng được xác nhận ở mức nâng cao? Nếu phát hành lúc 03:00 (nhu cầu ổn định) thì 10 phút giám sát có phát hiện được không? Thử bằng cách sửa t_h.",
         "Đề xuất quy trình kiểm thử kịch bản trước khi phát hành (mô phỏng, triển khai thử một trạm, cửa sổ giám sát theo giờ cao điểm)."
       ],
       "events": [
@@ -176,11 +176,11 @@
       "name": "S7 · Hỏng bơm P-01 giờ cao điểm – chuyển bơm dự phòng",
       "modes": ["a", "d"],
       "duration_h": 24,
-      "summary": "07:45 biến tần VFD-01 báo lỗi (ngay sau lượt kiểm tra 07:30 của công nhân). Gateway chuyển sang P-02 trong vài giây. Phương án lịch cố định chỉ phát hiện ở lượt kiểm tra 16:30.",
+      "summary": "07:45 biến tần VFD-01 báo lỗi (ngay sau lượt kiểm tra 07:30 của công nhân). Gateway chuyển sang P-02 trong vài giây. Phương án lịch cố định chỉ phát hiện ở lượt kiểm tra 16:30. Đội sửa chữa thay biến tần lúc 20:00.",
       "questions": ["Thời gian phát hiện sự cố của hai phương án khác nhau bao nhiêu? Hậu quả với áp lực điểm bất lợi?", "Khi chỉ còn một bơm, gateway có nên hạ biên an toàn để tránh quá tải không? Lập luận."],
       "events": [
         {"t_h": 7.75, "type": "pump_fault", "pump": 0},
-        {"t_h": 15.0, "type": "pump_repair", "pump": 0}
+        {"t_h": 20.0, "type": "pump_repair", "pump": 0}
       ]
     },
     {

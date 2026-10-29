@@ -148,17 +148,17 @@ def plot_result(res_basic, res_adv, path, title=""):
     ax = axes[0]
     shade(ax)
     ax.axhspan(1.4, 4.0, color=BAND, alpha=0.35, lw=0, zorder=0)
-    ax.plot(tf, hf["p_out"], color=FIXED, lw=1.0, label="Đầu ra – lịch cố định")
-    ax.plot(th, hb["p_out"], color=SMART, lw=1.2, label="Đầu ra – thông minh cơ bản")
+    ax.plot(tf, hf["p_out"], color=FIXED, lw=1.0, label="Đầu ra – cố định")
+    ax.plot(th, hb["p_out"], color=SMART, lw=1.2, label="Đầu ra – cơ bản")
     if ha:
-        ax.plot(ta, ha["p_out"], color=SMART2, lw=1.0, label="Đầu ra – thông minh nâng cao")
-    ax.plot(th, hb["p_crit"], color=CRIT, lw=1.0, label="Điểm bất lợi – thông minh cơ bản")
+        ax.plot(ta, ha["p_out"], color=SMART2, lw=1.0, label="Đầu ra – nâng cao")
+    ax.plot(th, hb["p_crit"], color=CRIT, lw=1.0, label="Điểm bất lợi – cơ bản")
     ax.axhline(1.4, color=MUTED, lw=0.8, ls="--")
     ax.axhline(4.0, color=MUTED, lw=0.8, ls="--")
     ax.set_ylabel("bar")
     ax.set_ylim(-0.5, 5.0)
-    ax.set_title("Áp lực (dải cho phép: điểm bất lợi ≥ 1,4 bar, đầu ra ≤ 4,0 bar)")
-    ax.legend(loc="upper right", ncol=2, fontsize=8, frameon=False)
+    ax.set_title("Áp lực, bar (điểm bất lợi ≥ 1,4 · đầu ra ≤ 4,0)")
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=4, fontsize=8, frameon=False, borderaxespad=0.2)
 
     ax = axes[1]
     shade(ax)
@@ -169,7 +169,7 @@ def plot_result(res_basic, res_adv, path, title=""):
         ax.plot(ta, ha["q_fc"], color=MUTED, lw=1.0, ls="--", label="Dự báo (nâng cao)")
     ax.set_ylabel("m³/h")
     ax.set_title("Lưu lượng cấp vào mạng lưới")
-    ax.legend(loc="upper right", ncol=4, fontsize=8, frameon=False)
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=4, fontsize=8, frameon=False, borderaxespad=0.2)
 
     ax = axes[2]
     shade(ax)
@@ -179,7 +179,7 @@ def plot_result(res_basic, res_adv, path, title=""):
         ax.plot(ta, ha["kw"], color=SMART2, lw=1.0, label="Thông minh nâng cao")
     ax.set_ylabel("kW")
     ax.set_title("Công suất điện tiêu thụ")
-    ax.legend(loc="upper right", ncol=3, fontsize=8, frameon=False)
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=4, fontsize=8, frameon=False, borderaxespad=0.2)
 
     ax = axes[3]
     shade(ax)
@@ -191,7 +191,7 @@ def plot_result(res_basic, res_adv, path, title=""):
         ax.annotate("%.1f kWh" % y, (x, y), xytext=(4, 0), textcoords="offset points", fontsize=8, color=INK, va="center")
     ax.set_ylabel("kWh")
     ax.set_title("Điện năng lũy kế")
-    ax.legend(loc="upper left", ncol=3, fontsize=8, frameon=False)
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=4, fontsize=8, frameon=False, borderaxespad=0.2)
 
     ax = axes[4]
     shade(ax)
@@ -202,8 +202,8 @@ def plot_result(res_basic, res_adv, path, title=""):
     ax.axhline(0.6, color=MUTED, lw=0.8, ls="--")
     ax.set_ylabel("m")
     ax.set_ylim(0, 4.2)
-    ax.set_title("Mực nước bể chứa T-01 (đường đứt: mức dừng bơm 0,6 m)")
-    ax.legend(loc="lower left", ncol=3, fontsize=8, frameon=False)
+    ax.set_title("Mực nước bể T-01, m (đứt: dừng bơm 0,6 m)")
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=4, fontsize=8, frameon=False, borderaxespad=0.2)
 
     ax = axes[5]
     shade(ax)
@@ -211,8 +211,8 @@ def plot_result(res_basic, res_adv, path, title=""):
     ax.plot(th, hb["cl"], color=CRIT, lw=1.2, label="Clo dư (mg/L)")
     ax.axhline(2.0, color=MUTED, lw=0.8, ls="--")
     ax.axhline(0.2, color=MUTED, lw=0.8, ls=":")
-    ax.set_title("Chất lượng nước trong bể (đứt: độ đục 2 NTU; chấm: clo dư 0,2 mg/L)")
-    ax.legend(loc="upper right", ncol=2, fontsize=8, frameon=False)
+    ax.set_title("Chất lượng nước trong bể (đứt: 2 NTU; chấm: clo 0,2 mg/L)")
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=4, fontsize=8, frameon=False, borderaxespad=0.2)
     ax.set_xlabel("Giờ kể từ 00:00 Thứ Hai (nền xám: mất mạng; nền hồng: chế độ (d) cảnh báo/dừng an toàn)")
     hours = th[-1]
     step = 2 if hours <= 24 else (6 if hours <= 48 else 24)

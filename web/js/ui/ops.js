@@ -1,3 +1,5 @@
+import { D_PREFIXES } from '../sim/gateway.js';
+
 // Dữ liệu trạm và lệnh điều khiển dùng chung cho màn HMI và điều khiển trong cảnh 3D.
 // Hai vị trí vận hành:
 //   'local'  – tại trạm (HMI-01 trên cửa tủ CP-02, hoặc người đứng trong trạm ở cảnh 3D): đọc trực tiếp từ gateway,
@@ -24,6 +26,11 @@ export const CMD_TXT = {
 export const cmdName = (type) => CMD_TXT[type] || type || '–';
 /** Chuỗi do lõi mô phỏng tạo (thông báo báo động, lý do lệnh, note()) dùng dấu chấm thập phân – đổi sang dấu phẩy. */
 export const viNum = (s) => (s === null || s === undefined ? '' : String(s).replace(/(\d)\.(\d)/g, '$1,$2'));
+const CMD_RE = new RegExp('\\b(' + Object.keys(CMD_TXT).join('|') + ')\\b', 'g'), ST_RE = /\b(ok|rejected|expired|duplicate)(?= \()/g;
+/** Chuỗi do lõi mô phỏng tạo (báo động, lý do lệnh, nhật ký): dấu phẩy thập phân, tên lệnh tiếng Việt thay mã nội bộ. */
+export const viText = (s) => viNum(s).replace(CMD_RE, (m) => { const n = cmdName(m); return n[0].toLowerCase() + n.slice(1); }).replace(ST_RE, (m) => CMD_STATUS[m][1]);
+export const STRAT_NAME = { threshold: 'theo ngưỡng', predictive: 'theo dự báo', fallback: 'dự phòng theo ngưỡng', custom: 'của học viên' };
+export const COMMS_NAME = { online: 'trực tuyến', offline: 'mất kết nối', resync: 'đang đồng bộ' };
 /** Thời gian còn lại dạng mm:ss (dùng chung cho HUD, HMI, thẻ 3D). */
 export const fmtLease = (sec) => { if (sec === null || sec === undefined || !(sec >= 0)) return '–'; const s = Math.floor(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
@@ -38,7 +45,8 @@ export function stationData(app, where) {
     const alarms = [...g.alarms.active.values()].map((x) => ({ ...x, station: st.sid }));
     return {
       where, t, dead, stale: dead, age: null, p1: sig.p1, p2: sig.p2, q: sig.q_f, q_in: sig.q_in_f, level: sig.level, cl: sig.cl, ntu: sig.ntu, ph: sig.ph,
-      kw: pl.kw, kwh: st.kpi.energy_kwh, p_set: dead ? st.gw_dead.p_set : g.ctrl.p_set, p_crit: pl.p_crit, valve: pl.outlet_frac, psv: pl.q_relief,
+      kw: pl.kw, kwh: st.kpi.energy_kwh, p_set: dead ? st.gw_dead.p_set : g.ctrl.p_set, p_crit: Math.max(0, pl.p_crit), // logger PL-301 đọc áp dư ≥ 0 (ống cạn → 0)
+      valve: pl.outlet_frac, psv: pl.q_relief,
       pumps: pl.pumps.map((pu, i) => ({
         tag: pu.tag, running: pu.running, f: pu.f, kw: pu.kw, amps: pu.amps, fault: pu.fault, run_h: pu.run_s / 3600, starts: pu.starts,
         starts_h: g.pm.startsLastHour(i, t), f_set: g.manual ? g.manual.f[i] : null, want: g.manual ? g.manual.run[i] : null,
@@ -86,6 +94,8 @@ export function sendCommand(app, where, type, args = {}, { toast = true } = {}) 
     const id = app.server.sendCommand(app.st.sid, type, args, t, ttl);
     res = { ok: null, id, msg: `Đã gửi ${id} ${type} qua MQTT (hạn ${Math.round(ttl / 60)} phút) – chờ trạm xác nhận` };
   }
+  if (where !== 'local') res.msg = `Đã gửi ${res.id} ${cmdName(type).toLowerCase()} qua MQTT (hạn ${Math.round((MANUAL_CMDS.includes(type) ? app.cfg.gateway.manual_cmd_ttl_s : 900) / 60)} phút) – chờ trạm xác nhận`;
+  else res.msg = viText(res.msg);
   if (toast) app.toast(res.ok === null ? res.msg : (res.ok ? '✓ ' : '✗ TỪ CHỐI: ') + res.msg);
   app._updatePanels(true);
   return res;
@@ -142,6 +152,16 @@ export function commandLog(app, where, n = 8) {
   const log = app.server.stations[app.st.sid].cmd_log, types = {};
   for (const c of log) if (c.type) types[c.id] = c.type;
   return log.slice(-n).reverse().map((c) => ({ t: c.t, id: c.id, type: c.type || types[c.id] || '', status: c.status, reason: c.reason }));
+}
+
+/**
+ * Mức nghiêm trọng của chế độ (d) cho màu hiển thị (dùng chung HMI, HUD, thanh trên, dải thông báo):
+ * 'crit' khi mini PC ngừng, trạm đang cắt/dừng an toàn/khóa chạy khô, hoặc có báo động mức báo động–khẩn thuộc nhóm (d); còn lại 'warn'.
+ */
+export function modeSev(app, d) {
+  if (d.dead) return 'crit';
+  if (d.where === 'local' && ['trip', 'safe_stop', 'level_stop'].includes(app.st.gw.safety.state)) return 'crit';
+  return d.alarms.some((x) => (x.sev === 'critical' || x.sev === 'alarm') && D_PREFIXES.some((p) => x.code.startsWith(p))) ? 'crit' : 'warn';
 }
 
 /** Vị trí có quyền ra lệnh tay lúc này không (để bật/tắt nút). */

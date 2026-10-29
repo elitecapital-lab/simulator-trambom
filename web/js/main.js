@@ -6,7 +6,7 @@ import { Control3D } from './ui/control3d.js';
 import { h, fmt } from './ui/dom.js';
 import { HmiView } from './ui/hmi.js';
 import { Intro } from './ui/intro.js';
-import { viNum } from './ui/ops.js';
+import { COMMS_NAME, CTL_NAME, MODE_NAME, modeSev, stationData, STRAT_NAME, viNum } from './ui/ops.js';
 import { Panels } from './ui/panels.js';
 import { StationScene } from './ui/scene3d.js';
 import { ico, PANES, Shell } from './ui/shell.js';
@@ -226,12 +226,7 @@ class App {
     requestAnimationFrame((t) => this.loop(t));
   }
   /** Màu của chế độ (d) theo mức nghiêm trọng cao nhất: 'crit' khi dừng an toàn / cắt bơm / khóa chạy khô hoặc có báo động mức báo động–khẩn; 'warn' khi chỉ có cảnh báo. */
-  modeSev() {
-    const g = this.st.gw;
-    if (this.st.gw_dead || ['trip', 'safe_stop', 'level_stop'].includes(g.safety.state)) return 'crit';
-    for (const x of g.alarms.active.values()) if (x.sev === 'alarm' || x.sev === 'critical') return 'crit';
-    return 'warn';
-  }
+  modeSev() { return modeSev(this, stationData(this, 'local')); }
   view() {
     const g = this.st.gw;
     return { plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
@@ -267,7 +262,7 @@ class App {
     const cs = getComputedStyle(document.documentElement), px = (n) => parseFloat(cs.getPropertyValue(n)) || 0, e = px('--edge');
     // sb, sr: tấm biểu đồ và khung bên phải đang mở – chỉ để bảng nổi 3D tránh, camera giữ nguyên
     const B = document.body.classList, sb = B.contains('sheet-open') ? px('--sheet-h') + e : 0;
-    if (this.shell.mqMobile.matches) return { l: 0, r: 0, t: px('--topbar-h') + px('--hud-h'), b: px('--dock-h'), sb, sr: 0 };
+    if (this.shell.mqMobile.matches) return { l: 0, r: 0, t: px('--topbar-h') + px('--hud-h') + px('--banner-h'), b: px('--dock-h'), sb, sr: 0 };
     const r = px('--dock-w') + 2 * e, sr = B.contains('side-open') ? r + px('--side-w') + e : 0;
     return { l: B.contains('hud-min') ? 0 : px('--hud-w') + 2 * e, r, t: px('--topbar-h'), b: 0, sb, sr };
   }
@@ -320,7 +315,7 @@ class App {
     sc.setLabel('UPS-01', 'nguồn lưới · 100 %');
     sc.setLabel('HMI-01', dead ? 'mất kết nối' : ctlName, dead);
     sc.setLabel('RT-01', dead ? 'mini PC im lặng' : { online: '4G trực tuyến', offline: 'MẤT KẾT NỐI', resync: 'đồng bộ…' }[g.comms.state], dead || g.comms.state === 'offline');
-    sc.setLabel('MANG-LUOI', `điểm bất lợi ${fmt(pl.p_crit, 2)} bar`, pl.p_crit < 1.4);
+    sc.setLabel('MANG-LUOI', `điểm bất lợi ${fmt(Math.max(0, pl.p_crit), 2)} bar`, pl.p_crit < 1.4);
   }
   liveValues(tag) {
     const g = this.st.gw, pl = this.st.plant, sig = g.sig || {};
@@ -334,12 +329,12 @@ class App {
       'AIT-201': [['Clo dư', fmt(sig.cl, 3, 'mg/L')]], 'AIT-202': [['Độ đục', fmt(sig.ntu, 3, 'NTU')]], 'AIT-203': [['pH', fmt(sig.ph, 3)]],
       'MANG-LUOI': [['Nhu cầu tiêu thụ', fmt(pl.q_cons, 1, 'm³/h')], ['Cấp được', fmt(pl.q_served, 1, 'm³/h')], ['Rò rỉ', fmt(pl.q_leak, 2, 'm³/h')], ['Áp điểm bất lợi', fmt(pl.p_crit, 2, 'bar')], ['Thiếu hụt bồn mái', fmt(pl.backlog, 1, 'm³')]],
       'CP-01': [['Công suất', fmt(pl.kw, 2, 'kW')], ['Điện năng', fmt(this.st.kpi.energy_kwh, 1, 'kWh')]],
-      'GW-01': [['Chế độ', this.st.gw_dead ? 'mini PC ngừng' : g.mode()], ['Quyền điều khiển', g.controlSrc()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm', g.comms.buf.length + ' bản ghi']],
-      'MPC-01': [['Trạng thái', this.st.gw_dead ? 'treo (watchdog đã nhả)' : 'đang chạy GW-01'], ['Chế độ gateway', g.mode()], ['Quyền điều khiển', g.controlSrc()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm lưu-và-chuyển', g.comms.buf.length + ' bản ghi'], ['Thời gian ngừng lũy kế', fmt((this.st.gw_down_s + (this.st.gw_dead ? this.st.t - this.st.gw_dead.t0 : 0)) / 60, 0, 'phút')]],
-      'RT-01': [['Kết nối', g.comms.state], ['Dữ liệu lên', fmt(this.st.link.bytes_up / 1e6, 2, 'MB')], ['SMS đã gửi', String(g.comms.stats.sms)]],
+      'GW-01': [['Chế độ', this.st.gw_dead ? 'mini PC ngừng' : MODE_NAME[g.mode()]], ['Quyền điều khiển', CTL_NAME[g.controlSrc()]], ['Kịch bản', 'v' + g.script.version + ' ' + (STRAT_NAME[g.script.strategy] || g.script.strategy)], ['Bộ đệm', g.comms.buf.length + ' bản ghi']],
+      'MPC-01': [['Trạng thái', this.st.gw_dead ? 'treo (watchdog đã nhả)' : 'đang chạy GW-01'], ['Chế độ gateway', MODE_NAME[g.mode()]], ['Quyền điều khiển', CTL_NAME[g.controlSrc()]], ['Kịch bản', 'v' + g.script.version + ' ' + (STRAT_NAME[g.script.strategy] || g.script.strategy)], ['Bộ đệm lưu-và-chuyển', g.comms.buf.length + ' bản ghi'], ['Thời gian ngừng lũy kế', fmt((this.st.gw_down_s + (this.st.gw_dead ? this.st.t - this.st.gw_dead.t0 : 0)) / 60, 0, 'phút')]],
+      'RT-01': [['Kết nối', COMMS_NAME[g.comms.state] || g.comms.state], ['Dữ liệu lên', fmt(this.st.link.bytes_up / 1e6, 2, 'MB')], ['SMS đã gửi', String(g.comms.stats.sms)]],
       'WDR-01': [['Rơ-le', this.st.gw_dead ? 'nhả' : 'giữ'], ['Dự phòng', this.st.gw_dead ? viNum(this.st.gw_dead.note()) : (this.cfg.hardware.VFD_PID_fallback ? 'sẵn sàng: PID nội ' + fmt(this.cfg.fallback.p_set_bar, 1, 'bar') : 'không lắp – I/O giữ lệnh cuối')]],
       'EM-101': [['Công suất', fmt(pl.kw, 2, 'kW')], ['Điện năng', fmt(this.st.kpi.energy_kwh, 1, 'kWh')]],
-      'HMI-01': [['Quyền điều khiển', g.controlSrc()], ['Mở màn HMI', 'nút "HMI" trên thanh trên cùng']],
+      'HMI-01': [['Quyền điều khiển', CTL_NAME[g.controlSrc()]], ['Mở màn HMI', 'nút "HMI" trên thanh trên cùng']],
     };
     pl.pumps.forEach((pu, i) => { L['VFD-0' + (i + 1)] = [['Trạng thái', pu.fault ? 'lỗi' : pu.running ? 'chạy' : 'dừng'], ['Tần số', fmt(pu.f, 1, 'Hz')], ['Dòng điện', fmt(pu.amps, 1, 'A')], ['Công suất', fmt(pu.kw, 2, 'kW')], ['Nguồn lệnh', this.st.gw_dead ? (this.st.gw_dead.enabled ? 'PID nội (watchdog)' : 'giữ lệnh cuối của I/O') : 'mini PC qua Modbus RTU']]; });
     pl.pumps.forEach((pu, i) => { L[pu.tag] = [['Trạng thái', pu.fault ? 'lỗi' : pu.running ? 'chạy' : 'dừng'], ['Tần số', fmt(pu.f, 1, 'Hz')], ['Lưu lượng', fmt(pu.q, 1, 'm³/h')], ['Cột áp', fmt(pu.h, 1, 'm')], ['Công suất', fmt(pu.kw, 2, 'kW')], ['Dòng điện', fmt(pu.amps, 1, 'A')], ['Số lần khởi động', String(pu.starts)], ['Giờ chạy', fmt(pu.run_s / 3600, 1, 'h')]]; });

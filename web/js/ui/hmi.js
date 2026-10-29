@@ -5,10 +5,9 @@
 //   - Tại trạm (màn cảm ứng HMI-01 trên cửa tủ CP-02): đọc trực tiếp từ gateway, lệnh đi thẳng, không qua mạng.
 //   - Trung tâm (SCADA): chỉ thấy dữ liệu MÁY CHỦ đã nhận qua MQTT (chu kỳ 10 s, đứng yên khi mất mạng);
 //     lệnh đi qua máy chủ, có thời hạn ngắn, có thể bị từ chối (quyền tại chỗ) hoặc hết hạn (mất mạng).
-import { D_PREFIXES } from '../sim/gateway.js';
 import { fmtClock, fmtHM } from '../sim/util.js';
 import { h, SEV_LABEL, tShort } from './dom.js';
-import { ackAlarm, CMD_STATUS, CMD_TXT, cmdName, commandLog, CTL_NAME, firstBlock, fmtLease, MODE_NAME, needsReset, permissives, sendCommand, SEV_ORDER, stationData, viNum } from './ops.js';
+import { ackAlarm, CMD_STATUS, cmdName, commandLog, CTL_NAME, firstBlock, fmtLease, MODE_NAME, modeSev, needsReset, permissives, sendCommand, SEV_ORDER, stationData, STRAT_NAME, viNum, viText } from './ops.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 function S(tag, attrs = {}, ...kids) {
@@ -25,10 +24,7 @@ function S(tag, attrs = {}, ...kids) {
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const num = (v, nd) => { const s = v.toFixed(nd); return (/^-0(\.0+)?$/.test(s) ? s.slice(1) : s).replace('.', ','); }; // không hiện "-0,00"
-const CMD_RE = new RegExp('\\b(' + Object.keys(CMD_TXT).join('|') + ')\\b', 'g'), ST_RE = /\b(ok|rejected|expired|duplicate)(?= \()/g;
-/** Chuỗi do lõi mô phỏng tạo (báo động, lý do lệnh, nhật ký): dấu phẩy thập phân, tên lệnh tiếng Việt thay mã nội bộ. */
-const viTxt = (s) => viNum(s).replace(CMD_RE, (m) => { const n = cmdName(m); return n[0].toLowerCase() + n.slice(1); }).replace(ST_RE, (m) => CMD_STATUS[m][1]);
-const STRAT = { threshold: 'theo ngưỡng', predictive: 'theo dự báo', fallback: 'dự phòng theo ngưỡng', custom: 'của học viên' };
+const viTxt = viText, STRAT = STRAT_NAME;
 const NOOP = /không ở trạng thái dừng an toàn|đã ở chế độ tự động/; // lệnh hợp lệ nhưng không làm thay đổi gì
 const VB = { y: 14, w: 1280, h: 638 }; // khung nhìn sơ đồ P&ID (cắt bớt lề trên/dưới trống)
 // chỉ ghi DOM khi giá trị thay đổi (update() chạy mỗi 250 ms)
@@ -388,8 +384,7 @@ export class HmiView {
   /** Lớp màu của chế độ gateway; (d) theo mức nghiêm trọng cao nhất đang có: chỉ cảnh báo → vàng, báo động/khẩn/dừng an toàn → đỏ. */
   _modeCls(d) {
     if (d.mode !== 'd') return { a: 'ok', b: 'warn', c: 'info', x: 'alarm' }[d.mode] || '';
-    if (!this.ctx.remote && !d.dead && ['trip', 'safe_stop', 'level_stop'].includes(this.app.st.gw.safety.state)) return 'alarm';
-    return d.alarms.some((x) => (x.sev === 'critical' || x.sev === 'alarm') && D_PREFIXES.some((p) => x.code.startsWith(p))) ? 'alarm' : 'warn';
+    return modeSev(this.app, d) === 'crit' ? 'alarm' : 'warn';
   }
   /** Tên chế độ gateway; trung tâm mất bản tin thì (b) chỉ là suy luận. */
   _modeText(d) { return this.ctx.remote && this.ctx.stale ? '(b)? Tự vận hành – suy luận' : MODE_NAME[d.mode] || d.mode; }

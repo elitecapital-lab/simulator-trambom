@@ -243,7 +243,7 @@ export class Panels {
   }
   updateScript() {
     const a = this.app, gw = a.st.gw;
-    this.scriptInfo.textContent = `v${gw.script.version} · ${gw.script.strategy} · tác giả: ${gw.script.author ?? 'máy chủ'} · hash ${gw.script.hash}${gw.script.local_modified ? ' · có chỉnh sửa tại chỗ chưa đồng bộ (' + gw.local_changes.length + ')' : ''}`;
+    this.scriptInfo.textContent = `v${gw.script.version} · ${STRAT_TXT[gw.script.strategy] || gw.script.strategy} · tác giả: ${gw.script.author ?? 'máy chủ'} · hash ${gw.script.hash}${gw.script.local_modified ? ' · có chỉnh sửa tại chỗ chưa đồng bộ (' + gw.local_changes.length + ')' : ''}`;
     if (a.studentLoaded && !gw.custom_fn) this.codeStatus.textContent = 'Kịch bản học viên bị lỗi khi chạy – gateway đã chuyển về kịch bản dựng sẵn (xem Nhật ký).';
     const log = a.server.stations['ST-01'].sync_log;
     const key = log.length;

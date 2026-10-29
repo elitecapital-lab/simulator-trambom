@@ -179,7 +179,8 @@ class App {
     this.running = run;
     this._syncHeader();
     this.closeDrawer();
-    this.ctl3d?.close();
+    this.ctl3d?.close(); this.ctl3d?.setWhere?.('local');
+    this.hmi?.reset?.();
     this.updateCharts();
     this._updatePanels(true);
     if (this._applyThemeInit) { this._applyThemeInit(); this._applyThemeInit = null; }
@@ -256,9 +257,11 @@ class App {
   /** Phần khung 3D bị thanh trên, HUD, dock che – để camera căn giữa vùng còn trống. */
   _viewInsets() {
     const cs = getComputedStyle(document.documentElement), px = (n) => parseFloat(cs.getPropertyValue(n)) || 0, e = px('--edge');
-    const sb = document.body.classList.contains('sheet-open') ? px('--sheet-h') + e : 0; // tấm biểu đồ: chỉ để bảng nổi tránh, camera giữ nguyên
-    if (this.shell.mqMobile.matches) return { l: 0, r: 0, t: px('--topbar-h') + px('--hud-h'), b: px('--dock-h'), sb };
-    return { l: document.body.classList.contains('hud-min') ? 0 : px('--hud-w') + 2 * e, r: px('--dock-w') + 2 * e, t: px('--topbar-h'), b: 0, sb };
+    // sb, sr: tấm biểu đồ và khung bên phải đang mở – chỉ để bảng nổi 3D tránh, camera giữ nguyên
+    const B = document.body.classList, sb = B.contains('sheet-open') ? px('--sheet-h') + e : 0;
+    if (this.shell.mqMobile.matches) return { l: 0, r: 0, t: px('--topbar-h') + px('--hud-h'), b: px('--dock-h'), sb, sr: 0 };
+    const r = px('--dock-w') + 2 * e, sr = B.contains('side-open') ? r + px('--side-w') + e : 0;
+    return { l: B.contains('hud-min') ? 0 : px('--hud-w') + 2 * e, r, t: px('--topbar-h'), b: 0, sb, sr };
   }
   _updatePanels(force) {
     if (!this.st) return;

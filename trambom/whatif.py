@@ -10,6 +10,7 @@ HW_LABEL = {
     "AIT-201": "Máy đo clo dư online AIT-201",
     "AIT-202": "Máy đo độ đục online AIT-202",
     "AIT-203": "Máy đo pH online AIT-203",
+    "MV-02": "Van điện đầu ra MV-02",
     "SMS": "Modem 4G có SMS dự phòng",
     "FT-100_pulse": "Đầu ra xung của đồng hồ nước vào FT-100",
 }
@@ -22,14 +23,18 @@ METRIC_LABEL = {
     "quality_viol_m3": ("Nước không đạt QCVN đã cấp", "m³", 1),
     "detect_min": ("Thời gian phát hiện sự cố", "phút", 1),
     "notify_max_min": ("Báo động nghiêm trọng tới người trực chậm nhất", "phút", 1),
+    "unserved_m3": ("Nước dân thiếu (bồn mái cạn)", "m³", 1),
 }
-# (tùy chọn phần cứng, kịch bản, mức, các chỉ số cần so sánh)
+# (tùy chọn phần cứng, kịch bản, mức, các chỉ số cần so sánh[, cấu hình bổ sung, nhãn bổ sung])
 CASES = [
-    ("VFD_PID_fallback", "S11", "basic", ["t_out_min", "p_crit_min", "energy_kwh"]),
+    ("VFD_PID_fallback", "S11", "basic", ["t_out_min", "p_crit_min", "unserved_m3"]),
+    ("VFD_PID_fallback", "S11", "basic", ["t_out_min", "p_crit_min"], {"fallback.io_safe_state": "hold"}, "I/O cấu hình giữ lệnh cuối"),
     ("PT-102", "S5", "basic", ["t_high_min", "p_out_max", "detect_min"]),
     ("PT-102", "S5", "advanced", ["t_high_min", "t_out_min", "detect_min"]),
     ("AIT-202", "S4", "basic", ["quality_viol_m3", "detect_min"]),
     ("AIT-201", "S9", "basic", ["quality_viol_m3", "detect_min"]),
+    ("AIT-203", "S13", "basic", ["quality_viol_m3", "detect_min"]),
+    ("MV-02", "S4", "basic", ["quality_viol_m3", "t_out_min"]),
     ("SMS", "S9", "basic", ["notify_max_min"]),
     ("FT-100_pulse", "S6", "advanced", ["detect_min", "t_out_min"]),
 ]
@@ -52,12 +57,22 @@ def metrics(s):
     return {"t_out_min": s["t_out_min"], "t_high_min": s["t_high_min"], "t_low_min": s["t_low_min"],
             "p_out_max": s["p_out_max"], "p_crit_min": s["p_crit_min"], "energy_kwh": s["energy_kwh"],
             "quality_viol_m3": s["quality_viol_m3"], "detect_min": det, "detect_how": inc["how"] if inc else None,
-            "notify_max_min": s["notify"]["max_delay_min"], "dry_run_min": s["dry_run_min"]}
+            "notify_max_min": s["notify"]["max_delay_min"], "dry_run_min": s["dry_run_min"], "unserved_m3": s["unserved_m3"]}
+
+
+def _apply(cfg, overrides):
+    for path, v in (overrides or {}).items():
+        node = cfg
+        keys = path.split(".")
+        for k in keys[:-1]:
+            node = node[k]
+        node[keys[-1]] = v
+    return cfg
 
 
 def run_case(job):
-    opt, sc_id, level, installed = job
-    cfg = load_config()
+    opt, sc_id, level, installed, overrides = job
+    cfg = _apply(load_config(), dict(overrides))
     cfg["hardware"][opt] = installed
     r = TwinSim(cfg, load_scenarios()[sc_id], level, with_fixed=False).run()
     return job, metrics(r["smart"])
@@ -65,7 +80,8 @@ def run_case(job):
 
 def run_all(jobs=4, progress=None):
     from concurrent.futures import ProcessPoolExecutor
-    work = [(o, sc, lv, inst) for o, sc, lv, _ in CASES for inst in (True, False)]
+    cases = [(c[0], c[1], c[2], c[3], tuple(sorted((c[4] if len(c) > 4 else {}).items())), c[5] if len(c) > 5 else "") for c in CASES]
+    work = [(o, sc, lv, inst, ov) for o, sc, lv, _, ov, _ in cases for inst in (True, False)]
     res = {}
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         for job, m in ex.map(run_case, work):
@@ -73,9 +89,9 @@ def run_all(jobs=4, progress=None):
             if progress:
                 progress(job)
     out = []
-    for o, sc, lv, keys in CASES:
-        out.append({"option": o, "label": HW_LABEL[o], "scenario": sc, "level": lv, "metrics": keys,
-                    "with": res[(o, sc, lv, True)], "without": res[(o, sc, lv, False)]})
+    for o, sc, lv, keys, ov, note in cases:
+        out.append({"option": o, "label": HW_LABEL[o] + (" – " + note if note else ""), "scenario": sc, "level": lv, "metrics": keys,
+                    "with": res[(o, sc, lv, True, ov)], "without": res[(o, sc, lv, False, ov)]})
     return out
 
 

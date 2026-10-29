@@ -18,7 +18,8 @@ NODE = shutil.which("node")
 CASES = [("S3", "basic", 15.0, ()), ("S4", "basic", 16.0, ()), ("S5", "advanced", 10.0, ()), ("S8", "advanced", 4.0, ()),
          ("S11", "basic", 24.0, ()), ("S11", "basic", 24.0, ("VFD_PID_fallback",)), ("S12", "basic", 17.0, ()),
          ("S5", "basic", 10.0, ("PT-102",)), ("S4", "basic", 16.0, ("AIT-202",)), ("S6", "advanced", 11.0, ("FT-100_pulse",)),
-         ("S9", "basic", 41.0, ("SMS",))]
+         ("S9", "basic", 41.0, ("SMS",)), ("S13", "basic", 22.0, ()), ("S4", "basic", 22.0, ("MV-02",)),
+         ("S12", "advanced", 17.0, ())]
 
 
 def run_js(sid, level, hours, off=()):

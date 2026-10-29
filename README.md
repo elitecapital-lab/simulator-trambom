@@ -18,7 +18,7 @@ dành cho sinh viên các học phần Tự động hóa, Hệ thống nhúng/Io
   - *Tại trạm · HMI-01*: dữ liệu trực tiếp từ gateway, lệnh đi thẳng;
   - *Trung tâm · SCADA*: chỉ thấy dữ liệu máy chủ nhận qua MQTT, lệnh có thời hạn.
 
-  Cả hai đều có điều khiển bơm TAY (chạy/dừng, đặt tần số, đóng/mở van), quyền tại chỗ ưu tiên và tự trở về tự động khi mất mạng.
+  Cả hai đều có điều khiển bơm TAY (chạy/dừng, đặt tần số, đóng/mở van), quyền tại chỗ ưu tiên; quyền từ xa tự trở về tự động khi mất mạng.
 - **Lõi mô phỏng Python** (chỉ thư viện chuẩn): chạy kịch bản không giao diện, xuất bảng KPI và biểu đồ, kiểm thử tự động,
   chấm bài học viên. Lõi JavaScript của bản web là bản chuyển đổi một-một, được kiểm thử đối chiếu cho cùng kết quả.
 
@@ -87,8 +87,8 @@ mọi kịch bản, mẫu bài học viên, và đối chiếu Python–JavaScri
 | (b) Mất mạng – tự vận hành | Phát hiện sau 60 s không có ACK nhịp tim; chạy kịch bản đã lưu, cộng biên áp an toàn, lưu đệm và nén dữ liệu, SMS dự phòng | S2, S9 |
 | (c) Đồng bộ khi có mạng lại | Bắt tay đồng bộ, hợp nhất 3 chiều tham số (bảo thủ cho tham số an toàn), lệnh hết hạn bị hủy, phát lại bộ đệm, quay lui kịch bản lỗi | S3, S3b, S9 |
 | (d) Cảnh báo và dừng an toàn | Độ đục/clo/pH vượt QCVN → dừng bơm, đóng van đầu ra, chờ đặt lại; áp cao → giới hạn tần số, áp rất cao → cắt bơm; chống chạy khô | S4, S5, S6, S7, S8, S9 |
-| Mini PC ngừng (watchdog) | Rơ-le watchdog nhả sau 5 s → biến tần chạy PID nội 3,0 bar; mất dừng an toàn chất lượng, ghép bơm, đo xa; khởi động lại → đồng bộ (c) | S11 |
-| Điều khiển TAY từ xa / tại chỗ | Chạy/dừng bơm, đặt tần số, đóng/mở van; quyền tại chỗ ưu tiên; quyền từ xa có hạn và tự hủy khi mất mạng; lớp an toàn vẫn ưu tiên | S12 |
+| Mini PC ngừng (watchdog) | Rơ-le watchdog nhả sau 5 s (trước khi I/O hết chờ ở 10 s) → biến tần của bơm đang chạy giữ 3,0 bar bằng PID nội; mất dừng an toàn chất lượng, ghép bơm, đo xa; khởi động lại → theo dõi 60 s rồi tiếp quản, đồng bộ (c) | S11 |
+| Điều khiển TAY từ xa / tại chỗ | Chạy/dừng bơm, đặt tần số, đóng/mở van; quyền tại chỗ ưu tiên; quyền từ xa có hạn và tự hủy khi mất mạng (quyền tại chỗ thì không); lớp an toàn vẫn ưu tiên | S12 |
 
 ## Kết quả chính (từ `python -m trambom compare`)
 

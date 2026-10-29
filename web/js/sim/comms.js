@@ -34,7 +34,7 @@ export class CommsClient {
       if (typ === 'hb_ack') { this.last_ack = t; if (this.state === 'offline') this._onReconnect(t); }
       else if (typ === 'tel_ack') {
         for (const r of this.buf) if (r.seq_lo >= msg.seq_lo && r.seq_hi <= msg.seq_hi) { r.acked = true; this.any_acked = true; }
-      } else if (typ === 'evt_ack') { const ids = new Set(msg.eseqs); this.events = this.events.filter((e) => !ids.has(e.eseq)); }
+      } else if (typ === 'evt_ack') { const ids = new Set(msg.eseqs); this.events = this.events.filter((e) => !ids.has(e.eseq)); this.gw.onEventsAcked(ids, t); }
       else if (typ === 'cmd') this.gw.handleCommand(msg.cmd, t, 'trực tuyến');
       else if (typ === 'script') this.gw.handleScript(msg.doc, t, 'phát hành trực tuyến', msg.conflicts);
       else if (typ === 'version_assigned') this.gw.onVersionAssigned(msg, t);

@@ -15,11 +15,12 @@ const CHANGE_TXT = { giu_nguyen: 'giữ nguyên', cau_hinh_lai: 'cấu hình l�
 const PRIO_TXT = { bat_buoc: 'bắt buộc', nen_co: 'nên có', tuy_chon: 'tùy chọn' };
 // Tùy chọn phần cứng mô phỏng được (cfg.hardware) và kịch bản thử tương ứng
 export const HW_OPTS = [
-  ['VFD_PID_fallback', 'Rơ-le watchdog WDR-01 + PID nội biến tần', 'Mini PC treo → biến tần tự giữ áp 3,0 bar. Không có: mô-đun I/O giữ nguyên lệnh cuối.', 'S11', 'basic'],
+  ['VFD_PID_fallback', 'Rơ-le watchdog WDR-01 + PID nội biến tần', 'Mini PC treo → sau 5 s biến tần tự giữ áp 3,0 bar. Không có: sau 10 s mô-đun I/O đưa lệnh chạy về 0, bơm dừng.', 'S11', 'basic'],
   ['PT-102', 'Cảm biến áp lực thứ hai PT-102', 'Đối chiếu chéo, biểu quyết 2/3 khi PT-101 kẹt/trôi.', 'S5', 'basic'],
   ['AIT-201', 'Máy đo clo dư online AIT-201', 'Dừng an toàn khi clo < 0,2 mg/L.', 'S9', 'basic'],
   ['AIT-202', 'Máy đo độ đục online AIT-202', 'Dừng an toàn khi độ đục > 2 NTU.', 'S4', 'basic'],
-  ['AIT-203', 'Máy đo pH online AIT-203', 'Dừng an toàn khi pH ngoài 6,0–8,5.', 'S0', 'basic'],
+  ['AIT-203', 'Máy đo pH online AIT-203 (khuyến nghị)', 'Dừng an toàn khi pH ngoài 6,0–8,5.', 'S13', 'basic'],
+  ['MV-02', 'Van điện đầu ra MV-02 (khuyến nghị)', 'Cách ly trạm khi dừng an toàn; trình tự mở van trước – chạy bơm sau.', 'S4', 'basic'],
   ['SMS', 'SMS dự phòng qua modem 4G', 'Báo động nghiêm trọng tới tổ trực khi mất mạng IP.', 'S9', 'basic'],
   ['FT-100_pulse', 'Đầu phát xung cho đồng hồ nước vào FT-100', 'Không có: ước lượng lưu lượng vào bằng cân bằng khối lượng (LT-101 + FT-101).', 'S6', 'advanced'],
 ];
@@ -46,7 +47,7 @@ export class Panels {
           h('tr', {}, h('td', {}, 'Chiến lược thực dùng'), h('td', {}, c.strategy)),
           h('tr', {}, h('td', {}, 'Lệnh ghi đè từ xa'), h('td', {}, c.override)),
           h('tr', {}, h('td', {}, 'Bộ đệm lưu-và-chuyển'), h('td', {}, c.bufMeter, c.bufTxt))))),
-      h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Số đo & điều khiển (đã kiểm tra hợp lệ)'),
+      h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Số đo & điều khiển (đã kiểm tra hợp lệ)'), c.sigNote = h('p', { class: 'note', hidden: '' }, 'Mini PC ngừng: các giá trị dưới đây là giá trị cuối cùng gateway xử lý trước khi treo.'),
         h('table', { class: 'kv fixed' }, h('tbody', {},
           row('p1', 'PT-101 áp đầu ra', 'bar'), row('p2', 'PT-102 áp bảo vệ', 'bar'), row('pset', 'Áp đặt P_set(Q)', 'bar'), row('pmodel', 'Áp theo mô hình bơm', 'bar'),
           row('pcrit', 'Áp điểm bất lợi (logger PL-301)', 'bar'), row('q', 'FT-101 lưu lượng ra', 'm³/h'), row('qfc', 'Dự báo lưu lượng', 'm³/h'), row('qin', 'FT-100 lưu lượng vào', 'm³/h'),
@@ -62,7 +63,8 @@ export class Panels {
       : h('span', { class: 'chip ' + { a: 'good', b: 'warning', c: 'info', d: 'critical' }[mode] }, MODE_TXT[mode]),
       !dead && ctl !== 'auto' ? h('span', { class: 'chip warning', style: 'margin-left:4px' }, ctl === 'remote' ? 'TAY từ xa' : 'TAY tại chỗ') : '');
     const cs = gw.comms.state;
-    c.comms.textContent = COMMS_TXT[cs] + (gw.offline_since !== null ? ` · ${fmt((a.st.t - gw.offline_since) / 60, 0)} phút` : '');
+    c.comms.textContent = dead ? 'Ngừng gửi – máy chủ phát hiện qua LWT' : COMMS_TXT[cs] + (gw.offline_since !== null ? ` · ${fmt((a.st.t - gw.offline_since) / 60, 0)} phút` : '');
+    c.sigNote.hidden = !dead;
     c.script.textContent = `v${gw.script.version}${gw.script.local_modified ? ' + sửa tại chỗ' : ''} · ${gw.script.hash}${gw.watch ? ' · đang giám sát' : ''}`;
     c.strategy.textContent = STRAT_TXT[gw.ctrl.strategy_used] || gw.ctrl.strategy_used;
     c.override.textContent = gw.override ? `${fmt(gw.override.p_set, 2)} bar, còn ${fmt((gw.override.until - a.st.t) / 60, 0)} phút` : 'không';
@@ -419,6 +421,7 @@ export class Panels {
     const a = this.app;
     const sc = a.scenarios.find((s) => s.id === scId);
     if (!sc || scId === 'S0') { this.wiOut.replaceChildren(h('p', { class: 'note' }, 'Chưa có kịch bản riêng cho tùy chọn này – hãy bỏ chọn rồi tiêm lỗi pH ở tab Sự cố.')); return; }
+    const token = (this._wiToken = (this._wiToken ?? 0) + 1); // lần bấm mới hủy lần chạy cũ
     const mk = (inst) => { const cfg = structuredClone(a.cfg); cfg.hardware[opt] = inst; return new TwinSim(cfg, sc, level, { withFixed: false }); };
     const sims = [mk(true), mk(false)];
     const n = Math.round((sc.duration_h ?? 24) * 3600 / sims[0].dt);
@@ -427,6 +430,7 @@ export class Panels {
     const prog = h('p', { class: 'note' });
     this.wiOut.replaceChildren(prog);
     const tick = () => {
+      if (token !== this._wiToken) return;
       const t0 = performance.now();
       while (i < n && performance.now() - t0 < 60) { sims[0].step(); sims[1].step(); i++; }
       prog.textContent = `Đang chạy ${scId} (${level === 'basic' ? 'cơ bản' : 'nâng cao'}) có/không “${label}”: ${Math.round(100 * i / n)} %`;

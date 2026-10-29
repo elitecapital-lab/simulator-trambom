@@ -368,6 +368,38 @@
       ]
     },
     {
+      "id": "S13",
+      "name": "S13 · pH nước nguồn 9,5 trong 8 giờ – giá trị của máy đo pH",
+      "modes": ["a", "d"],
+      "duration_h": 24,
+      "summary": "06:00 nước nguồn có pH 9,5 kéo dài 8 giờ (sự cố châm hóa chất ở nhà máy nước). Có AIT-203: dừng an toàn khi pH trong bể vượt 8,5 quá 120 s; 14:30 xả bể, 16:30 đặt lại khi nước đã đạt. Tắt AIT-203 ở tab Thiết bị (hoặc python -m trambom run S13 --off AIT-203) để thấy nước pH cao vẫn được cấp ra mạng.",
+      "questions": [
+        "Không có máy đo pH online, bao nhiêu m³ nước pH > 8,5 đã cấp ra mạng? Lượt kiểm tra tay có phát hiện được không?",
+        "Có máy đo pH thì trạm dừng cấp nhiều giờ (áp ngoài dải). Hãy lập luận vì sao ưu tiên an toàn chất lượng vẫn đúng, và trung tâm nên làm gì để rút ngắn thời gian dừng.",
+        "Khi nào máy đo pH nên chuyển từ khuyến nghị thành bắt buộc (gợi ý: cảm biến clo cần bù pH, nhà máy nguồn có chỉnh pH bằng vôi)?"
+      ],
+      "events": [
+        {"t_h": 6.0, "type": "inflow_quality", "param": "ph", "value": 9.5, "until_h": 14.0},
+        {
+          "t_h": 14.5,
+          "type": "server_command",
+          "cmd": {
+            "type": "flush_tank",
+            "args": {"target_m": 1.4}
+          }
+        },
+        {
+          "t_h": 16.5,
+          "type": "server_command",
+          "cmd": {
+            "type": "reset_safe_stop",
+            "args": {}
+          },
+          "ttl_s": 7200
+        }
+      ]
+    },
+    {
       "id": "S0",
       "name": "S0 · Tự do (tự tạo sự cố bằng bảng điều khiển)",
       "modes": ["a", "b", "c", "d"],

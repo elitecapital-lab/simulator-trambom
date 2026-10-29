@@ -31,7 +31,7 @@ class NetworkSim:
             s.step()
         self.server.step(t)
         for s in self.smart:
-            if s.gw_dead is not None and not self.server.stations[s.sid]["online"]:
+            if s.gw_dead is not None and not s.gw_dead.restarted and not self.server.stations[s.sid]["online"]:
                 s.kpi.detect_kind(t, "gateway_fail", "máy chủ mất nhịp tim (LWT)")
         self.t = self.smart[0].t
 

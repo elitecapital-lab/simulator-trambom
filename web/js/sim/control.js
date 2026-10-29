@@ -131,6 +131,8 @@ export class Controller {
     if (level < lv.conserve_m) { cons = lv.conserve_delta_bar; this.conserve = 2; }
     A.setHyst(t, dt, 'LEVEL_LOW', level < lv.conserve_m, level > lv.conserve_m + 0.05, 'warning',
       `Mức bể thấp (< ${lv.conserve_m.toFixed(1)} m) – giảm áp tiết kiệm nước`, 5.0, 60.0);
+    const hiL = gw.cfg.safety.level_high_m;
+    A.setHyst(t, dt, 'LEVEL_HIGH', level > hiL, level < hiL - 0.05, 'warning', `Mức bể > ${hiL.toFixed(1)} m – nghi van phao FV-01 kẹt mở, sắp tràn`, 60.0, 60.0);
     if (t >= this.next_tte) {
       this.next_tte = t + 60.0;
       const qIn = sig.q_in_f ?? 0.0;
@@ -183,7 +185,7 @@ export class Controller {
       return { n: 0, f_ref: 0.0, order: [this.duty, 1 - this.duty], p_set: pSet };
     }
     // chế độ TAY: kịch bản tạm ngưng; trạng thái được đặt lại để tiếp quản êm
-    if (gw.manual !== null && gw.manual !== undefined) {
+    if ((gw.manual !== null && gw.manual !== undefined) || (gw.observe_until !== null && gw.observe_until !== undefined)) {
       this.n = 0; this.I = fMin; this.stage_timer = 0; this.destage_timer = 0; this.sleep_state = 'awake'; this.last_f_ref = 0; this.p_set = pSet;
       return { n: 0, f_ref: 0.0, order: [this.duty, 1 - this.duty], p_set: pSet };
     }

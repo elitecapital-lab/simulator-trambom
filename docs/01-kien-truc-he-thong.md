@@ -35,7 +35,7 @@ flowchart TB
     C1["4G/LTE · MQTT trên TLS"]
     C2["SMS dự phòng"]
   end
-  subgraph L2["2 · Edge gateway GW-01 (tủ CP-01, UPS 4 h)"]
+  subgraph L2["2 · Edge gateway GW-01 trên mini PC MPC-01 (tủ mới CP-02, UPS 4 h)"]
     G1["Thu thập & kiểm tra tín hiệu"] --> G2["Kịch bản điều khiển<br/>ngưỡng / dự báo"]
     G2 --> G3["LỚP AN TOÀN<br/>ưu tiên cao nhất"]
     G3 --> G4["Quản lý bơm<br/>giới hạn khởi động"]
@@ -131,7 +131,7 @@ Chế độ (d) có ưu tiên hiển thị cao nhất: trạm có thể đồng 
 
 Hai trạng thái nằm ngoài bốn chế độ trên:
 
-- **Quyền điều khiển TAY.** Từ xa hoặc tại chỗ, kịch bản tạm ngưng nhưng lớp an toàn vẫn chạy (S12, mục 7 của tài liệu 07). Trạng thái này độc lập với (a)–(d).
+- **Quyền điều khiển TAY.** Từ xa hoặc tại chỗ, kịch bản tạm ngưng nhưng lớp an toàn vẫn chạy (S12, mục 7 của tài liệu 07). Quyền TAY *tại chỗ* độc lập với (a)–(d). Quyền TAY *từ xa* tự kết thúc khi trạm chuyển sang (b).
 - **Mini PC ngừng.** Không còn gateway để có chế độ nào. Biến tần tự giữ áp bằng PID nội, máy chủ chỉ thấy trạm mất nhịp tim (S11).
 
 | Chế độ | Gateway làm gì | Máy chủ thấy gì |
@@ -158,7 +158,7 @@ bơm bị cấm khi đã khởi động ≥ 4 lần trong giờ; dừng an toàn
 | Lớp | Cơ chế | Độc lập với |
 |---|---|---|
 | Cơ khí | Van an toàn PSV-01 mở ở 6 bar | Toàn bộ điện tử |
-| Mạch cứng | Phao LSLL-101 (0,35 m) cắt contactor bơm; rơ-le nhiệt động cơ | Phần mềm gateway |
+| Mạch cứng | Phao LSLL-101 (0,35 m) cắt lệnh chạy biến tần qua chuỗi liên động IL-01 (STO/dừng tự do, có nguồn 24 VDC riêng trong CP-01); bảo vệ nội biến tần | Phần mềm gateway, mini PC |
 | Lớp an toàn phần mềm | Cắt áp > 4,5 bar dùng giá trị lớn nhất của PT-101/PT-102; khóa chống chạy khô 0,5 m; dừng an toàn chất lượng | Kịch bản điều khiển |
 | Kịch bản | Dừng bơm 0,6 m, giảm áp khi bể thấp, giới hạn P_set | – |
 | Giám sát trung tâm | Cảnh báo tập trung, logger điểm bất lợi, kế hoạch cắt nước | Trạm (khi có mạng) |

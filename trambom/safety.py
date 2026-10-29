@@ -52,13 +52,19 @@ class SafetyLayer:
             return (-1e9, s["ntu_warn"], -1e9, s["ntu_trip"], s["ntu_delay_s"])
         return (s["ph_warn_low"], s["ph_warn_high"], s["ph_trip_low"], s["ph_trip_high"], s["ph_delay_s"])
 
-    def quality_ok_for_reset(self, sig):
+    def quality_ok_for_reset(self, sig, installed=None):
+        """Chỉ xét các máy phân tích thực sự được lắp; máy đã lắp mà mất tín hiệu thì chưa cho đặt lại."""
         s = self.s
-        cl, ntu, ph = sig["cl"], sig["ntu"], sig["ph"]
-        if cl is None or ntu is None or ph is None:
-            return False
-        return (s["cl_trip_low"] + 0.05 <= cl <= s["cl_trip_high"] - 0.05 and ntu < s["ntu_reset_max"]
-                and s["ph_trip_low"] + 0.2 <= ph <= s["ph_trip_high"] - 0.2)
+        ok = {"cl": lambda v: s["cl_trip_low"] + 0.05 <= v <= s["cl_trip_high"] - 0.05,
+              "ntu": lambda v: v < s["ntu_reset_max"],
+              "ph": lambda v: s["ph_trip_low"] + 0.2 <= v <= s["ph_trip_high"] - 0.2}
+        for key, tag in QUALITY_TAGS.items():
+            if installed is not None and tag not in installed:
+                continue
+            v = sig[key]
+            if v is None or not ok[key](v):
+                return False
+        return True
 
     def request_reset(self, t, gw):
         if self.lockout and not self.safe_stop:
@@ -174,7 +180,7 @@ class SafetyLayer:
                     self.safe_t = t
                     self.safe_reason = QUALITY_NAME[key]
                     A.raise_(t, "SAFE_STOP", "critical", "DỪNG AN TOÀN: %s không đạt – dừng bơm, đóng van MV-02" % QUALITY_NAME[key])
-        if self.quality_ok_for_reset(sig):
+        if self.quality_ok_for_reset(sig, installed):
             self.ok_timer += dt
         else:
             self.ok_timer = 0.0

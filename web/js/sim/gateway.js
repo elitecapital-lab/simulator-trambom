@@ -8,6 +8,8 @@ import { canonical, clamp, deepCopy, flatten, fnv1a, getPath, setPath } from './
 export const SEV_RANK = { info: 0, warning: 1, alarm: 2, critical: 3 };
 export const D_PREFIXES = ['P_HIGH', 'P_HH_TRIP', 'LOCKOUT', 'P_LOW', 'BURST_SUSPECT', 'LEVEL_LL', 'LEVEL_STOP', 'DRY_RUN_FLOAT',
   'CL_', 'NTU_', 'PH_', 'SAFE_STOP', 'PT_DEVIATION', 'PT_STUCK', 'NO_PRESSURE', 'SENSOR_FAULT', 'PUMP_FAULT', 'FLOW_ANOMALY'];
+// Tùy chọn lắp đặt: thiếu khóa = có lắp; mọi giá trị "falsy" khác = không lắp (giống Python: not hw.get(k, True))
+export const hwOn = (cfg, k) => { const v = cfg.hardware?.[k]; return v === undefined ? true : Boolean(v); };
 export const EVENT_ALARMS = ['SCRIPT_ROLLBACK', 'SCRIPT_REJECTED', 'SCRIPT_ERROR', 'GW_WATCHDOG'];
 // Lệnh vận hành bằng tay (từ xa qua MQTT hoặc tại chỗ qua HMI)
 export const MANUAL_CMDS = ['set_mode', 'pump_start', 'pump_stop', 'pump_speed', 'valve'];
@@ -91,21 +93,28 @@ export class SignalProcessor {
     this.qf = { cl: null, ntu: null, ph: null }; this.dev_timer = 0; this.agree_timer = 0;
     for (const st of Object.values(this.stuck)) { st[0] = null; st[1] = 0; }
   }
-  // Không có FT-100: lưu lượng vào ≈ lưu lượng ra (FT-101 + xả đáy) + A·dH/dt, cửa sổ trượt 15 phút
+  // Ước lượng lưu lượng vào ≈ lưu lượng ra (FT-101 + xả đáy) + A·dH/dt, cửa sổ trượt 15 phút.
+  // Dùng khi không lắp FT-100 hoặc FT-100 mất tín hiệu. FT-101 lỗi → không ước lượng được (null).
   _inflowMassBalance(t, dt, lv, qOut, drain) {
+    if (qOut === null || qOut === undefined) { this.mb_hist = []; this.mb_lv = null; return null; }
     const a = 1.0 - Math.exp(-dt / 30.0);
     this.mb_lv = this.mb_lv === null ? lv : this.mb_lv + (lv - this.mb_lv) * a;
-    this.mb_vout += ((qOut ?? 0) + (drain ? this.drain_q : 0)) * dt / 3600.0;
+    this.mb_vout += (qOut + (drain ? this.drain_q : 0)) * dt / 3600.0;
     const H = this.mb_hist;
     if (!H.length || t - H[H.length - 1][0] >= 60.0 - 1e-9) { H.push([t, this.mb_lv, this.mb_vout]); if (H.length > 16) H.shift(); }
     if (H.length < 16) return null;
     const [t0, l0, v0] = H[0], [t1, l1, v1] = H[H.length - 1];
     return Math.max(0, (this.area * (l1 - l0) + (v1 - v0)) * 3600.0 / (t1 - t0));
   }
+  // NAMUR NE43: 3,8–20,5 mA (kể cả bão hòa ngoài thang) vẫn hợp lệ, được dùng cho lớp an toàn; chỉ mất tín hiệu mới là lỗi
   _valid(tag, v) {
     if (v === null || v === undefined) return false;
     const sp = this.sensors[tag]; const span = sp.hi - sp.lo;
-    return sp.lo - 0.0124 * span < v && v < sp.hi + 0.0309 * span;
+    return sp.lo - 0.0126 * span <= v && v <= sp.hi + 0.0311 * span;
+  }
+  _saturated(tag, v) {
+    const sp = this.sensors[tag]; const span = sp.hi - sp.lo;
+    return v <= sp.lo - 0.0124 * span || v >= sp.hi + 0.0309 * span;
   }
   process(t, dt, meas, gw) {
     const A = gw.alarms; const P = gw.script.params; const voting = P.features.pressure_voting; const s = gw.cfg.safety;
@@ -114,7 +123,8 @@ export class SignalProcessor {
       const ok = this._valid(tag, meas[tag]);
       valid[tag] = ok;
       if (!this.installed.has(tag)) continue; // không lắp: không phải lỗi tín hiệu
-      A.set(t, 'SENSOR_FAULT_' + tag, !ok, 'alarm', `Lỗi tín hiệu ${tag} (ngoài 4–20 mA / mất tín hiệu)`);
+      A.set(t, 'SENSOR_FAULT_' + tag, !ok, 'alarm', `Lỗi tín hiệu ${tag} (mất tín hiệu < 3,6 mA)`);
+      A.set(t, 'SENSOR_RANGE_' + tag, ok && this._saturated(tag, meas[tag]), 'warning', `${tag} bão hòa ngoài thang đo (3,8 / 20,5 mA) – giá trị thật có thể còn xa hơn`);
     }
     const running = meas.pumps.some((p) => p.running);
     for (const tag of ['PT-101', 'PT-102']) {
@@ -179,10 +189,11 @@ export class SignalProcessor {
     if (!prot.length) prot = [p1, p2].filter((v) => v !== null);
     const pProt = prot.length ? Math.max(...prot) : null;
     if (qRaw !== null) this.q_f = this.q_f === null ? qRaw : this.q_f + (qRaw - this.q_f) * (1.0 - Math.exp(-dt / 10.0));
-    if (this.installed.has('FT-100')) {
-      const qin = valid['FT-100'] ? meas['FT-100'] : null;
-      if (qin !== null) this.qin_f = this.qin_f === null ? qin : this.qin_f + (qin - this.qin_f) * (1.0 - Math.exp(-dt / 300.0));
-    } else this.qin_f = this._inflowMassBalance(t, dt, lv, qRaw, meas.drain_open);
+    const mb = this._inflowMassBalance(t, dt, lv, qRaw, meas.drain_open);
+    if (this.installed.has('FT-100') && valid['FT-100']) {
+      const qin = meas['FT-100']; // lưu lượng trượt ≈ 60 s từ bộ đếm xung
+      this.qin_f = this.qin_f === null ? qin : this.qin_f + (qin - this.qin_f) * (1.0 - Math.exp(-dt / 60.0));
+    } else this.qin_f = mb;
     const aq = 1.0 - Math.exp(-dt / 20.0);
     for (const [key, tag] of [['cl', 'AIT-201'], ['ntu', 'AIT-202'], ['ph', 'AIT-203']]) {
       const v = valid[tag] ? meas[tag] : null;
@@ -211,7 +222,7 @@ export class Gateway {
     this.override = null; this.offline_since = null; this.last_offline_since = null; this.flush = null; this.applied_cmds = [];
     this.custom_fn = null; this.clock_offset = 0; this.sig = null; this.out = null; this.level_name = levelName; this.sms_log = [];
     this.last = {}; this.cmd_results = []; this.conflicts = []; this.stopped_s = 0; this.recover_until = 0;
-    this.notify = []; this.manual = null; this.manual_s = 0; this.local_seq = 0;
+    this.notify = []; this.manual = null; this.manual_s = 0; this.local_seq = 0; this.observe_until = null;
     this.onLog = null;
   }
   logEvent(t, level, text) {
@@ -227,46 +238,66 @@ export class Gateway {
     if (this.onLog) this.onLog(e);
     this.comms.pushEvent({ kind: 'alarm', action, code: a.code, sev: a.sev, msg: a.msg, t });
     if (action === 'raise' && a.sev === 'critical') {
-      const sms = this.cfg.gateway.sms_fallback && (this.cfg.hardware?.SMS ?? true);
-      let s = null;
-      if (this.offline_since === null) this.notify.push({ t, code: a.code, via: 'IP', t_notified: t });
-      else if (sms) {
-        this.sms_log.push({ t, text: `[${this.id}] ${a.msg}` });
-        this.comms.stats.sms += 1;
-        s = { t, level: 'info', text: 'Mất mạng IP – gửi SMS dự phòng tới tổ trực: ' + a.msg };
-        this.notify.push({ t, code: a.code, via: 'SMS', t_notified: t });
-      } else {
-        s = { t, level: 'info', text: 'Mất mạng IP, trạm không có modem SMS – báo động chờ gửi khi có mạng: ' + a.msg };
-        this.notify.push({ t, code: a.code, via: 'chờ mạng', t_notified: null });
-      }
-      if (s) { this.logs.push(s); if (this.onLog) this.onLog(s); }
+      // thời điểm tổ trực thực sự biết: khi máy chủ xác nhận sự kiện (evt_ack) hoặc khi SMS được gửi
+      const n = { t, code: a.code, msg: a.msg, via: null, t_notified: null, eseq: this.comms.eseq };
+      this.notify.push(n);
+      if (this.offline_since !== null) this._notifySms(t, n);
     }
+  }
+  _notifySms(t, n) {
+    let s;
+    if (this.cfg.gateway.sms_fallback && hwOn(this.cfg, 'SMS')) {
+      this.sms_log.push({ t, text: `[${this.id}] ${n.msg}` });
+      this.comms.stats.sms += 1;
+      s = { t, level: 'info', text: 'Mất mạng IP – gửi SMS dự phòng tới tổ trực: ' + n.msg };
+      n.via = 'SMS'; n.t_notified = t;
+    } else {
+      s = { t, level: 'info', text: 'Mất mạng IP, trạm không có modem SMS – báo động chờ gửi khi có mạng: ' + n.msg };
+      n.via = 'chờ mạng';
+    }
+    this.logs.push(s); if (this.onLog) this.onLog(s);
+  }
+  onEventsAcked(ids, t) {
+    for (const n of this.notify) if (n.t_notified === null && ids.has(n.eseq)) { n.t_notified = t; if (n.via === null) n.via = 'IP'; }
   }
   onOffline(t, lastAck) {
     this.offline_since = t; this.last_offline_since = lastAck;
     this.logEvent(t, 'alarm', `Mất kết nối máy chủ > ${this.cfg.gateway.offline_after_s.toFixed(0)} s – chuyển chế độ (b) tự vận hành bằng kịch bản v${this.script.version} đã lưu`);
     this.alarms.raise_(t, 'COMMS_OFFLINE', 'warning', 'Mất kết nối máy chủ điều hành');
+    // báo động khẩn phát sinh khi mạng đã đứt nhưng chưa phát hiện (≤ 60 s): gửi SMS ngay khi phát hiện
+    for (const n of this.notify) if (n.t_notified === null && n.via === null) this._notifySms(t, n);
   }
   onOnline(t) {
     const dur = this.offline_since !== null ? t - this.offline_since : 0;
     this.offline_since = null;
-    for (const n of this.notify) if (n.t_notified === null) n.t_notified = t;
     this.alarms.clear(t, 'COMMS_OFFLINE');
     this.logEvent(t, 'info', `Khôi phục kết nối sau ${(dur / 60).toFixed(1)} phút – chế độ (c) đồng bộ: gửi bản tin chào, ${this.comms.buf.length} bản ghi đệm`);
   }
   // Mini PC khởi động lại sau khi treo: nạp kịch bản, dự báo, bộ đệm từ ổ SSD; tiếp quản không xung
   restart(t, tFail, pumps, note) {
     const down = t - tFail;
+    if (this.manual !== null) {
+      // phiên điều khiển tay không được "sống lại" sau khi mini PC khởi động lại
+      this.manual = null; this.alarms.clear(t, 'MANUAL_MODE');
+      this.logEvent(t, 'info', 'Mini PC khởi động lại – hủy phiên điều khiển TAY trước đó');
+    }
     this.sig_proc.restart();
-    const c = this.ctrl;
-    c.n = 0; c.sleep_state = 'awake'; c.stage_timer = 0; c.destage_timer = 0; c.swap_until = null; c.next_tte = t;
-    const running = pumps.map((p, i) => (p.running ? i : -1)).filter((i) => i >= 0);
-    if (running.length === 1) c.duty = running[0];
     pumps.forEach((p, i) => { this.pm.cmd[i] = p.running; });
     this.comms.restart(t);
     this.offline_since = t; this.last_offline_since = tFail;
-    this.alarms.raise_(t, 'GW_WATCHDOG', 'alarm', `Mini PC ngừng ${(down / 60).toFixed(0)} phút (watchdog phát hiện) – ${note}; đã khởi động lại và tiếp quản`);
-    this.logEvent(t, 'info', `Mini PC khởi động lại: nạp kịch bản v${this.script.version}, mô hình dự báo và ${this.comms.buf.length} bản ghi đệm từ ổ SSD – tiếp quản không xung, chờ đồng bộ`);
+    this.observe_until = t + this.cfg.fallback.takeover_s;
+    this.alarms.raise_(t, 'GW_WATCHDOG', 'alarm', `Mini PC ngừng ${(down / 60).toFixed(0)} phút (watchdog phát hiện) – ${note}; đã khởi động lại`);
+    this.logEvent(t, 'info', `Mini PC khởi động lại: nạp kịch bản v${this.script.version}, mô hình dự báo và ${this.comms.buf.length} bản ghi đệm từ ổ SSD – theo dõi ${this.cfg.fallback.takeover_s.toFixed(0)} s trước khi tiếp quản`);
+  }
+  // Hết thời gian theo dõi: tiếp quản từ PID nội biến tần theo kiểu không xung
+  _takeover(t, pumps) {
+    this.observe_until = null;
+    const c = this.ctrl;
+    c.n = 0; c.sleep_state = 'awake'; c.stage_timer = 0; c.destage_timer = 0; c.swap_until = null; c.next_tte = t;
+    const running = pumps.map((p, i) => (p.running ? i : -1)).filter((i) => i >= 0);
+    if (running.length) c.duty = running[0];
+    pumps.forEach((p, i) => { this.pm.cmd[i] = p.running; });
+    this.logEvent(t, 'info', 'Mini PC tiếp quản điều khiển (không xung) – biến tần thôi chạy PID nội');
   }
   applyScript(doc, t, source) {
     const errs = validateParams(doc.params, this.cfg.script_schema);
@@ -287,6 +318,11 @@ export class Gateway {
   _watchStep(t, dt) {
     const w = this.watch;
     if (!w) return;
+    if (this.manual !== null || this.observe_until !== null) {
+      // kịch bản không điều khiển lúc này: tạm dừng cửa sổ giám sát
+      w.until += dt; w.t0 += dt; w.trips0 = this.safety.trip_count;
+      return;
+    }
     const g = this.cfg.gateway; const sig = this.sig;
     if (sig.pumps.some((p) => p.running) && sig.p_ctrl !== null) {
       w.n_s += dt;
@@ -399,6 +435,7 @@ export class Gateway {
   // Vận hành bằng tay: quyền tại chỗ ưu tiên hơn từ xa; lệnh từ xa có thời hạn; mọi lệnh tay vẫn qua lớp an toàn
   _manualCmd(typ, a, t, src) {
     const m = this.manual, n = this.pump_tags.length, pm = this.cfg.pump_model, lease = this.cfg.gateway.manual_lease_s;
+    if (this.observe_until !== null) return [false, 'mini PC vừa khởi động lại, đang theo dõi trước khi tiếp quản – thử lại sau'];
     if (src === 'remote' && m !== null && m.src === 'local') return [false, 'trạm đang điều khiển TẠI CHỖ – quyền HMI tại trạm ưu tiên, từ chối lệnh từ xa'];
     if (typ === 'set_mode') {
       if ((a.mode ?? 'manual') === 'auto') {
@@ -409,14 +446,18 @@ export class Gateway {
       const pumps = this.sig ? this.sig.pumps : Array.from({ length: n }, () => ({ running: false, f: 0 }));
       if (m === null) {
         this.manual = { src, t0: t, until: src === 'remote' ? t + lease : null, run: this.pm.cmd.map(Boolean),
-          f: pumps.map((p) => (p.running ? Math.round(p.f * 10) / 10 : 40.0)), valve: true };
+          f: pumps.map((p) => (p.running ? p.f : 40.0)), valve: true };
         this.alarms.raise_(t, 'MANUAL_MODE', 'warning', `Trạm ở chế độ TAY – điều khiển ${SRC_NAME[src]}; kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động`);
       } else this._takeOver(t, src, lease);
       return [true, `chuyển sang chế độ TAY ${SRC_NAME[src]}` + (src === 'remote' ? `, quyền có hạn ${(lease / 60).toFixed(0)} phút, tự trở về tự động khi mất kết nối` : '')];
     }
     if (m === null) return [false, 'trạm đang ở chế độ TỰ ĐỘNG – cần chuyển sang TAY trước'];
     this._takeOver(t, src, lease);
-    if (typ === 'valve') { m.valve = a.open ?? true; m.valve = Boolean(m.valve); return [true, (m.valve ? 'mở' : 'đóng') + ' van MV-02']; }
+    if (typ === 'valve') {
+      if (!hwOn(this.cfg, 'MV-02')) return [false, 'trạm không lắp van điện MV-02'];
+      m.valve = a.open === undefined ? true : Boolean(a.open);
+      return [true, (m.valve ? 'mở' : 'đóng') + ' van MV-02'];
+    }
     const i = Math.trunc(a.pump ?? 0);
     if (i < 0 || i >= n) return [false, 'không có bơm ' + i];
     const tag = this.pump_tags[i];
@@ -460,7 +501,8 @@ export class Gateway {
     this.manual_s += dt;
     const n = m.run.length;
     const idx = [...Array(n).keys()];
-    const order = idx.filter((i) => m.run[i]).concat(idx.filter((i) => !m.run[i]));
+    // chỉ những bơm người vận hành đã ra lệnh chạy – không để bộ quản lý bơm tự chọn bơm khác
+    const order = idx.filter((i) => m.run[i]);
     const fs = idx.filter((i) => m.run[i]).map((i) => m.f[i]);
     return { n: fs.length, f_ref: fs.length ? Math.max(...fs) : 0.0, order, p_set: this.ctrl.p_set };
   }
@@ -505,13 +547,25 @@ export class Gateway {
     if (this.script.params.features.anomaly_detection && t >= this.recover_until) {
       this.alarms.set(t, 'FLOW_ANOMALY', this.forecaster.anomaly, 'alarm', `Lưu lượng cao hơn dự báo ${this.forecaster.resid.toFixed(1)} m³/h kéo dài – nghi rò rỉ/vỡ ống`);
     } else this.alarms.clear(t, 'FLOW_ANOMALY');
-    const mo = this.manual !== null ? this._manualOutput(t, dt) : null;
+    if (this.observe_until !== null && t >= this.observe_until) this._takeover(t, meas.pumps);
+    let mo = this.manual !== null ? this._manualOutput(t, dt) : null;
+    if (this.observe_until !== null) {
+      // đang theo dõi sau khởi động lại: bám theo trạng thái bơm do PID nội biến tần điều khiển
+      const runI = meas.pumps.map((p, i) => (p.running ? i : -1)).filter((i) => i >= 0);
+      mo = { n: runI.length, f_ref: runI.length ? Math.max(...runI.map((i) => meas.pumps[i].f)) : 0.0, order: runI, p_set: this.ctrl.p_set };
+    }
     let co = this.ctrl.step(t, dt, sig, this);
     if (mo !== null) co = mo;
     const fo = this.safety.evaluate(t, dt, sig, co, this, meas);
     const run = this.pm.apply(t, fo.n, fo.order, meas.pumps, this);
     const m = this.manual;
-    if (mo !== null && fo.block && !fo.block.startsWith('chờ van')) {
+    const man = m !== null && mo !== null;
+    if (man) {
+      meas.pumps.forEach((p, i) => {
+        if (p.fault && m.run[i]) { m.run[i] = false; this.logEvent(t, 'safety', `${this.pump_tags[i]} báo lỗi khi đang chạy TAY – dừng, cần lệnh chạy lại sau khi sửa`); }
+      });
+    }
+    if (man && fo.block && !fo.block.startsWith('chờ van')) {
       // liên động/cắt an toàn ở chế độ tay: bơm không tự chạy lại, người vận hành phải ra lệnh mới
       m.run.forEach((r, i) => { if (r) { m.run[i] = false; this.logEvent(t, 'safety', `Liên động an toàn dừng ${this.pump_tags[i]} khi đang chạy TAY (${fo.block}) – cần lệnh chạy lại`); } });
     }
@@ -523,10 +577,11 @@ export class Gateway {
     this._watchStep(t, dt);
     if (Math.trunc(t) % 60 === 0) this.alarms.expireEvents(t);
     const fRef = fo.f_ref;
-    const fEach = mo !== null ? run.map((r, i) => (r ? Math.min(m.f[i], this.safety.f_cap) : 0.0)) : run.map((r) => (r ? fRef : 0.0));
+    const fEach = man ? run.map((r, i) => (r ? Math.min(m.f[i], this.safety.f_cap) : 0.0))
+      : mo !== null ? run.map((r, i) => (r ? meas.pumps[i].f : 0.0)) : run.map((r) => (r ? fRef : 0.0));
     this.last = { p: sig.p_ctrl, p_set: this.ctrl.p_set, q: sig.q_f, q_in: sig.q_in_f, level: sig.level, cl: sig.cl, ntu: sig.ntu, ph: sig.ph, kw: meas.kw, kwh: meas.kwh, f1: meas.pumps[0].f, f2: meas.pumps[1].f };
     this.comms.tick(t, dt);
-    this.out = { run, f_ref: fEach, outlet_open: fo.outlet_open && (mo === null || m.valve), drain_open: drain };
+    this.out = { run, f_ref: fEach, outlet_open: fo.outlet_open && (!man || m.valve), drain_open: drain };
     return this.out;
   }
 }

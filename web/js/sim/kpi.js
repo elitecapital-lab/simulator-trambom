@@ -2,7 +2,7 @@
 export const INCIDENT_CODES = {
   pump_fault: ['PUMP_FAULT'], 'inflow_quality:ntu': ['NTU_'], 'inflow_quality:cl': ['CL_'], 'inflow_quality:ph': ['PH_'],
   supply: ['SUPPLY_LOST', 'LEVEL_LOW', 'TTE_LOW', 'LEVEL_STOP', 'LEVEL_LL'], burst: ['FLOW_ANOMALY', 'BURST_SUSPECT', 'P_LOW'],
-  sensor_fault: ['PT_DEVIATION', 'PT_STUCK', 'SENSOR_FAULT', 'P_HIGH'],
+  sensor_fault: ['PT_DEVIATION', 'PT_STUCK', 'SENSOR_FAULT', 'SENSOR_RANGE', 'P_HIGH'],
 };
 
 export class KpiTracker {

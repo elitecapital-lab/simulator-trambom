@@ -837,7 +837,7 @@
    "gw_down_min": 0.0,
    "notify": {
     "critical": 2,
-    "max_delay_min": 0.0,
+    "max_delay_min": 0.03333,
     "via": [
      "IP"
     ]
@@ -918,7 +918,7 @@
    "gw_down_min": 0.0,
    "notify": {
     "critical": 2,
-    "max_delay_min": 0.0,
+    "max_delay_min": 0.03333,
     "via": [
      "IP"
     ]
@@ -1215,7 +1215,7 @@
      "kind": "supply",
      "t": 32400.0,
      "label": "supply",
-     "detected": 34155.0,
+     "detected": 33232.0,
      "how": "SUPPLY_LOST"
     }
    ],
@@ -1294,8 +1294,8 @@
      "kind": "supply",
      "t": 32400.0,
      "label": "supply",
-     "detected": 34020.0,
-     "how": "TTE_LOW"
+     "detected": 33232.0,
+     "how": "SUPPLY_LOST"
     }
    ],
    "alarms_raised": {
@@ -1887,14 +1887,14 @@
   },
   "advanced": {
    "hours": 48.0,
-   "energy_kwh": 95.43392,
-   "kwh_per_day": 47.71696,
-   "specific_kwh_m3": 0.11492,
-   "pumped_m3": 830.45629,
-   "delivered_m3": 830.46882,
+   "energy_kwh": 95.41931,
+   "kwh_per_day": 47.70965,
+   "specific_kwh_m3": 0.1149,
+   "pumped_m3": 830.44211,
+   "delivered_m3": 830.45464,
    "served_m3": 763.11292,
    "consumption_m3": 768.00161,
-   "leak_m3": 67.35591,
+   "leak_m3": 67.34173,
    "burst_m3": 0.0,
    "unserved_m3": 0.0,
    "backlog_end_m3": 4.88869,
@@ -1904,11 +1904,11 @@
    "pct_in_band": 83.27546,
    "p_out_max": 4.03392,
    "p_out_min": 0.0,
-   "p_out_avg": 2.17833,
+   "p_out_avg": 2.17801,
    "p_crit_min": -0.62247,
    "quality_episodes": 1,
-   "quality_viol_min": 8.7,
-   "quality_viol_m3": 2.53453,
+   "quality_viol_min": 8.68333,
+   "quality_viol_m3": 2.52937,
    "starts": [
     1,
     4
@@ -1919,7 +1919,7 @@
     23.16917
    ],
    "dry_run_min": 0.0,
-   "level_min": 1.63517,
+   "level_min": 1.63555,
    "incidents": [
     {
      "kind": "inflow_quality:cl",
@@ -1932,7 +1932,7 @@
      "kind": "supply",
      "t": 108000.0,
      "label": "supply",
-     "detected": 108660.0,
+     "detected": 108180.0,
      "how": "TTE_LOW"
     }
    ],
@@ -1953,7 +1953,7 @@
     "outages": 1,
     "sms": 2
    },
-   "forecast_mape": 0.05614,
+   "forecast_mape": 0.0558,
    "sms": 2,
    "script_version": 5,
    "manual_min": 0.0,
@@ -2195,14 +2195,14 @@
   },
   "basic": {
    "hours": 30.0,
-   "energy_kwh": 52.35763,
-   "kwh_per_day": 41.88611,
-   "specific_kwh_m3": 0.10816,
-   "pumped_m3": 484.10606,
-   "delivered_m3": 484.08521,
+   "energy_kwh": 52.36869,
+   "kwh_per_day": 41.89495,
+   "specific_kwh_m3": 0.10818,
+   "pumped_m3": 484.11914,
+   "delivered_m3": 484.09828,
    "served_m3": 435.2669,
    "consumption_m3": 435.2669,
-   "leak_m3": 48.81831,
+   "leak_m3": 48.83138,
    "burst_m3": 0.0,
    "unserved_m3": 0.0,
    "backlog_end_m3": 0.0,
@@ -2212,7 +2212,7 @@
    "pct_in_band": 99.96759,
    "p_out_max": 3.65939,
    "p_out_min": 1.9684,
-   "p_out_avg": 2.41473,
+   "p_out_avg": 2.41519,
    "p_crit_min": 1.33171,
    "quality_episodes": 0,
    "quality_viol_min": 0.0,
@@ -2254,7 +2254,7 @@
     "outages": 1,
     "sms": 0
    },
-   "forecast_mape": 0.05553,
+   "forecast_mape": 0.05552,
    "sms": 0,
    "script_version": 3,
    "manual_min": 0.0,
@@ -2274,25 +2274,25 @@
   },
   "advanced": {
    "hours": 30.0,
-   "energy_kwh": 50.77559,
-   "kwh_per_day": 40.62047,
-   "specific_kwh_m3": 0.10529,
-   "pumped_m3": 482.27799,
-   "delivered_m3": 482.26016,
+   "energy_kwh": 50.78811,
+   "kwh_per_day": 40.63049,
+   "specific_kwh_m3": 0.10531,
+   "pumped_m3": 482.29287,
+   "delivered_m3": 482.27503,
    "served_m3": 435.2669,
    "consumption_m3": 435.2669,
-   "leak_m3": 46.99326,
+   "leak_m3": 47.00813,
    "burst_m3": 0.0,
    "unserved_m3": 0.0,
    "backlog_end_m3": 0.0,
-   "t_low_min": 0.78333,
+   "t_low_min": 0.7,
    "t_high_min": 0.0,
-   "t_out_min": 0.78333,
-   "pct_in_band": 99.95648,
+   "t_out_min": 0.7,
+   "pct_in_band": 99.96111,
    "p_out_max": 3.61374,
-   "p_out_min": 1.88291,
-   "p_out_avg": 2.34793,
-   "p_crit_min": 1.32761,
+   "p_out_min": 1.88242,
+   "p_out_avg": 2.34846,
+   "p_crit_min": 1.32879,
    "quality_episodes": 0,
    "quality_viol_min": 0.0,
    "quality_viol_m3": 0.0,
@@ -2333,7 +2333,7 @@
     "outages": 1,
     "sms": 0
    },
-   "forecast_mape": 0.05995,
+   "forecast_mape": 0.05994,
    "sms": 0,
    "script_version": 3,
    "manual_min": 0.0,
@@ -2392,25 +2392,25 @@
   },
   "basic": {
    "hours": 18.0,
-   "energy_kwh": 32.06736,
-   "kwh_per_day": 42.75649,
-   "specific_kwh_m3": 0.10548,
-   "pumped_m3": 304.05599,
-   "delivered_m3": 304.01274,
+   "energy_kwh": 32.06526,
+   "kwh_per_day": 42.75368,
+   "specific_kwh_m3": 0.10547,
+   "pumped_m3": 304.0538,
+   "delivered_m3": 304.01055,
    "served_m3": 275.09609,
    "consumption_m3": 275.10197,
-   "leak_m3": 28.91665,
+   "leak_m3": 28.91446,
    "burst_m3": 0.0,
    "unserved_m3": 0.0,
    "backlog_end_m3": 0.00587,
-   "t_low_min": 12.93333,
+   "t_low_min": 12.86667,
    "t_high_min": 0.0,
-   "t_out_min": 12.93333,
-   "pct_in_band": 98.80247,
+   "t_out_min": 12.86667,
+   "pct_in_band": 98.80864,
    "p_out_max": 3.99673,
-   "p_out_min": 0.01841,
-   "p_out_avg": 2.40175,
-   "p_crit_min": -0.42153,
+   "p_out_min": 0.01845,
+   "p_out_avg": 2.40162,
+   "p_crit_min": -0.4272,
    "quality_episodes": 0,
    "quality_viol_min": 0.0,
    "quality_viol_m3": 0.0,
@@ -2443,7 +2443,7 @@
     "outages": 1,
     "sms": 0
    },
-   "forecast_mape": 0.05278,
+   "forecast_mape": 0.05279,
    "sms": 0,
    "script_version": 3,
    "manual_min": 120.88333,
@@ -2463,25 +2463,25 @@
   },
   "advanced": {
    "hours": 18.0,
-   "energy_kwh": 30.98087,
-   "kwh_per_day": 41.30782,
-   "specific_kwh_m3": 0.10228,
-   "pumped_m3": 302.92993,
-   "delivered_m3": 302.89003,
+   "energy_kwh": 30.98304,
+   "kwh_per_day": 41.31072,
+   "specific_kwh_m3": 0.10229,
+   "pumped_m3": 302.93223,
+   "delivered_m3": 302.89233,
    "served_m3": 275.09607,
    "consumption_m3": 275.10197,
-   "leak_m3": 27.79396,
+   "leak_m3": 27.79626,
    "burst_m3": 0.0,
    "unserved_m3": 0.0,
-   "backlog_end_m3": 0.00589,
-   "t_low_min": 24.46667,
+   "backlog_end_m3": 0.0059,
+   "t_low_min": 24.08333,
    "t_high_min": 0.0,
-   "t_out_min": 24.46667,
-   "pct_in_band": 97.73457,
+   "t_out_min": 24.08333,
+   "pct_in_band": 97.77006,
    "p_out_max": 3.99684,
-   "p_out_min": 0.01793,
-   "p_out_avg": 2.33333,
-   "p_crit_min": -0.41525,
+   "p_out_min": 0.01791,
+   "p_out_avg": 2.33347,
+   "p_crit_min": -0.41538,
    "quality_episodes": 0,
    "quality_viol_min": 0.0,
    "quality_viol_m3": 0.0,
@@ -2531,6 +2531,215 @@
    "conflicts": 0,
    "bytes_up": 1963500,
    "bytes_down": 616656
+  }
+ },
+ "S13": {
+  "fixed": {
+   "hours": 24.0,
+   "energy_kwh": 74.01087,
+   "kwh_per_day": 74.01087,
+   "specific_kwh_m3": 0.17826,
+   "pumped_m3": 415.13526,
+   "delivered_m3": 415.19247,
+   "served_m3": 368.47458,
+   "consumption_m3": 391.79727,
+   "leak_m3": 46.71789,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 23.32269,
+   "t_low_min": 474.7,
+   "t_high_min": 302.23333,
+   "t_out_min": 776.93333,
+   "pct_in_band": 46.0463,
+   "p_out_max": 4.28806,
+   "p_out_min": 0.0,
+   "p_out_avg": 2.64003,
+   "p_crit_min": -0.3924,
+   "quality_episodes": 1,
+   "quality_viol_min": 307.25,
+   "quality_viol_m3": 97.74319,
+   "starts": [
+    1,
+    2
+   ],
+   "starts_total": 3,
+   "run_h": [
+    17.00528,
+    5.01056
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 2.76954,
+   "incidents": [
+    {
+     "kind": "inflow_quality:ph",
+     "t": 21600.0,
+     "label": "inflow_quality",
+     "detected": null,
+     "how": null
+    }
+   ]
+  },
+  "basic": {
+   "hours": 24.0,
+   "energy_kwh": 46.36581,
+   "kwh_per_day": 46.36581,
+   "specific_kwh_m3": 0.12295,
+   "pumped_m3": 377.13723,
+   "delivered_m3": 377.10049,
+   "served_m3": 348.50825,
+   "consumption_m3": 391.79727,
+   "leak_m3": 28.59224,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 43.28902,
+   "t_low_min": 538.6,
+   "t_high_min": 0.0,
+   "t_out_min": 538.6,
+   "pct_in_band": 62.59722,
+   "p_out_max": 3.65939,
+   "p_out_min": 0.0,
+   "p_out_avg": 1.89074,
+   "p_crit_min": -0.54669,
+   "quality_episodes": 1,
+   "quality_viol_min": 3.68333,
+   "quality_viol_m3": 1.16763,
+   "starts": [
+    2,
+    4
+   ],
+   "starts_total": 6,
+   "run_h": [
+    17.75111,
+    7.74583
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 0.60512,
+   "incidents": [
+    {
+     "kind": "inflow_quality:ph",
+     "t": 21600.0,
+     "label": "inflow_quality",
+     "detected": 33177.0,
+     "how": "PH_WARN"
+    }
+   ],
+   "alarms_raised": {
+    "info": 0,
+    "warning": 2,
+    "alarm": 1,
+    "critical": 2
+   },
+   "comms": {
+    "generated": 8639,
+    "dropped": 0,
+    "compactions": 0,
+    "max_fill": 0.00023,
+    "events_dropped": 0,
+    "syncs": 0,
+    "offline_s": 0.0,
+    "outages": 0,
+    "sms": 0
+   },
+   "forecast_mape": 0.05692,
+   "sms": 0,
+   "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 2,
+    "max_delay_min": 0.03333,
+    "via": [
+     "IP"
+    ]
+   },
+   "server_records": 8639,
+   "completeness": 1.0,
+   "server_records_agg": 0,
+   "server_late": 0,
+   "conflicts": 0,
+   "bytes_up": 2628660,
+   "bytes_down": 830336
+  },
+  "advanced": {
+   "hours": 24.0,
+   "energy_kwh": 47.38122,
+   "kwh_per_day": 47.38122,
+   "specific_kwh_m3": 0.12351,
+   "pumped_m3": 383.65563,
+   "delivered_m3": 383.62432,
+   "served_m3": 355.4819,
+   "consumption_m3": 391.79727,
+   "leak_m3": 28.14243,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 36.31538,
+   "t_low_min": 516.01667,
+   "t_high_min": 0.0,
+   "t_out_min": 516.01667,
+   "pct_in_band": 64.16551,
+   "p_out_max": 3.97309,
+   "p_out_min": 0.0,
+   "p_out_avg": 1.86988,
+   "p_crit_min": -0.75111,
+   "quality_episodes": 1,
+   "quality_viol_min": 3.65,
+   "quality_viol_m3": 1.16498,
+   "starts": [
+    2,
+    3
+   ],
+   "starts_total": 5,
+   "run_h": [
+    17.52972,
+    7.63389
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 0.60618,
+   "incidents": [
+    {
+     "kind": "inflow_quality:ph",
+     "t": 21600.0,
+     "label": "inflow_quality",
+     "detected": 33177.0,
+     "how": "PH_WARN"
+    }
+   ],
+   "alarms_raised": {
+    "info": 0,
+    "warning": 3,
+    "alarm": 1,
+    "critical": 2
+   },
+   "comms": {
+    "generated": 8639,
+    "dropped": 0,
+    "compactions": 0,
+    "max_fill": 0.00023,
+    "events_dropped": 0,
+    "syncs": 0,
+    "offline_s": 0.0,
+    "outages": 0,
+    "sms": 0
+   },
+   "forecast_mape": 0.06078,
+   "sms": 0,
+   "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 2,
+    "max_delay_min": 0.03333,
+    "via": [
+     "IP"
+    ]
+   },
+   "server_records": 8639,
+   "completeness": 1.0,
+   "server_records_agg": 0,
+   "server_late": 0,
+   "conflicts": 0,
+   "bytes_up": 2629020,
+   "bytes_down": 830432
   }
  }
 }

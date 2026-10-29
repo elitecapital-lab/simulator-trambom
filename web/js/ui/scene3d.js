@@ -7,6 +7,7 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const css = (name, fallback) => (getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback);
 const PRIMARY = new Set(['T-01', 'P-01', 'P-02', 'FT-101', 'PT-101', 'MV-02', 'AIT-202', 'CP-01', 'CP-02', 'MPC-01', 'MANG-LUOI', 'LT-101']);
 // Màu phân loại phạm vi thiết bị: hiện trạng / giải pháp đưa vào / khuyến nghị bổ sung
+const CONTAINERS = new Set(['CP-01', 'CP-02']);
 export const SCOPE_COLOR = { hien_trang: 0xa0703c, giai_phap: 0x7a5af5, khuyen_nghi: 0x0f9fb0 };
 const fmt = (v, nd = 2) => (v === null || v === undefined || Number.isNaN(v) ? '–' : v.toFixed(nd).replace('.', ','));
 
@@ -199,11 +200,12 @@ export class StationScene {
           const m = m0.clone();
           if (m.emissive) { m.emissive = new THREE.Color(SCOPE_COLOR[scope]); m.emissiveIntensity = 0.55; } else m.color = new THREE.Color(SCOPE_COLOR[scope]);
           if (m0.transparent) m.opacity = Math.max(0.35, m0.opacity);
+          m.userData.src = m0;
           this._tint.set(k, m);
         }
         o.material = this._tint.get(k);
       } else {
-        if (!this._ghost.has(m0.uuid)) { const m = m0.clone(); m.transparent = true; m.opacity = 0.14; m.depthWrite = false; this._ghost.set(m0.uuid, m); }
+        if (!this._ghost.has(m0.uuid)) { const m = m0.clone(); m.transparent = true; m.opacity = 0.14; m.depthWrite = false; m.userData.src = m0; this._ghost.set(m0.uuid, m); }
         o.material = this._ghost.get(m0.uuid);
       }
     }
@@ -212,6 +214,11 @@ export class StationScene {
       l.div.dataset.scope = sc || '';
       l.div.classList.toggle('scope-off', scope !== 'all' && sc !== scope);
     }
+  }
+  /** Bản sao vật liệu khi lọc phạm vi phải theo kịp thay đổi màu của bản gốc (độ đục nước, giao diện sáng/tối). */
+  _syncScopeMats() {
+    for (const m of this._tint.values()) { const s = m.userData.src; m.color.copy(s.color); if (m.map !== s.map) m.map = s.map; }
+    for (const m of this._ghost.values()) { const s = m.userData.src; m.color.copy(s.color); if (s.emissive && m.emissive) m.emissive.copy(s.emissive); }
   }
   /** 0 = ẩn, 1 = nhãn chính + nhãn gần camera, 2 = tất cả */
   setLabelMode(m) { this.labelMode = m; this._labelVisibility(); }
@@ -498,7 +505,13 @@ export class StationScene {
     const r = this.renderer.domElement.getBoundingClientRect();
     this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    const hit = this.raycaster.intersectObjects(this.pickables, false)[0];
+    const hits = this.raycaster.intersectObjects(this.pickables, false);
+    let hit = hits[0];
+    // thiết bị nằm bên trong vỏ tủ: tia chạm vỏ trước – ưu tiên thiết bị bên trong nếu nằm ngay sau vỏ
+    if (hit && CONTAINERS.has(hit.object.userData.tag)) {
+      const inner = hits.find((h) => !CONTAINERS.has(h.object.userData.tag) && h.distance - hit.distance < 0.7);
+      if (inner) hit = inner;
+    }
     if (hit && this.onPick) this.onPick(hit.object.userData.tag);
   }
   goto(name) {
@@ -519,6 +532,7 @@ export class StationScene {
       if (tw.t >= 1) this.tween = null;
     }
     if (view) this._applyView(dt, view);
+    if (this.scope && this.scope !== 'all') this._syncScopeMats();
     this._lv = (this._lv || 0) + 1;
     if (this._lv % 10 === 0) this._labelVisibility();
     this.controls.update();
@@ -607,6 +621,7 @@ export class StationScene {
     const ql = [['AIT-201', 'CLO DƯ', sig.cl, 'mg/L', 2, (x) => x < 0.2 || x > 1.0, (x) => x < 0.3 || x > 0.8],
       ['AIT-202', 'ĐỘ ĐỤC', sig.ntu, 'NTU', 2, (x) => x > 2, (x) => x > 1], ['AIT-203', 'pH', sig.ph, '', 2, (x) => x < 6 || x > 8.5, (x) => x < 6.5 || x > 8]];
     for (const [tag, name, val, unit, nd, bad, warn] of ql) {
+      if (v.installed && !v.installed.has(tag)) { draw(this.aitScreens[tag], [[tag + ' · ' + name, 20, '#6d7570'], ['KHÔNG LẮP', 40, '#6d7570']], '#1a1f20'); continue; }
       const col = val === null || val === undefined ? '#d03b3b' : bad(val) ? '#ff6b6b' : warn(val) ? '#fab219' : '#8ef0b0';
       draw(this.aitScreens[tag], [[tag + ' · ' + name, 20, '#9fb3b8'], [val === null || val === undefined ? 'LỖI' : fmt(val, nd), 64, col], [unit, 20, '#9fb3b8']]);
     }

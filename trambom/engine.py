@@ -75,6 +75,7 @@ class StationSim:
         self._alarm_seen = 0
         self.gw_dead = None
         self.gw_down_s = 0.0
+        self.has_mv02 = kind != "smart" or cfg.get("hardware", {}).get("MV-02", True)
         if kind == "smart":
             self.sensors = SensorSet(cfg, self.station, seed)
             self.link = Link(cfg, self.station.get("seed_offset", 0))
@@ -112,6 +113,12 @@ class StationSim:
             meas = self.sensors.read(pl, dt, t)
             if self.gw_dead is None:
                 out = self.gw.step(t, dt, meas)
+            elif self.gw_dead.restarted:
+                # mini PC đã khởi động lại: theo dõi (xử lý tín hiệu, đồng bộ) trong khi PID nội biến tần vẫn điều khiển
+                self.gw.step(t, dt, meas)
+                out = self.gw_dead.step(t, dt, meas)
+                if self.gw.observe_until is None:
+                    self.gw_dead = None
             else:
                 self.link.recv_gateway(t)  # bản tin tới mini PC đang treo bị mất
                 out = self.gw_dead.step(t, dt, meas)
@@ -136,7 +143,7 @@ class StationSim:
         for i, pu in enumerate(pl.pumps):
             pu.cmd_run = bool(out["run"][i]) and not lsll
             pu.f_ref = out["f_ref"][i]
-        pl.outlet_cmd = out["outlet_open"]
+        pl.outlet_cmd = out["outlet_open"] if self.has_mv02 else True  # không lắp MV-02: đầu ra luôn thông
         pl.drain_open = out["drain_open"]
         pl.step(dt, d)
         self.kpi.update(t, dt, pl)
@@ -147,7 +154,7 @@ class StationSim:
             self.hist.add(self.snapshot())
 
     def fail_gateway(self, t):
-        if self.gw_dead is not None:
+        if self.gw_dead is not None and not self.gw_dead.restarted:
             return
         self.gw_dead = GatewayFallback(self.cfg, self.gw, self.plant, t)
         self.gw.logs.append({"t": t, "level": "critical",
@@ -156,9 +163,9 @@ class StationSim:
 
     def restore_gateway(self, t):
         fb = self.gw_dead
-        if fb is None:
+        if fb is None or fb.restarted:
             return
-        self.gw_dead = None
+        fb.restarted = True  # giữ mạch dự phòng điều khiển cho tới khi mini PC tiếp quản (fallback.takeover_s)
         self.gw_down_s += t - fb.t0
         pumps = [{"running": pu.running, "f": pu.f} for pu in self.plant.pumps]
         self.gw.restart(t, fb.t0, pumps, fb.note())
@@ -200,10 +207,11 @@ class StationSim:
             s["sms"] = c["sms"]
             s["script_version"] = g.script["version"]
             s["manual_min"] = g.manual_s / 60.0
-            s["gw_down_min"] = (self.gw_down_s + (self.t - self.gw_dead.t0 if self.gw_dead is not None else 0.0)) / 60.0
+            dead = self.gw_dead is not None and not self.gw_dead.restarted
+            s["gw_down_min"] = (self.gw_down_s + (self.t - self.gw_dead.t0 if dead else 0.0)) / 60.0
             delays = [((n["t_notified"] if n["t_notified"] is not None else self.t) - n["t"]) / 60.0 for n in g.notify]
             s["notify"] = {"critical": len(delays), "max_delay_min": max(delays) if delays else 0.0,
-                           "via": sorted(set(n["via"] for n in g.notify))}
+                           "via": sorted(set(n["via"] or ("IP" if n["t_notified"] is not None else "chưa gửi") for n in g.notify))}
             if self.server is not None:
                 st = self.server.stations[self.sid]
                 s["server_records"] = st["records"]
@@ -243,14 +251,20 @@ def dispatch_event(ev, t, smart, fixed, server):
     elif typ == "link_up":
         smart.link.set_up(True, t)
     elif typ == "server_command":
-        ttl = ev.get("ttl_s", smart.cfg["gateway"]["manual_cmd_ttl_s"] if ev["cmd"]["type"] in MANUAL_CMDS else 900.0)
+        ttl = ev.get("ttl_s")
+        if ttl is None:
+            ttl = smart.cfg["gateway"]["manual_cmd_ttl_s"] if ev["cmd"]["type"] in MANUAL_CMDS else 900.0
         server.send_command(sid, ev["cmd"]["type"], ev["cmd"].get("args", {}), t, ttl)
     elif typ == "server_publish":
         server.publish_script(sid, ev["patch"], t, ev.get("by", "Điều độ viên"), ev.get("reason", ""), ev.get("strategy"))
     elif typ == "local_edit":
         smart.gw.local_edit(ev["patch"], t, ev.get("by", "HMI"), ev.get("reason", ""))
     elif typ == "local_command":
-        smart.gw.local_command(ev["cmd"]["type"], ev["cmd"].get("args", {}), t)
+        if smart.gw_dead is not None and not smart.gw_dead.restarted:
+            # HMI-01 chỉ là trang web do mini PC phục vụ: mini PC treo thì thao tác trên HMI không tới được bộ điều khiển
+            smart.gw.logs.append({"t": t, "level": "alarm", "text": "HMI-01 mất kết nối bộ điều khiển (mini PC ngừng) – bỏ qua lệnh %s" % ev["cmd"]["type"]})
+        else:
+            smart.gw.local_command(ev["cmd"]["type"], ev["cmd"].get("args", {}), t)
     elif typ == "gateway_fail":
         smart.fail_gateway(t)
     elif typ == "gateway_restore":
@@ -286,7 +300,7 @@ class TwinSim:
         if self.fixed is not None:
             self.fixed.step()
         self.server.step(t)
-        if self.smart.gw_dead is not None and not self.server.stations[self.smart.sid]["online"]:
+        if self.smart.gw_dead is not None and not self.smart.gw_dead.restarted and not self.server.stations[self.smart.sid]["online"]:
             self.smart.kpi.detect_kind(t, "gateway_fail", "máy chủ mất nhịp tim (LWT)")
         self.t = self.smart.t
 

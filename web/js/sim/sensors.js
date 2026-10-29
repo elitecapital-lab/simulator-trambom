@@ -7,10 +7,11 @@ export const TAG_ORDER = ['PT-101', 'PT-102', 'FT-101', 'FT-100', 'LT-101', 'AIT
 // Các cảm biến thực sự được lắp theo tùy chọn cfg.hardware (mặc định: lắp đủ)
 export function installedTags(cfg) {
   const hw = cfg.hardware ?? {};
+  const off = (k) => hw[k] !== undefined && !hw[k]; // giống Python: not hw.get(k, True)
   const out = new Set(TAG_ORDER);
-  if (hw['PT-102'] === false) out.delete('PT-102');
-  if (hw['FT-100_pulse'] === false) out.delete('FT-100');
-  for (const t of ['AIT-201', 'AIT-202', 'AIT-203']) if (hw[t] === false) out.delete(t);
+  if (off('PT-102')) out.delete('PT-102');
+  if (off('FT-100_pulse')) out.delete('FT-100');
+  for (const t of ['AIT-201', 'AIT-202', 'AIT-203']) if (off(t)) out.delete(t);
   return out;
 }
 

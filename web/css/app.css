@@ -366,3 +366,4 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
 .hmi-pid.stale .hmi-val, .hmi-pid.stale .hmi-small { fill: var(--muted); }
 .hmi-pid.stale .hmi-water { opacity: 0.5; }
 @container (max-width: 700px) { .hmi-pidwrap { overflow-x: auto; } .hmi-pid { min-width: 720px; } .hmi-stale { position: sticky; left: 8px; transform: none; display: block; margin: 6px 0; } }
+.hmi-stale[hidden] { display: none !important; }

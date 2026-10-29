@@ -23,8 +23,9 @@ Bể bê tông cốt thép nhận nước từ ống cấp thành phố qua van 
 |---|---|
 | Vai trò | Nguồn hút và bộ đệm thể tích/chất lượng của trạm. |
 | Giao tiếp với mini PC | Không nối trực tiếp; được đo bằng LT-101 (giải pháp) và phao LSLL-101 (hiện trạng). |
+| Thông số điển hình | Ngưỡng: làm việc 1,2–3,8 m; giảm áp tiết kiệm < 1,2 m; dừng bơm 0,6 m (chạy lại 1,5 m); khóa phần mềm 0,5 m (mở khóa 1,0 m); phao cứng 0,35 m (đặt lại 0,6 m); cảnh báo mức cao LEVEL_HIGH > 3,9 m (van phao đóng 3,8 m, tràn 4,0 m). |
 | Nếu không có | — |
-| Khi hỏng / dự phòng | Mất tín hiệu LT-101 → phao LSLL-101 vẫn cắt bơm. Cải tạo nhỏ: giá lắp LT-101 trên nắp bể, ống luồn cáp kín nước. |
+| Khi hỏng / dự phòng | Mất tín hiệu LT-101 → phao LSLL-101 vẫn cắt bơm. Cải tạo nhỏ: giá lắp LT-101 trên nắp bể, ống luồn cáp kín nước; nắp thăm kín có khóa, lưới chắn ở ống thông hơi/ống tràn. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -68,8 +69,8 @@ Van xả cặn/súc rửa bể. Hiện trạng vận hành tay; lệnh flush_tan
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Xả cặn/súc rửa bể sau sự cố chất lượng. |
-| Giao tiếp với mini PC | Hiện trạng là van tay: kỹ thuật viên mở theo lệnh xả của trung tâm. Nếu lắp bộ truyền động VX-01A (khuyến nghị) thì điều khiển bằng DO của IO-01. |
-| Khi hỏng / dự phòng | Lệnh flush_tank chỉ được chấp nhận khi trạm đang dừng an toàn. |
+| Giao tiếp với mini PC | Hiện trạng là van tay: kỹ thuật viên mở theo lệnh xả của trung tâm. Công tắc hành trình ZSC-VX01 (giải pháp) báo van đóng hẳn để cân bằng khối lượng không bị sai khi xả tay. Bộ truyền động điện VX-01A (khuyến nghị) cho phép xả từ xa. |
+| Khi hỏng / dự phòng | Lệnh flush_tank chỉ được chấp nhận khi trạm đang dừng an toàn; không xả cạn (dừng ở 1,0–1,4 m) để tránh khuấy cặn vào ống hút. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -128,16 +129,16 @@ Giống P-01. Hai bơm chạy luân phiên theo giờ chạy (bơm chính/bơm d
 
 *Hiện trạng nhà máy · cấu hình lại · bắt buộc · nhóm điện – điều khiển*
 
-Hiện trạng chỉ dùng như khởi động mềm, chạy 50 Hz bằng bàn phím. Giải pháp giữ nguyên phần cứng, cấu hình lại: nhận tần số đặt qua Modbus RTU, PID nội theo PT-101 khi rơ-le watchdog nhả.
+Hiện trạng chỉ dùng như khởi động mềm, chạy 50 Hz bằng bàn phím. Giải pháp giữ nguyên phần cứng, cấu hình lại: nhận tần số đặt qua Modbus RTU, PID nội theo PT-101 khi rơ-le watchdog nhả. Nếu biến tần không có RS-485 thì lắp card truyền thông COM-VFD; không có PID nội hoặc quá cũ thì thay biến tần chuyên dụng cho bơm.
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Điều khiển tốc độ bơm P-01 theo lệnh mini PC; PID nội làm dự phòng khi mini PC hỏng. |
-| Giao tiếp với mini PC | Modbus RTU (RS-485 COM1 của MPC-01, địa chỉ 1, 19 200 bps): ghi tần số đặt, đọc f, I, kW, kWh, mã lỗi. Lệnh chạy: DO IO-01 → SA-01 (TỰ ĐỘNG) → WDR-01 → đầu cực FWD. AI2 nhận PT-101 qua ISO-101 cho PID dự phòng. |
-| Thông số điển hình | Khóa f_max 50 Hz; f_min 25 Hz; tăng/giảm 20 s; bảo vệ non tải (chạy khô); tự khởi động lại sau mất điện có trễ lệch giữa 2 biến tần; timeout Modbus 3–5 s → giữ tần số cuối; PID nội 3,0 bar (Kp 6 Hz/bar, Ti 15 s); mất phản hồi PID → 40 Hz. |
-| Nếu không có | Không có RS-485: dùng phương án đầu cực (AO 4–20 mA tần số, DI/AI trạng thái). Không có PID nội: thay biến tần chuyên dụng cho bơm. |
+| Giao tiếp với mini PC | Modbus RTU (RS-485 COM1 của MPC-01, địa chỉ 1, 19 200 bps 8E1): ghi tần số đặt vào thanh ghi lệnh (RAM, không lưu EEPROM), đọc f, I, kW, kWh, mã lỗi. Lệnh chạy: DO IO-01 → rơ-le trung gian → SA-01 (TỰ ĐỘNG) → chuỗi liên động IL-01 → KA-WD1 (WDR-01) → FWD. AI2 nhận PT-101 qua ISO-101. DI chọn nguồn tần số Modbus/PID do KA-WD1 điều khiển; DI "tại chỗ/bàn phím" do vị trí TAY của SA-01 điều khiển (ưu tiên hơn). |
+| Thông số điển hình | Khóa f_max 50 Hz (60 Hz cho áp đóng van ≈6,6 bar, vượt PSV-01); f_min 25 Hz; tăng/giảm 20 s; bảo vệ non tải (chạy khô); bắt tốc độ quay; tự khởi động lại sau mất điện trễ ≈10 s; tự reset chỉ cho lỗi điện áp, tối đa 3 lần – không tự reset lỗi chạm đất/quá dòng; timeout Modbus 3–5 s → giữ tần số cuối và cảnh báo. PID nội: điểm đặt 30 % thang 0–10 bar (3,0 bar); Kp quy đổi ≈ 6 Hz/bar × 10 bar / 50 Hz ≈ 1,2, Ti 15 s (đơn vị theo từng hãng); mất phản hồi (< 3,6 mA) → tần số đặt sẵn 40 Hz; tắt chức năng ngủ của PID nội. |
+| Nếu không có | Không cấu hình lại thì mini PC chỉ giám sát, không điều khiển được tốc độ: mất phần lớn mức tiết kiệm ≈40 % điện của S10. |
 | Khi hỏng / dự phòng | Lớp 2: bảo vệ nội của biến tần. Lớp 7: PID nội giữ áp khi mini PC treo. |
-| Thử trong mô phỏng | Kịch bản S11; tắt tùy chọn VFD_PID_fallback để thấy I/O giữ lệnh cuối. |
+| Thử trong mô phỏng | Kịch bản S11; tắt tùy chọn VFD_PID_fallback để thấy hậu quả khi không có mạch dự phòng. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -153,12 +154,12 @@ Hiện trạng chỉ dùng như khởi động mềm, chạy 50 Hz bằng bàn p
 
 *Hiện trạng nhà máy · cấu hình lại · bắt buộc · nhóm điện – điều khiển*
 
-Như VFD-01, địa chỉ Modbus 2. Khởi động lại sau mất điện trễ hơn VFD-01 (≈40 s so với ≈10 s) để không đóng điện cùng lúc.
+Như VFD-01, địa chỉ Modbus 2. Khởi động lại sau mất điện trễ hơn VFD-01 (≈40 s so với ≈10 s) để không đóng điện cùng lúc. PID dự phòng dùng cảm biến áp riêng PT-102 (qua ISO-102), nên hai biến tần không phụ thuộc chung một cảm biến.
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Điều khiển tốc độ bơm P-02; nhận quyền PID nội nếu VFD-01 lỗi. |
-| Giao tiếp với mini PC | Modbus RTU COM1 địa chỉ 2; lệnh chạy qua SA-02 → WDR-01; AI2 nhận PT-101 qua ISO-101. |
+| Vai trò | Điều khiển tốc độ bơm P-02; nhận PID dự phòng khi P-02 là bơm chính hoặc VFD-01 lỗi. |
+| Giao tiếp với mini PC | Modbus RTU COM1 địa chỉ 2; lệnh chạy qua SA-02 → IL-01 → KA-WD2; AI2 nhận PT-102 qua ISO-102 (không có PT-102 thì nhận PT-101). |
 | Thông số điển hình | Như VFD-01. |
 | Khi hỏng / dự phòng | Như VFD-01. |
 
@@ -216,12 +217,12 @@ Bình màng làm mềm dao động áp lực, cấp nước khi bơm ngủ đôn
 | Vai trò | Làm mềm dao động áp, cho phép bơm ngủ đông khi lưu lượng rất nhỏ. |
 | Giao tiếp với mini PC | Không nối mini PC (áp lực đo bằng PT-101/102). |
 | Nếu không có | Nếu trạm chưa có: nên bổ sung; không có thì tắt chức năng ngủ đông (sleep.enabled = false). |
-| Khi hỏng / dự phòng | Kiểm tra áp nạp trước 1,7–1,8 bar mỗi 6 tháng. |
+| Khi hỏng / dự phòng | Kiểm tra áp nạp trước 1,7 bar mỗi 6 tháng. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
 | Thể tích bình | 300 | L |
-| Áp nạp trước | 1,8 | bar |
+| Áp nạp trước | 1,7 | bar |
 | Độ đàn hồi đường ống | 0,005 | m³/bar |
 
 **Dải làm việc:** 1,8–6,0 bar
@@ -269,15 +270,15 @@ Lớp bảo vệ cuối cùng, độc lập với điện tử: mở khi áp l�
 
 *Hiện trạng nhà máy · nâng cấp · nên có · nhóm cảm biến*
 
-Đồng hồ Woltmann thương mại hiện có của công ty cấp nước. Giải pháp chỉ gắn thêm đầu phát xung (10 L/xung) – cần phối hợp đơn vị cấp nước và niêm chì lại.
+Đồng hồ Woltmann thương mại hiện có của công ty cấp nước. Giải pháp chỉ gắn thêm đầu phát xung (10 L/xung) – cần phối hợp đơn vị cấp nước và niêm chì lại. GW-01 tự lưu offset bộ đếm, xử lý khi bộ đếm reset hoặc tràn.
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Đo nước mua vào: cân bằng nước, dự báo thời gian cạn bể, phát hiện mất nguồn. |
-| Giao tiếp với mini PC | Xung → DI đếm xung của IO-01 (≥ 100 Hz), tính lưu lượng trượt 60 s. |
-| Nếu không có | Gateway ước lượng lưu lượng vào bằng cân bằng khối lượng: Q_vào ≈ Q_ra (FT-101) + A·dH/dt (LT-101), cửa sổ 15 phút. |
-| Khi hỏng / dự phòng | Như khi không có (cân bằng khối lượng). |
-| Thử trong mô phỏng | S6 – tắt FT-100_pulse: phát hiện mất nguồn gần như không đổi (dư thừa phân tích). |
+| Vai trò | Đo nước mua vào: cân bằng nước, phát hiện mất nguồn sớm, dự báo thời gian cạn bể, đối soát với công ty cấp nước. |
+| Giao tiếp với mini PC | Xung → DI đếm xung của IO-01 (≥ 100 Hz), lọc thành lưu lượng trượt ≈ 60 s. |
+| Nếu không có | Gateway ước lượng lưu lượng vào bằng cân bằng khối lượng: Q_vào ≈ Q_ra (FT-101) + A·dH/dt (LT-101), cửa sổ 15 phút – phát hiện mất nguồn chậm hơn (xem mục 9 tài liệu 07). |
+| Khi hỏng / dự phòng | FT-100 mất tín hiệu → tự chuyển sang cân bằng khối lượng; FT-101 cũng lỗi thì không ước lượng (không báo mất nguồn giả). |
+| Thử trong mô phỏng | S6 – tắt FT-100_pulse. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -290,12 +291,12 @@ Lớp bảo vệ cuối cùng, độc lập với điện tử: mở khi áp l�
 
 *Hiện trạng nhà máy · nâng cấp · bắt buộc · nhóm cảm biến*
 
-Phao hiện có, cắt bơm trực tiếp qua mạch khởi động khi mức < 0,35 m, đặt lại ở 0,6 m. Cải tạo: đấu lại kiểu thường đóng (đứt dây = dừng), thêm rơ-le KA-LS lấy tiếp điểm giám sát về mini PC, đặt phao trong ống lặng.
+Phao hiện có, cắt bơm khi mức < 0,35 m, đặt lại ở 0,6 m. Cải tạo: đấu lại kiểu thường đóng (đứt dây = dừng), thêm rơ-le KA-LS lấy tiếp điểm giám sát về mini PC. Dùng phao từ trên thanh dẫn hướng inox (đặt được trong ống lặng) hoặc phao cáp treo tự do trong lồng bảo vệ, xa dòng vào và miệng hút – không đặt phao cáp trong ống lặng.
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Chống chạy khô bằng mạch cứng, độc lập phần mềm. |
-| Giao tiếp với mini PC | Mạch cứng IL-01 trong CP-01 (tác động ở mọi chế độ Tay/Tự động/PID nội). Tiếp điểm phụ → DI IO-01 (chỉ để giám sát). |
+| Giao tiếp với mini PC | Chuỗi liên động cứng IL-01 trong CP-01 (tác động ở mọi chế độ Tay/Tự động/PID nội). Tiếp điểm phụ KA-LS → DI IO-01 (chỉ để giám sát). |
 | Khi hỏng / dự phòng | Lớp 1 (liên động cứng): vẫn bảo vệ khi mini PC hỏng. |
 
 | Tham số | Giá trị | Đơn vị |
@@ -309,13 +310,13 @@ Phao hiện có, cắt bơm trực tiếp qua mạch khởi động khi mức < 
 
 *Hiện trạng nhà máy · nâng cấp · bắt buộc · nhóm điện – điều khiển*
 
-Hiện trạng: MCCB tổng và từng bơm, 2 biến tần, contactor, rơ-le nhiệt, đồng hồ V/A, nút bấm. Cải tạo: lắp công tắc Tay/0/Tự động SA-01/02 và dừng khẩn trên cửa, rơ-le watchdog WDR-01, rơ-le liên động, đồng hồ điện EM-101, chống sét SPD-01 ở đầu vào; thêm hàng kẹp sang tủ mới CP-02.
+Hiện trạng: MCCB tổng và từng bơm, 2 biến tần, contactor, rơ-le nhiệt, đồng hồ V/A, nút bấm, bộ hẹn giờ TMR-01. Phần thi công cải tạo (bố trí chỗ lắp, đi lại dây FWD, vệ sinh) thuộc hạng mục này; các thiết bị mới lắp vào CP-01 được liệt kê riêng ở nhóm giải pháp: SA-01/02, WDR-01, K-SS, IL-01 + PSU-IL, KA-DO, EM-101, SPD-01, VT-CP01.
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Tủ động lực hiện có: cấp điện và bảo vệ cho 2 bơm/biến tần. |
-| Giao tiếp với mini PC | Hàng kẹp X-IF sang CP-02: lệnh chạy, trạng thái, RS-485, 4–20 mA, nguồn 230 VAC cho CP-02. |
-| Khi hỏng / dự phòng | Mạch liên động cứng (LSLL-101, dừng khẩn, van MV-02 đóng → cấm chạy) nằm trong CP-01 và đấu kiểu thường đóng. |
+| Giao tiếp với mini PC | Hàng kẹp X-IF sang CP-02: lệnh chạy, trạng thái, RS-485, 4–20 mA. |
+| Khi hỏng / dự phòng | Mạch liên động cứng IL-01 (LSLL-101, dừng khẩn, K-SS, MV-02 đóng → cấm chạy) nằm trong CP-01, đấu kiểu thường đóng, lấy nguồn riêng PSU-IL. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -323,6 +324,19 @@ Hiện trạng: MCCB tổng và từng bơm, 2 biến tần, contactor, rơ-le n
 | Cấp bảo vệ | IP54 | – |
 
 **Dải làm việc:** –
+
+#### TMR-01 · Bộ hẹn giờ lịch cố định hiện có trong CP-01
+
+*Hiện trạng nhà máy · thay thế · bắt buộc · nhóm điện – điều khiển*
+
+Các mốc giờ của phương án lịch cố định không có công nhân ở trạm (chỉ có lượt kiểm tra 07:30 và 16:30), nên CP-01 chắc chắn đang có thiết bị tự bật/tắt bơm. Mini PC thay thế chức năng này.
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Bộ hẹn giờ / PLC mini hiện có đang bật tắt bơm theo lịch cố định (05:00–22:00, 06–08 h, 17:30–20:30). |
+| Giao tiếp với mini PC | Tháo khỏi mạch FWD, hoặc giữ làm chế độ "LỊCH" riêng dưới công tắc SA-01/02 – không bao giờ để hai nguồn lệnh chạy song song. |
+| Nếu không có | — |
+| Khi hỏng / dự phòng | Có thể giữ làm phương án vận hành tạm khi mini PC và PID dự phòng cùng không dùng được. |
 
 #### MANG-LUOI · Mạng lưới phân phối khu dân cư A (DMA-A)
 
@@ -352,21 +366,22 @@ Hiện trạng: MCCB tổng và từng bơm, 2 biến tần, contactor, rơ-le n
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
 
-Máy tính công nghiệp gắn DIN trong tủ CP-02. Chạy Linux LTS phân vùng gốc chỉ đọc, các dịch vụ: io (Modbus TCP tới IO-01), drive (Modbus RTU tới biến tần), meter (EM-101, AIT, FT-101), control (lõi GW-01 chu kỳ 1 s – chính là mã đã kiểm chứng trong mô phỏng), comms (MQTT/TLS + bộ đệm SQLite trên SSD), hmi (web HMI).
+Máy tính công nghiệp gắn DIN trong tủ CP-02. Chạy Linux LTS phân vùng gốc chỉ đọc, các dịch vụ: io (Modbus TCP tới IO-01, 100–200 ms), drive (Modbus RTU COM1 – chỉ biến tần), meter (COM2: EM-101, AIT, FT-101), control (lõi GW-01 chu kỳ 1 s – chính là mã đã kiểm chứng trong mô phỏng), comms (MQTT/TLS + bộ đệm SQLite trên SSD), hmi (web HMI).
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Phần cứng edge gateway: tiếp nhận, xử lý, điều khiển tín hiệu tại chỗ; chạy GW-01 và web HMI. |
-| Giao tiếp với mini PC | LAN1 ↔ RT-01 (WAN). LAN2 ↔ SW-01 (mạng OT: IO-01, HMI-01). COM1 RS-485 cách ly ↔ VFD-01/02. COM2 RS-485 cách ly ↔ EM-101, AIT, FT-101. Nguồn 24 VDC từ UPS-01. |
-| Thông số điển hình | x86 hoặc ARM công nghiệp 4 nhân, RAM 4–8 GB, SSD công nghiệp pSLC 64–128 GB, 2 LAN, 2 RS-485 cách ly, watchdog phần cứng, TPM 2.0, RTC có pin, 9–36 VDC, −20…60 °C, 10–15 W. |
+| Giao tiếp với mini PC | LAN1 ↔ RT-01 (WAN). LAN2 ↔ SW-01 (mạng OT: IO-01, HMI-01). COM1 RS-485 cách ly ↔ VFD-01/02. COM2 RS-485 cách ly ↔ EM-101, AIT, FT-101. Nguồn 24 VDC từ UPS-01. Xung sống tới WDR-01 qua DO bán dẫn của IO-01. |
+| Thông số điển hình | x86 hoặc ARM công nghiệp 4 nhân, RAM 4–8 GB, SSD/eMMC công nghiệp pSLC 64–128 GB có bảo vệ mất nguồn, 2 LAN, 2 RS-485 cách ly, watchdog phần cứng, TPM 2.0, RTC có pin, 9–36 VDC, −20…60 °C (nên chọn −40…70 °C), 10–15 W. |
 | Nếu không có | Không có bộ điều khiển tại chỗ: trạm quay về vận hành lịch cố định (phương án so sánh) – mất toàn bộ chế độ (a)–(d). |
-| Khi hỏng / dự phòng | Watchdog 3 tầng (dịch vụ → phần cứng → WDR-01). Mini PC treo > 5 s: biến tần chạy PID nội; khởi động lại thì nạp kịch bản/bộ đệm từ SSD, đồng bộ lại (chế độ c). |
+| Khi hỏng / dự phòng | Watchdog 3 tầng (dịch vụ → phần cứng → WDR-01). Mini PC treo > 5 s: biến tần chạy PID nội. Khởi động lại: hủy phiên điều khiển tay cũ, nạp kịch bản/bộ đệm từ SSD, theo dõi 60 s rồi mới tiếp quản không xung, đồng bộ lại (chế độ c). |
 | Thử trong mô phỏng | S11: mini PC treo 17:00–23:00. Tab Sự cố → "Mini PC treo". |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
 | Chu kỳ điều khiển | 1 | s |
 | Bộ đệm lưu-và-chuyển | 4.320 bản ghi + nén | – |
+| Theo dõi trước khi tiếp quản | 60 | s |
 | Công suất | 10–15 | W |
 
 **Dải làm việc:** −20…60 °C
@@ -382,7 +397,7 @@ Thu thập dữ liệu chu kỳ 1 s, kiểm tra hợp lệ tín hiệu, lớp an
 | Vai trò | Phần mềm edge gateway chạy trên MPC-01 (lõi đã mô phỏng trong dự án này). |
 | Giao tiếp với mini PC | Đọc/ghi I/O qua dịch vụ io/drive/meter; MQTT/TLS 8883 tới SRV-01; web HMI cho HMI-01. |
 | Khi hỏng / dự phòng | Lớp an toàn phần mềm luôn chạy sau kịch bản và có thể ghi đè. Kịch bản mới có giám sát 10 phút và tự quay lui. |
-| Thử trong mô phỏng | Mọi kịch bản S1–S12. |
+| Thử trong mô phỏng | Mọi kịch bản S1–S13. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -399,15 +414,15 @@ Thu thập dữ liệu chu kỳ 1 s, kiểm tra hợp lệ tín hiệu, lớp an
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
 
-Tập trung các tín hiệu hiện trường về mini PC. Có giá trị an toàn khi mất truyền thông cho từng DO.
+Tập trung các tín hiệu hiện trường về mini PC. Thời gian chờ truyền thông đặt 10 s (≥ 2 lần WDR-01) để rơ-le watchdog luôn chuyển quyền sang PID nội TRƯỚC khi DO về trạng thái an toàn.
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Mô-đun vào/ra từ xa: số hóa tín hiệu 4–20 mA, tiếp điểm, xung; xuất lệnh. |
-| Giao tiếp với mini PC | Modbus TCP qua SW-01 (chu kỳ 100–200 ms). Cấp nguồn vòng cho cảm biến 2 dây. |
-| Thông số điển hình | ≥ 8 AI 4–20 mA 16 bit (phát hiện đứt dây), ≥ 16 DI 24 VDC (2 kênh đếm xung), ≥ 8 DO (≥ 1 kênh bán dẫn cho xung watchdog), 2 AO; cách ly 1,5 kV; dư ≥ 20 % kênh. |
+| Giao tiếp với mini PC | Modbus TCP qua SW-01 (chu kỳ 100–200 ms). Cấp nguồn vòng cho cảm biến 2 dây. DO đóng cắt thiết bị hiện trường qua rơ-le trung gian KA-DO. |
+| Thông số điển hình | ≥ 12 AI 4–20 mA 16 bit (phát hiện đứt dây), ≥ 32 DI 24 VDC (≥ 2 kênh đếm xung), ≥ 16 DO (≥ 1 kênh bán dẫn cho xung watchdog), 2 AO; cách ly 1,5 kV; dư ≥ 20 % kênh. |
 | Nếu không có | Dùng card I/O gắn trực tiếp mini PC (kém linh hoạt, khó thay nóng). |
-| Khi hỏng / dự phòng | Mất truyền thông 2–5 s: DO lệnh chạy về 0 – không gây mất nước vì WDR-01 đã chuyển biến tần sang PID nội. |
+| Khi hỏng / dự phòng | Mất truyền thông 10 s: DO lệnh chạy về 0. Khi đó WDR-01 (5 s) đã chuyển biến tần sang PID nội, nên lệnh chạy lúc này đi qua mạch dự phòng – bơm không bị dừng. Bài thử SAT: rút cáp LAN2 khi bơm đang chạy – đạt nếu không có lệnh dừng và tần số sụt ≤ 5 Hz. |
 
 #### CP-02 · Tủ điều khiển & truyền thông mới (CP-02)
 
@@ -446,7 +461,7 @@ Switch công nghiệp cho mạng OT trong tủ CP-02.
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm truyền thông*
 
-MQTT/TLS tới máy chủ điều hành qua APN riêng/VPN, chỉ kết nối ra ngoài. Khi mất IP, báo động nghiêm trọng gửi SMS tới tổ trực.
+MQTT/TLS tới máy chủ điều hành qua APN riêng/VPN, chỉ kết nối ra ngoài. Khi mất IP, báo động khẩn (critical) gửi SMS tới tổ trực; báo động khẩn phát sinh trong lúc mạng đã đứt nhưng chưa phát hiện (≤ 60 s) được gửi SMS ngay khi phát hiện.
 
 | Mục | Nội dung |
 |---|---|
@@ -473,34 +488,83 @@ Giữ mini PC, I/O, router, cảm biến ≥ 4 h khi mất điện lưới.
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Giữ mini PC, I/O, router, cảm biến ≥ 4 h khi mất điện lưới. |
-| Giao tiếp với mini PC | Tiếp điểm mất điện lưới / ắc quy yếu → DI IO-01. |
-| Thông số điển hình | Nguồn 230 VAC/24 VDC 10 A; DC-UPS; ắc quy AGM 2 × 12 V ≈ 20–26 Ah hoặc LiFePO4; tải 40–80 W trong 4 h. |
+| Giao tiếp với mini PC | Hai tiếp điểm riêng (hoặc rơ-le trung gian 2 C/O) báo mất điện lưới / ắc quy yếu → DI IO-01 và RT-01 – không đấu song song một tiếp điểm vào hai thiết bị khác nguồn. |
+| Thông số điển hình | Nguồn 230 VAC/24 VDC 10 A; DC-UPS; ưu tiên ắc quy LiFePO4 có BMS (cắt sạc khi < 0 °C hoặc > 45–55 °C), đặt ở phần thấp, mát nhất của tủ; tải 40–80 W trong 4 h. Nếu dùng AGM: trong tủ 40–50 °C tuổi thọ chỉ ≈1,5–2 năm – thay sau 2 năm, thử dung lượng hằng năm. |
 | Nếu không có | Mất điện: mất đo, mất cảnh báo, khởi động lại mini PC mỗi lần chập chờn – dễ hỏng SSD. |
-| Khi hỏng / dự phòng | Có điện lại: biến tần khởi động lệch nhau, mini PC lấy lại quyền theo trình tự không giật. |
+| Khi hỏng / dự phòng | Có điện lại: biến tần khởi động lệch nhau, mini PC theo dõi 60 s rồi tiếp quản không xung. Mạch liên động IL-01 không lấy nguồn từ UPS-01 (dùng PSU-IL riêng). |
 
-#### WDR-01 · Rơ-le watchdog (giám sát xung sống) lắp trong CP-01
+#### WDR-01 · Rơ-le watchdog + rơ-le nhân tiếp điểm, chốt chọn bơm (lắp trong CP-01)
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
 
-Mini PC đảo một DO sau mỗi chu kỳ điều khiển thành công. Mất xung 5 s: rơ-le nhả, biến tần bơm chính chuyển nguồn tần số sang PID nội theo PT-101, bơm còn lại dừng. Đi kèm rơ-le chốt dừng an toàn K-SS: nếu trạm đang dừng an toàn do chất lượng nước thì mạch dự phòng KHÔNG được chạy bơm. Chỉ trả quyền khi mini PC khỏe liên tục ≥ 60 s.
+Mini PC đảo một DO sau mỗi chu kỳ điều khiển thành công. Mất xung 5 s: WDR-01 nhả, hai rơ-le nhân tiếp điểm KA-WD1/KA-WD2 (mỗi biến tần một rơ-le, 4 C/O) chuyển nguồn tần số của biến tần bơm chính sang PID nội; bơm còn lại dừng. Bơm chính do rơ-le chốt KA-DUTY quyết định – mini PC đặt KA-DUTY mỗi lần luân phiên hoặc khi chạy tay, nên mạch dự phòng nhận đúng bơm đang chạy; biến tần bơm chính lỗi thì KA-FB chuyển sang bơm kia. Điều kiện "mini PC khỏe ≥ 60 s mới lấy lại quyền" là logic phần mềm của GW-01 (fallback.takeover_s).
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Cắt quyền điều khiển của mini PC khi nó ngừng phát xung sống, chuyển biến tần sang PID nội. |
-| Giao tiếp với mini PC | Đầu vào: DO bán dẫn của IO-01 (xung 1 Hz). Đầu ra: DI chọn nguồn tần số của VFD-01/02, chuyển lệnh chạy sang mạch chọn bơm dự phòng. |
-| Thông số điển hình | Rơ-le giám sát xung 24 VDC, chỉnh 1–30 s (đặt 5 s), 2 tiếp điểm C/O, nút thử. |
-| Nếu không có | Mini PC treo: mô-đun I/O giữ nguyên lệnh cuối – bơm chạy "mù" theo tần số cũ (S11: áp ngoài dải 213 phút so với 1 phút). |
-| Khi hỏng / dự phòng | Bản thân WDR-01 là lớp dự phòng; thử hằng quý bằng cách dừng dịch vụ điều khiển. |
+| Giao tiếp với mini PC | Đầu vào: DO bán dẫn của IO-01 (xung 1 Hz). Đầu ra: KA-WD1/KA-WD2 → DI chọn nguồn tần số của VFD-01/02 (mỗi biến tần dùng nguồn 24 V nội riêng, không chung tiếp điểm), chuyển lệnh chạy sang KA-FB; tiếp điểm riêng báo về DI IO-01 và RT-01. KA-DUTY: 1 DO đặt + 1 DI đọc lại. |
+| Thông số điển hình | Rơ-le giám sát xung kích theo SƯỜN (không theo mức – DO kẹt ở 1 hay 0 đều phải bị phát hiện), 24 VDC, chỉnh 1–30 s (đặt 5 s), nút thử; KA-WD1/2 4 C/O đế cắm có LED; KA-DUTY rơ-le chốt giữ trạng thái khi mất điện. |
+| Nếu không có | Mini PC treo: sau 10 s mô-đun I/O đưa lệnh chạy về 0 → bơm dừng, mất nước tới khi có người tới (S11: áp ngoài dải hàng trăm phút). Nếu cấu hình I/O "giữ lệnh cuối" thì bơm chạy mù theo tần số cũ – cũng thiếu áp giờ cao điểm. |
+| Khi hỏng / dự phòng | Bài thử FAT: ép DO xung đứng yên ở 1 và ở 0 – cả hai phải làm WDR-01 nhả. Thử hằng quý bằng cách dừng dịch vụ điều khiển. |
 | Thử trong mô phỏng | S11 có/không VFD_PID_fallback. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
 | Thời gian giám sát | 5 | s |
+| Thời gian chờ truyền thông IO-01 | 10 | s |
 | Điểm đặt PID dự phòng | 3,0 | bar |
 
 **Dải làm việc:** –
 
-#### ISO-101 · Bộ cách ly và chia tín hiệu 4–20 mA
+#### K-SS · Rơ-le chốt dừng an toàn + công tắc khóa đặt lại S-RST
+
+*Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
+
+GW-01 đặt K-SS khi SAFE_STOP (chất lượng nước) hoặc LOCKOUT (cắt áp cao nhiều lần). K-SS nằm trong chuỗi IL-01 nên mạch dự phòng PID không chạy bơm khi chốt đang bật. Đặt lại bằng lệnh của GW-01 hoặc bằng công tắc khóa S-RST trên cửa CP-01 (đấu thẳng vào cuộn reset) – để trạm không bị kẹt dừng khi mini PC hỏng. Đặt lại bằng S-RST cần hai người và kết quả đo KIT-01 đạt (clo 0,25–0,95 mg/L, độ đục < 1,5 NTU, pH 6,2–8,3, duy trì 10 phút).
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Rơ-le chốt dừng an toàn: giữ trạm dừng khi mini PC hỏng trong lúc đang dừng an toàn hoặc đang khóa do áp cao. |
+| Giao tiếp với mini PC | DO đặt / DO đặt lại từ IO-01; tiếp điểm trạng thái → DI; S-RST → cuộn reset + DI ghi nhật ký. |
+| Nếu không có | Mini PC hỏng lúc đang dừng an toàn → PID dự phòng có thể bơm nước chưa đạt ra mạng. |
+
+#### IL-01 · Mạch liên động cứng + nguồn riêng PSU-IL (lắp trong CP-01)
+
+*Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
+
+Tác động lên STO hoặc DI dừng tự do của biến tần ở mọi chế độ (Tay, Tự động, PID nội). Lấy nguồn từ bộ nguồn 24 VDC riêng trong CP-01 (≈2,5 A, MCB riêng; có thể ghép diode với UPS-01) – nếu lấy từ UPS-01 của CP-02 thì hỏng nguồn của giải pháp sẽ dừng cả chế độ TAY, tạo điểm hỏng đơn lẻ mới.
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Chuỗi liên động cứng (rơ-le KA-IL, KA-LS, dừng khẩn ES-01, K-SS, MV-02 đóng → cấm chạy) với nguồn 24 VDC riêng PSU-IL. |
+| Giao tiếp với mini PC | Không qua mini PC; tiếp điểm phụ báo trạng thái về DI IO-01. |
+| Nếu không có | Bảo vệ chạy khô/khẩn cấp chỉ còn phần mềm – không đạt yêu cầu "an toàn độc lập với điện tử". |
+
+#### KA-DO · Rơ-le trung gian, contactor đảo chiều van
+
+*Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
+
+DO rơ-le 2 A của IO-01 không trực tiếp đóng cắt động cơ van hay mạch hiện trường. Rơ-le đế cắm có LED và diode.
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Rơ-le trung gian cho các DO của IO-01 và bộ contactor đảo chiều có khóa chéo cho động cơ van MV-02. |
+| Giao tiếp với mini PC | DO IO-01 → KA-DO → thiết bị hiện trường. |
+| Nếu không có | Hỏng DO của IO-01 khi đóng cắt tải cảm; khó thay thế. |
+
+#### COM-VFD · Card truyền thông cho biến tần (có điều kiện)
+
+*Giải pháp đưa vào · bổ sung mới · tùy chọn · nhóm điện – điều khiển*
+
+Bắt buộc nếu khảo sát cho thấy VFD-01/02 không có RS-485. Phương án thay thế: điều khiển đầu cực (AO 4–20 mA tần số đặt, AO/DI trạng thái).
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Card truyền thông RS-485/Modbus cho biến tần – chỉ khi biến tần hiện có chưa có cổng. |
+| Giao tiếp với mini PC | Lắp vào biến tần, nối bus COM1. |
+| Nếu không có | Dùng phương án đầu cực, mất dữ liệu kW, kWh, mã lỗi chi tiết. |
+
+#### ISO-101 · Bộ cách ly và chia tín hiệu 4–20 mA (ISO-101, ISO-102)
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
 
@@ -508,21 +572,21 @@ Chia tín hiệu PT-101 cho cả IO-01 và PID nội của 2 biến tần; cách
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Chia tín hiệu PT-101 cho cả IO-01 và PID nội của 2 biến tần; cách ly chống nhiễu. |
-| Giao tiếp với mini PC | PT-101 → ISO-101 (1 vào 3 ra) → IO-01 AI1, VFD-01 AI2, VFD-02 AI2. Các kênh khác dùng loại 1 vào 1 ra. |
-| Thông số điển hình | Cách ly 3 cổng 1,5–2,5 kV, sai số ≤ 0,1 % FS, đáp ứng < 50 ms, truyền được mức lỗi NAMUR (< 3,6 mA). |
+| Vai trò | Chia tín hiệu áp cho cả IO-01 và PID nội của biến tần; cách ly chống nhiễu. |
+| Giao tiếp với mini PC | PT-101 → ISO-101 (1 vào 2 ra) → IO-01 AI1 + VFD-01 AI2. PT-102 → ISO-102 → IO-01 AI2 + VFD-02 AI2. Mỗi biến tần có cảm biến riêng ở chế độ dự phòng. Các kênh khác dùng loại 1 vào 1 ra. |
+| Thông số điển hình | Loại 1 vào 2 ra phổ biến, có cấp nguồn vòng; cách ly 3 cổng 1,5–2,5 kV, sai số ≤ 0,1 % FS, đáp ứng < 50 ms, truyền được mức lỗi NAMUR (< 3,6 mA). |
 | Nếu không có | Biến tần không có tín hiệu áp để chạy PID dự phòng. |
 
 #### SA-01/02 · Công tắc chọn chế độ, đèn báo, dừng khẩn
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
 
-TỰ ĐỘNG: cho phép lệnh từ mini PC hoặc PID nội. TAY: chạy tại chỗ theo bàn phím biến tần, vẫn qua liên động cứng. 0: khóa để bảo trì. Khác với chế độ TAY trên HMI (lệnh phần mềm qua mini PC).
+TỰ ĐỘNG: cho phép lệnh từ mini PC hoặc PID nội. TAY: biến tần chuyển sang điều khiển tại chỗ bằng bàn phím, vẫn qua liên động cứng. 0 = dừng điều khiển (KHÔNG phải điểm cách ly năng lượng: khóa – treo thẻ (LOTO) làm trên aptomat QF-01/02 có tay khóa, chờ tụ DC xả hết theo nhãn hãng). Khác với chế độ TAY trên HMI (lệnh phần mềm qua mini PC).
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Công tắc Tay/0/Tự động từng bơm, đèn báo và nút dừng khẩn trên cửa CP-01. |
-| Giao tiếp với mini PC | 2 DI/bơm (Tay, Tự động) → IO-01; đèn Chạy/Lỗi/Tự động/Dự phòng PID. |
+| Giao tiếp với mini PC | 2 DI/bơm (Tay, Tự động) → IO-01: SA khác TỰ ĐỘNG thì GW-01 coi bơm là không sẵn sàng. Tiếp điểm TAY → DI "điều khiển tại chỗ/bàn phím" của biến tần (ưu tiên hơn DI chọn nguồn của WDR-01). Đèn Chạy/Lỗi/Tự động/Dự phòng PID. |
 | Khi hỏng / dự phòng | Vận hành tay hoàn toàn bằng phần cứng khi mini PC và IO-01 cùng hỏng. |
 
 #### PT-101 · Cảm biến áp lực đầu ra (điều khiển)
@@ -556,10 +620,10 @@ Cảm biến độc lập thứ hai cho lớp an toàn (cắt áp rất cao) và
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Áp đầu ra cho lớp an toàn (cắt áp rất cao) và đối chiếu chéo với PT-101. |
-| Giao tiếp với mini PC | AI 4–20 mA → IO-01 AI2; điểm trích áp riêng. |
-| Nếu không có | PT-101 kẹt/trôi không bị phát hiện ở mức cơ bản: S5 – áp > 4,0 bar suốt 119 phút, đỉnh 4,56 bar. |
-| Khi hỏng / dự phòng | Mức nâng cao còn phát hiện kẹt bằng kiểm tra giá trị đứng yên + mô hình bơm. |
+| Vai trò | Áp đầu ra cho lớp an toàn (cắt áp rất cao theo max(PT-101, PT-102)), đối chiếu chéo với PT-101 và tín hiệu PID dự phòng của VFD-02. |
+| Giao tiếp với mini PC | AI 4–20 mA → ISO-102 → IO-01 AI2 + VFD-02 AI2; điểm trích áp riêng. |
+| Nếu không có | Mức cơ bản: PT-101 kẹt/trôi không bị phát hiện – S5: áp > 4,0 bar suốt 119 phút, đỉnh 4,56 bar. Mức nâng cao chỉ còn phát hiện được kẹt CỨNG (giá trị không đổi tuyệt đối 30 s) – cảm biến kẹt nhưng còn dao động nhiễu, hoặc ống trích bị tắc, sẽ không bị phát hiện; biểu quyết 2/3 với mô hình bơm cần cả PT-101 và PT-102. |
+| Khi hỏng / dự phòng | Mất cả hai cảm biến áp → chạy 40 Hz an toàn (NO_PRESSURE). |
 | Thử trong mô phỏng | S5 có/không PT-102 (tab Thiết bị). |
 
 | Tham số | Giá trị | Đơn vị |
@@ -578,10 +642,10 @@ Cảm biến độc lập thứ hai cho lớp an toàn (cắt áp rất cao) và
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Lưu lượng ra mạng: đường đặt áp P_set(Q), dự báo, phát hiện rò rỉ đêm. |
+| Vai trò | Lưu lượng ra mạng: đường đặt áp P_set(Q), dự báo, phát hiện rò rỉ đêm, cân bằng khối lượng. |
 | Giao tiếp với mini PC | AI 4–20 mA → IO-01 AI3; tổng m³ qua Modbus RTU COM2. |
 | Nếu không có | Phải đặt áp cố định cao (≈3,3 bar): tốn điện, tăng rò rỉ; mất phát hiện bất thường lưu lượng. |
-| Khi hỏng / dự phòng | Mất tín hiệu: ước lượng Q từ mô hình bơm, đặt P_set ở mức cao. |
+| Khi hỏng / dự phòng | Mất tín hiệu: giữ giá trị lọc cuối và báo SENSOR_FAULT_FT-101; cân bằng khối lượng tạm ngừng (không báo mất nguồn giả). Đề xuất mở rộng: ước lượng Q từ mô hình bơm và nâng P_set lên mức bảo thủ. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -600,10 +664,10 @@ Cảm biến mức siêu âm/radar đo từ nắp bể.
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Mức bể: dừng chống chạy khô theo kịch bản, tiết kiệm nước, dự báo thời gian cạn bể. |
+| Vai trò | Mức bể: dừng chống chạy khô theo kịch bản, tiết kiệm nước, dự báo thời gian cạn bể, cảnh báo mức cao. |
 | Giao tiếp với mini PC | AI 4–20 mA → IO-01 AI4 qua chống sét tín hiệu. |
 | Nếu không có | Chỉ còn phao LSLL-101 (cắt muộn ở 0,35 m, không có cảnh báo sớm). |
-| Khi hỏng / dự phòng | Mất tín hiệu: giữ giá trị cuối + phao cứng; khuyến nghị thêm LT-102 thủy tĩnh dự phòng. |
+| Khi hỏng / dự phòng | Mất tín hiệu: gateway giữ giá trị mức cuối và báo SENSOR_FAULT_LT-101; khóa phần mềm LEVEL_LL không còn xét – phao cứng LSLL-101 vẫn bảo vệ. Khuyến nghị LT-102 thủy tĩnh dự phòng. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -623,6 +687,7 @@ Lấy mẫu liên tục từ ống đẩy. QCVN 01-1:2018/BYT: clo dư tự do 0
 |---|---|
 | Vai trò | Clo dư online: dừng an toàn khi < 0,2 mg/L (QCVN 01-1:2018/BYT). |
 | Giao tiếp với mini PC | AI 4–20 mA → IO-01 AI5 (hoặc Modbus RTU COM2); chỉ hợp lệ khi công tắc dòng mẫu FS-201 báo có nước. |
+| Thông số điển hình | Giữ thang ra rộng 0–5 mg/L. Theo NAMUR NE43, tín hiệu bão hòa (3,8 / 20,5 mA) vẫn hợp lệ và vẫn dùng cho dừng an toàn (báo SENSOR_RANGE); chỉ < 3,6 mA mới là mất tín hiệu. |
 | Nếu không có | Clo thấp chỉ phát hiện khi xét nghiệm định kỳ hoặc dân phản ánh. |
 | Khi hỏng / dự phòng | Mất tín hiệu → cảnh báo (không dừng giả); đối chiếu DPD cầm tay hằng tuần. |
 | Thử trong mô phỏng | S9 có/không AIT-201. |
@@ -646,7 +711,8 @@ QCVN 01-1:2018/BYT: độ đục ≤ 2 NTU.
 |---|---|
 | Vai trò | Độ đục online: dừng an toàn khi > 2 NTU kéo dài 60 s. |
 | Giao tiếp với mini PC | AI 4–20 mA → IO-01 AI6. |
-| Nếu không có | S4: 28,3 m³ nước > 2 NTU cấp ra mạng (có máy: 0,4 m³). |
+| Thông số điển hình | Giữ thang ra rộng (0–100 NTU, tối thiểu 0–50 NTU). Thang quá hẹp làm tín hiệu bão hòa khi sự cố nặng – mô phỏng vẫn dùng giá trị bão hòa để dừng an toàn. |
+| Nếu không có | S4: nước > 2 NTU cấp ra mạng nhiều gấp hàng chục lần (mục 9 tài liệu 07). |
 | Khi hỏng / dự phòng | Mất tín hiệu → cảnh báo; vệ sinh buồng đo 2–4 tuần. |
 | Thử trong mô phỏng | S4 có/không AIT-202. |
 
@@ -659,28 +725,28 @@ QCVN 01-1:2018/BYT: độ đục ≤ 2 NTU.
 
 **Dải làm việc:** Làm việc < 1,0 NTU
 
-#### SP-201 · Panel lấy mẫu + công tắc dòng mẫu FS-201
+#### SP-201 · Panel lấy mẫu + bơm mẫu SPP-201 + công tắc dòng mẫu FS-201
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm chất lượng nước*
 
-Trích mẫu từ ống đẩy sau bơm, lưu lượng mẫu ổn định, xả về bể/thoát. FS-201 báo mất dòng mẫu để gateway không dùng số đo sai.
+Mẫu lấy trực tiếp từ bể T-01 bằng bơm mẫu nhỏ (bơm màng 24 VDC hoặc ly tâm 0,1–0,25 kW, vật liệu dùng cho nước uống, miệng hút cạnh miệng hút bơm chính) và van 3 ngả. Nếu chỉ lấy mẫu trên ống góp đẩy thì khi trạm dừng an toàn hoặc bơm ngủ, máy đo chỉ thấy nước đứng trong ống: không xác nhận được nước bể đã đạt, quy trình đặt lại (đạt 10 phút liên tục) không làm được. Mô phỏng giả định máy đo luôn thấy nước trong bể – đúng với thiết kế có bơm mẫu. Ống mẫu ngắn, DN10–15, trễ mẫu ≤ 60 s.
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Panel lấy mẫu liên tục cho máy phân tích, kèm công tắc dòng mẫu FS-201. |
-| Giao tiếp với mini PC | FS-201 → DI IO-01. |
-| Nếu không có | Máy phân tích đo nước đứng yên → giá trị sai, báo động giả. |
+| Vai trò | Panel lấy mẫu cho máy phân tích, kèm công tắc dòng mẫu FS-201 và bơm mẫu SPP-201 hút thẳng từ bể. |
+| Giao tiếp với mini PC | Bơm mẫu: 1 DO + 1 DI chạy/lỗi; FS-201 → DI IO-01. |
+| Nếu không có | Máy phân tích đo nước đứng yên → giá trị sai, báo động giả, không đặt lại được sau dừng an toàn. |
 
 #### EM-101 · Đồng hồ điện đa năng 3 pha có Modbus
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm điện – điều khiển*
 
-Lắp ở đầu vào CP-01 và ghi 2–4 tuần TRƯỚC khi giao quyền điều khiển để có đường cơ sở điện năng của cách vận hành hiện tại.
+Lắp ở đầu vào CP-01 và ghi 2–4 tuần TRƯỚC khi giao quyền điều khiển để có đường cơ sở điện năng của cách vận hành hiện tại. Không phải công tơ thu tiền của điện lực.
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Đo điện năng toàn trạm: chỉ tiêu kWh/m³ và đường cơ sở trước cải tạo. |
-| Giao tiếp với mini PC | Modbus RTU COM2, địa chỉ 10–11; 3 biến dòng ở đầu tổng. |
+| Giao tiếp với mini PC | Modbus RTU COM2, địa chỉ 10; 3 biến dòng ở đầu tổng. |
 | Thông số điển hình | kWh cấp 0,5S hoặc 1. |
 | Nếu không có | Chỉ còn bộ đếm kWh của biến tần (thiếu phụ tải phụ, sai số lớn) – khó chứng minh tiết kiệm. |
 
@@ -694,11 +760,11 @@ Lắp ở đầu vào CP-01 và ghi 2–4 tuần TRƯỚC khi giao quyền đi�
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm chất lượng nước*
 
-Bộ đo cầm tay clo dư (DPD), độ đục, pH để hiệu chuẩn máy online và nội kiểm.
+Nhiều xí nghiệp cấp nước đã có sẵn để nội kiểm theo QCVN – nếu đã có thì xếp hiện trạng (giữ nguyên), đưa vào phiếu khảo sát.
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Bộ đo cầm tay clo dư (DPD), độ đục, pH để hiệu chuẩn máy online và nội kiểm. |
+| Vai trò | Bộ đo cầm tay clo dư (DPD), độ đục, pH để hiệu chuẩn máy online, nội kiểm và xác nhận trước khi đặt lại. |
 | Giao tiếp với mini PC | Không nối mini PC; kết quả nhập vào HMI/nhật ký. |
 | Nếu không có | Không kiểm chứng được máy online – trôi số đo không bị phát hiện. |
 
@@ -710,21 +776,34 @@ Chống sét lan truyền đường nguồn, tín hiệu và ăng-ten; nối đ�
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Chống sét lan truyền đường nguồn, tín hiệu và ăng-ten; nối đất đẳng thế. |
+| Vai trò | Chống sét lan truyền đường nguồn, tín hiệu, RS-485 và ăng-ten; nối đất đẳng thế. |
 | Giao tiếp với mini PC | Đầu vào 3 pha CP-01, đường 230 VAC sang CP-02, cáp tín hiệu LT-101/PT ngoài trời, ăng-ten RT-01. |
+| Thông số điển hình | Nối đất an toàn ≤ 4 Ω theo TCVN 4756:1989; nối đất chống sét theo TCVN 9385:2012; liên kết đẳng thế giữa hai hệ (đối chiếu văn bản hiện hành). |
 | Nếu không có | Mùa mưa bão dễ hỏng mini PC, I/O, router, cảm biến cùng lúc. |
 
 #### SRV-01 · Máy chủ điều hành & SCADA trung tâm (dùng chung ST-01…ST-04)
 
 *Giải pháp đưa vào · bổ sung mới · bắt buộc · nhóm truyền thông*
 
-Máy chủ điều hành trung tâm + SCADA: nhận dữ liệu, phát hành kịch bản, lệnh từ xa, cảnh báo tập trung.
+Nếu xí nghiệp đã có SCADA/máy chủ trung tâm thì xếp hiện trạng và chỉ nâng cấp để tích hợp MQTT – đưa vào phiếu khảo sát để tránh mua trùng.
 
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Máy chủ điều hành trung tâm + SCADA: nhận dữ liệu, phát hành kịch bản, lệnh từ xa, cảnh báo tập trung. |
 | Giao tiếp với mini PC | MQTT broker + REST API; dashboard; giữ kịch bản retained, hàng đợi lệnh có thời hạn. |
 | Khi hỏng / dự phòng | Trạm không phụ thuộc máy chủ để vận hành an toàn (chế độ b). |
+
+#### ZSC-VX01 · Công tắc hành trình van xả đáy
+
+*Giải pháp đưa vào · bổ sung mới · nên có · nhóm cảm biến*
+
+Cung cấp trạng thái xả (drain_open) cho cân bằng khối lượng; van để hé là thất thoát không ai biết.
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Công tắc hành trình "đóng hẳn" trên van xả đáy tay VX-01. |
+| Giao tiếp với mini PC | DI → IO-01. |
+| Nếu không có | Xả tay làm sai cân bằng khối lượng, có thể báo mất nguồn giả khi không có FT-100. |
 
 #### SEC-01 · Hạ tầng an ninh mạng & quản lý thiết bị
 
@@ -750,8 +829,8 @@ QCVN 01-1:2018/BYT: pH 6,0–8,5.
 |---|---|
 | Vai trò | pH online: dừng an toàn khi ngoài 6,0–8,5; bù pH cho phép đo clo. |
 | Giao tiếp với mini PC | AI 4–20 mA → IO-01 AI7. |
-| Nếu không có | pH nước thành phố ít biến động – kiểm tra bằng KIT-01 theo lịch nội kiểm. |
-| Thử trong mô phỏng | Tắt AIT-203 rồi tiêm sự cố pH 9,2 ở tab Sự cố. |
+| Nếu không có | KHÔNG có dừng an toàn tự động theo pH – chủ đầu tư phải chấp nhận bằng văn bản; pH chỉ được kiểm tra bằng KIT-01 theo lịch nội kiểm. S13: nước pH > 8,5 được cấp ra mạng. Chuyển thành bắt buộc nếu cảm biến clo đã chọn cần bù pH (xem datasheet) hoặc nhà máy nguồn có chỉnh pH (châm vôi). |
+| Thử trong mô phỏng | S13 có/không AIT-203. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -770,9 +849,10 @@ Van bướm điện cách ly trạm khỏi mạng lưới khi dừng an toàn do
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Cách ly trạm khỏi mạng khi dừng an toàn; trình tự mở van trước – chạy bơm sau. |
-| Giao tiếp với mini PC | DO mở/đóng → bộ truyền động; DI vị trí mở/đóng → IO-01. Đóng hẳn → liên động cấm chạy bơm. |
-| Nếu không có | Dừng an toàn chỉ dừng bơm (bình tích áp vẫn xả nước ra mạng); không có trình tự khởi động êm. |
-| Khi hỏng / dự phòng | Mất điện: giữ vị trí. |
+| Giao tiếp với mini PC | DO mở/đóng qua contactor đảo chiều KA-DO; DI vị trí mở/đóng → IO-01. Đóng hẳn → liên động cứng cấm chạy bơm. Dừng an toàn: đóng ngay, song song với dừng bơm (hành trình 20 s đủ chống búa nước). |
+| Nếu không có | Dừng an toàn chỉ dừng bơm (bình tích áp vẫn xả ít nước ra mạng); không có trình tự khởi động êm. S4: lượng nước không đạt ra mạng gần như không đổi (mục 9 tài liệu 07) – vì vậy chỉ xếp khuyến nghị. |
+| Khi hỏng / dự phòng | Mất điện / mini PC hỏng: giữ vị trí. |
+| Thử trong mô phỏng | S4 có/không MV-02. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -812,13 +892,13 @@ Hiển thị web HMI do GW-01 phục vụ (xem chế độ "Màn hình HMI" củ
 
 *Khuyến nghị bổ sung · bổ sung mới · nên có · nhóm cảm biến*
 
-Công tắc áp cao cơ khí cắt bơm bằng mạch cứng (≈ 4,8 bar).
+Đặt 4,3–4,4 bar, trễ 3–5 s: cao hơn đỉnh vận hành (4,16 bar ở S5 có PT-102) và ngưỡng giới hạn 4,0 bar, nhưng thấp hơn áp đóng van lớn nhất ≈4,73 bar ở 50 Hz (đặt 4,8 bar thì không bao giờ tác động). Sau khi cắt phải chốt (đặt lại tay hoặc chờ ≥ 5 phút) để PID dự phòng không chạy lại rồi cắt liên tục.
 
 | Mục | Nội dung |
 |---|---|
-| Vai trò | Công tắc áp cao cơ khí cắt bơm bằng mạch cứng (≈ 4,8 bar). |
-| Giao tiếp với mini PC | Tiếp điểm NC trong chuỗi liên động IL-01 của CP-01; tiếp điểm phụ → DI IO-01. |
-| Nếu không có | Bảo vệ áp cao chỉ còn phần mềm (PT-101/102) và van an toàn PSV-01 6 bar. |
+| Vai trò | Công tắc áp cao cơ khí cắt bơm bằng mạch cứng – bảo vệ khi chỉ còn PID dự phòng (lúc đó không có cắt áp cao bằng phần mềm). |
+| Giao tiếp với mini PC | Tiếp điểm NC trong chuỗi IL-01 của CP-01; tiếp điểm phụ → DI IO-01. |
+| Nếu không có | Khi mini PC hỏng và PT-101 kẹt thấp, PID dự phòng đẩy bơm lên 50 Hz – chỉ còn van an toàn PSV-01 6 bar bảo vệ. |
 
 #### GSM-01 · Bộ báo động SMS độc lập
 
@@ -829,8 +909,8 @@ Bộ báo động SMS độc lập có pin: báo "mất bộ điều khiển", m
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Bộ báo động SMS độc lập có pin: báo "mất bộ điều khiển", mất điện, ngập. |
-| Giao tiếp với mini PC | DI từ WDR-01, UPS-01, LSH-01; SIM riêng. |
-| Nếu không có | Mini PC hỏng đồng thời mất 4G thì trung tâm không biết ngay. |
+| Giao tiếp với mini PC | DI từ WDR-01, UPS-01, LSH-01; SIM riêng. Chỉ gửi SMS cho tình huống khẩn (critical). |
+| Nếu không có | Mini PC hỏng đồng thời mất 4G thì trung tâm không biết ngay (bình thường trung tâm phát hiện qua LWT sau ≈1 phút). |
 
 #### LSH-01 · Phao báo ngập phòng bơm
 
@@ -842,6 +922,7 @@ Phao báo ngập phòng bơm (vỡ ống trong trạm).
 |---|---|
 | Vai trò | Phao báo ngập phòng bơm (vỡ ống trong trạm). |
 | Giao tiếp với mini PC | DI → IO-01 (và GSM-01). |
+| Nếu không có | Vỡ ống trong trạm chỉ phát hiện gián tiếp (áp thấp, lưu lượng lớn) hoặc khi tủ điện đã bị ngập. |
 
 #### LSHH-101 · Phao báo tràn bể
 
@@ -853,6 +934,7 @@ Phao báo tràn bể khi van phao FV-01 kẹt mở.
 |---|---|
 | Vai trò | Phao báo tràn bể khi van phao FV-01 kẹt mở. |
 | Giao tiếp với mini PC | DI → IO-01. |
+| Nếu không có | Dựa vào cảnh báo LEVEL_HIGH từ LT-101; nếu LT-101 cũng lỗi thì tràn không được phát hiện. |
 
 #### TH-01 · Giám sát nhiệt ẩm tủ + quạt/sưởi
 
@@ -864,6 +946,7 @@ Giám sát nhiệt độ/độ ẩm tủ, điều khiển quạt và sưởi ch�
 |---|---|
 | Vai trò | Giám sát nhiệt độ/độ ẩm tủ, điều khiển quạt và sưởi chống ngưng tụ. |
 | Giao tiếp với mini PC | Modbus RTU COM2 hoặc DI cảnh báo. |
+| Nếu không có | Không biết tủ quá nóng/ẩm cho tới khi mini PC, UPS hoặc biến tần hỏng; ắc quy AGM lão hóa nhanh. |
 
 #### ZS-01 · Công tắc cửa trạm / nắp bể
 
@@ -874,7 +957,8 @@ Công tắc cửa trạm, cửa tủ, nắp bể – an ninh nguồn nước.
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Công tắc cửa trạm, cửa tủ, nắp bể – an ninh nguồn nước. |
-| Giao tiếp với mini PC | DI → IO-01; báo động khi mở ngoài lịch bảo trì. |
+| Giao tiếp với mini PC | DI → IO-01; báo về trung tâm qua IP. Chỉ nâng lên khẩn (gửi SMS) khi mở nắp bể ngoài lịch bảo trì. |
+| Nếu không có | Xâm nhập trạm/bể (nguy cơ nhiễm bẩn có chủ đích) không được phát hiện. |
 
 #### VX-01A · Bộ truyền động điện van xả đáy
 
@@ -898,6 +982,7 @@ Bộ truyền động điện cho van xả đáy để xả bể từ xa theo l�
 |---|---|
 | Vai trò | Áp ống cấp thành phố: phân biệt mất nguồn với van phao kẹt. |
 | Giao tiếp với mini PC | AI → IO-01 AI8. |
+| Nếu không có | Cảnh báo SUPPLY_LOST không phân biệt được nguyên nhân (ống cấp mất áp hay van phao/lọc kẹt). |
 
 #### LT-102 · Cảm biến mức dự phòng (thủy tĩnh)
 
@@ -908,7 +993,8 @@ Cảm biến mức thủy tĩnh dự phòng, đối chiếu chéo với LT-101.
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Cảm biến mức thủy tĩnh dự phòng, đối chiếu chéo với LT-101. |
-| Giao tiếp với mini PC | AI → IO-01 kênh dự phòng. |
+| Giao tiếp với mini PC | AI → IO-01 AI9. |
+| Nếu không có | Mất LT-101 thì chỉ còn phao cứng 0,35 m; không có cảnh báo sớm và dự báo cạn bể. |
 
 #### VT-01/02 · Cảm biến rung, nhiệt ổ bi bơm
 
@@ -920,6 +1006,7 @@ Rung và nhiệt độ ổ bi bơm – bảo trì theo tình trạng.
 |---|---|
 | Vai trò | Rung và nhiệt độ ổ bi bơm – bảo trì theo tình trạng. |
 | Giao tiếp với mini PC | Modbus RTU hoặc AI. |
+| Nếu không có | Hỏng ổ bi chỉ phát hiện khi bơm đã lỗi (S7) hoặc qua kiểm tra định kỳ. |
 
 #### CAM-01 · Camera IP
 
@@ -930,7 +1017,8 @@ Camera IP quan sát trạm, xác nhận sự cố từ xa.
 | Mục | Nội dung |
 |---|---|
 | Vai trò | Camera IP quan sát trạm, xác nhận sự cố từ xa. |
-| Giao tiếp với mini PC | Ethernet, tách VLAN khỏi mạng OT. |
+| Giao tiếp với mini PC | Ethernet, tách VLAN khỏi mạng OT; chụp ảnh theo sự kiện để tiết kiệm dữ liệu 4G. |
+| Nếu không có | Trung tâm phải cử người tới xác nhận sự cố. Lưu ý tuân thủ quy định bảo vệ dữ liệu cá nhân hiện hành khi quay khu vực công cộng. |
 
 #### DOS-01 · Châm clo bổ sung tại trạm
 
@@ -966,6 +1054,31 @@ Bộ vật tư dự phòng: mini PC đã nạp sẵn ảnh hệ thống, cảm b
 |---|---|
 | Vai trò | Điểm đấu máy phát di động + cầu dao đảo nguồn cho mất điện dài. |
 | Giao tiếp với mini PC | DI trạng thái nguồn → IO-01. |
+| Nếu không có | Mất điện quá 1,5 h (dung lượng bồn mái) là dân thiếu nước; UPS chỉ giữ đo đạc, không chạy được bơm. |
+
+#### AV-01 · Van xả khí tự động ống góp đẩy
+
+*Khuyến nghị bổ sung · bổ sung mới · nên có · nhóm thủy lực*
+
+Van xả khí tự động ở đỉnh ống góp đẩy (khảo sát xem đã có chưa).
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Van xả khí tự động ở đỉnh ống góp đẩy (khảo sát xem đã có chưa). |
+| Giao tiếp với mini PC | Không nối mini PC. |
+| Nếu không có | Khí lọt vào sau khi xả bể hoặc mức bể thấp làm FT-101 đo sai, gây bọt khí cho AIT-202, ống rung. |
+
+#### QF-LOTO · Khóa – treo thẻ (LOTO) cho aptomat bơm
+
+*Khuyến nghị bổ sung · bổ sung mới · nên có · nhóm điện – điều khiển*
+
+Aptomat QF-01/02 có tay khóa + bộ khóa móc, thẻ LOTO.
+
+| Mục | Nội dung |
+|---|---|
+| Vai trò | Aptomat QF-01/02 có tay khóa + bộ khóa móc, thẻ LOTO. |
+| Giao tiếp với mini PC | Không nối mini PC; tiếp điểm phụ QF → DI (bơm không sẵn sàng). |
+| Nếu không có | Không cách ly năng lượng an toàn khi bảo trì bơm/biến tần (vị trí 0 của SA không phải điểm cách ly). |
 
 ## Bảng ngưỡng tham số
 

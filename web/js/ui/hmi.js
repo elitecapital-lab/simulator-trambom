@@ -96,7 +96,7 @@ export class HmiView {
       svg.append(S('line', { x1: TANK.x, y1: lvY(L), x2: TANK.x + TANK.w, y2: lvY(L), class: 'hmi-mark' }),
         S('text', { x: TANK.x + TANK.w - 4, y: lvY(L) - 3, class: 'hmi-small', 'text-anchor': 'end', text: txt }));
     }
-    svg.append(S('text', { x: TANK.x + 8, y: TANK.y0 + 18, class: 'hmi-tag', text: 'T-01 · BỂ CHỨA 154 m³' }),
+    svg.append(S('text', { x: TANK.x + 8, y: TANK.y0 + 18, class: 'hmi-tag', text: 'T-01 · BỂ 192 m³ (hữu ích 154 m³)' }),
       this._bubble('LT-101', 262, 96, [262, 130]), this._value('level', 162, 86, 80),
       this._bubble('LSLL-101', 66, lvY(0.35) - 26), S('line', { x1: 82, y1: lvY(0.35) - 26, x2: 100, y2: lvY(0.35), class: 'hmi-lead' }),
       S('path', { d: `M100 455 H76 M68 447 L84 463 M68 463 L84 447`, class: 'hmi-eq', onclick: () => this.app.openDrawer('VX-01') }),
@@ -233,6 +233,7 @@ export class HmiView {
   }
   ackAlarm(code) {
     const a = this.app, t = a.net.t;
+    if (this.where === 'local' && a.st.gw_dead) { a.toast('Mini PC đang ngừng – HMI-01 không xác nhận được báo động'); return; }
     if (this.where === 'local') a.st.gw.alarms.ack(code, t);
     else a.server.ackAlarm(a.st.sid, code, t);
     this.update(true);
@@ -271,10 +272,12 @@ export class HmiView {
     this.clock.textContent = fmtClock(d.t, a.cfg.sim.start_dow);
     const chip = (cls, txt) => h('span', { class: 'chip ' + cls }, txt);
     this.svg.classList.toggle('stale', Boolean(d.dead || d.stale));
-    this.chips.replaceChildren(d.dead ? chip('critical', 'PID BIẾN TẦN') : chip(d.ctl === 'auto' ? 'good' : 'warning', CTL_NAME[d.ctl]), chip(MODE_CHIP[d.mode] || 'off', MODE_NAME[d.mode] || d.mode),
+    const fbOn = d.dead && a.st.gw_dead.enabled && !a.st.gw_dead.inhibit;
+    this.chips.replaceChildren(d.dead ? chip('critical', fbOn ? 'PID BIẾN TẦN' : 'KHÔNG CÓ ĐIỀU KHIỂN') : chip(d.ctl === 'auto' ? 'good' : 'warning', CTL_NAME[d.ctl]),
+      chip(MODE_CHIP[d.mode] || 'off', d.mode === 'x' ? (fbOn ? MODE_NAME.x : 'Mini PC lỗi') : (MODE_NAME[d.mode] || d.mode)),
       chip(d.comms === 'online' ? 'good' : d.comms === 'resync' ? 'info' : 'off', { online: '4G trực tuyến', resync: 'đang đồng bộ', offline: 'mất kết nối' }[d.comms]));
     // dữ liệu cũ (trung tâm khi mất mạng) / mini PC lỗi
-    if (d.dead) { this.stale.hidden = false; this.stale.textContent = 'MINI PC NGỪNG – HMI-01 MẤT DỮ LIỆU · biến tần đang tự giữ áp bằng PID nội'; }
+    if (d.dead) { this.stale.hidden = false; this.stale.textContent = 'MINI PC NGỪNG – HMI-01 MẤT DỮ LIỆU · ' + a.st.gw_dead.note(); }
     else if (d.stale) { this.stale.hidden = false; this.stale.textContent = `DỮ LIỆU CŨ – mất kết nối với trạm, bản tin cuối ${d.age !== null ? (d.age / 60).toFixed(0) + ' phút trước' : '–'}`; }
     else this.stale.hidden = true;
     // báo động
@@ -363,9 +366,10 @@ export class HmiView {
 
   _updateSide(d, g, force) {
     const a = this.app, F = this.F, local = this.where === 'local', t = d.t;
-    F.ctlName.textContent = d.dead ? 'PID BIẾN TẦN (dự phòng)' : CTL_NAME[d.ctl];
+    const fbx = a.st.gw_dead;
+    F.ctlName.textContent = d.dead ? (fbx.enabled && !fbx.inhibit ? 'PID BIẾN TẦN (dự phòng)' : 'KHÔNG CÓ ĐIỀU KHIỂN') : CTL_NAME[d.ctl];
     F.ctlName.className = 'hmi-ctlname ' + (d.ctl === 'auto' ? 'auto' : 'man');
-    if (d.dead) F.ctlDetail.textContent = 'Mini PC ngừng: rơ-le watchdog đã chuyển biến tần sang PID nội; không thể ra lệnh qua HMI cho tới khi mini PC chạy lại.';
+    if (d.dead) F.ctlDetail.textContent = `Mini PC ngừng: ${fbx.note()}${fbx.restarted ? ' (mini PC đã khởi động lại, đang theo dõi trước khi tiếp quản)' : ''}; không thể ra lệnh qua HMI cho tới khi mini PC tiếp quản.`;
     else if (d.ctl === 'auto') F.ctlDetail.textContent = `Kịch bản v${g.script.version} (${g.ctrl.strategy_used === 'custom' ? 'của học viên' : g.script.strategy}) điều khiển bơm; lớp an toàn luôn ưu tiên.`;
     else if (d.ctl === 'remote' && local === false && g.manual) F.ctlDetail.textContent = `Quyền điều khiển từ xa còn ${Math.max(0, (g.manual.until - t) / 60).toFixed(0)} phút (mỗi lệnh gia hạn); mất kết nối → trạm tự trở về TỰ ĐỘNG.`;
     else if (d.ctl === 'remote') F.ctlDetail.textContent = 'Trung tâm đang điều khiển tay; quyền có thời hạn và tự hủy khi mất kết nối.';

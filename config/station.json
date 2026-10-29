@@ -124,7 +124,8 @@
     "min_off_s": 60.0,
     "pt_deviation_bar": 0.3,
     "pt_deviation_delay_s": 10.0,
-    "quality_auto_restart": false
+    "quality_auto_restart": false,
+    "level_high_m": 3.9
   },
   "gateway": {
     "heartbeat_s": 10.0,
@@ -259,14 +260,18 @@
     "AIT-201": true,
     "AIT-202": true,
     "AIT-203": true,
+    "MV-02": true,
     "SMS": true,
     "VFD_PID_fallback": true
   },
   "fallback": {
-    "note": "Dự phòng khi mini PC không hoạt động: rơ-le watchdog cắt quyền điều khiển của mini PC, biến tần bơm chính chuyển sang PID nội dùng tín hiệu PT-101 (chia tín hiệu 4–20 mA). Không có dự phòng: mô-đun I/O giữ nguyên đầu ra cuối cùng.",
+    "note": "Dự phòng khi mini PC không hoạt động. Rơ-le watchdog WDR-01 (watchdog_s) nhả trước khi mô-đun I/O hết thời gian chờ truyền thông (io_timeout_s ≥ 2 × watchdog_s): biến tần bơm chính chuyển sang PID nội theo cảm biến áp riêng của nó (VFD-01 ← PT-101, VFD-02 ← PT-102 qua bộ chia tín hiệu). Không có dự phòng: I/O giữ lệnh cuối cho tới io_timeout_s rồi đưa DO về trạng thái an toàn io_safe_state ('off' = lệnh chạy về 0, bơm dừng; 'hold' = giữ lệnh cuối). Sau khi khởi động lại, mini PC theo dõi takeover_s giây rồi mới tiếp quản.",
     "p_set_bar": 3.0,
     "kp_hz_per_bar": 6.0,
     "ti_s": 15.0,
-    "watchdog_s": 5.0
+    "watchdog_s": 5.0,
+    "io_timeout_s": 10.0,
+    "io_safe_state": "off",
+    "takeover_s": 60.0
   }
 }

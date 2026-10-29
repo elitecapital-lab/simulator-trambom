@@ -233,7 +233,7 @@ Nước nguồn bị đục 12 NTU từ 13:00 đến 16:00. Độ đục trong b
 - `N1 15:06` BÁO ĐỘNG [NTU_TRIP] Độ đục vượt ngưỡng QCVN (2.01 NTU) quá 60 s
 - `N1 15:06` BÁO ĐỘNG [SAFE_STOP] DỪNG AN TOÀN: Độ đục không đạt – dừng bơm, đóng van MV-02
 - `N1 15:06` Ưu tiên an toàn: chặn lệnh chạy 1 bơm của kịch bản (dừng an toàn do Độ đục)
-- `N1 16:53` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 6.0 h – chủ động giảm áp
+- `N1 16:51` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 6.0 h – chủ động giảm áp
 - `N1 17:30` Lệnh từ xa flush_tank (trực tuyến): mở van xả VX-01 tới mức 1.4 m
 - `N1 18:37` Xả bể kết thúc ở mức 1.40 m
 - `N1 20:00` Kết thúc dừng an toàn (lệnh đặt lại) – mở van đầu ra, chạy lại bơm
@@ -305,7 +305,7 @@ Nước nguồn bị đục 12 NTU từ 13:00 đến 16:00. Độ đục trong b
 | Số lần khởi động bơm (P-01 + P-02) | 5 (3 + 2) | 3 (1 + 2) | 3 (1 + 2) |
 | Giờ chạy P-01 / P-02 (h) | 11,8 / 2,6 | 18,9 / 5,0 | 18,9 / 5,1 |
 | Thời gian bơm chạy khô (phút) | 25,6 | 0,0 | 0,0 |
-| Thời gian phát hiện sự cố | 450 phút | 29 phút | 27 phút |
+| Thời gian phát hiện sự cố | 450 phút | 14 phút | 14 phút |
 
 ![S6 · Mất nước nguồn 10 giờ – mức bể thấp](img/S6.png)
 
@@ -313,8 +313,8 @@ Nước nguồn bị đục 12 NTU từ 13:00 đến 16:00. Độ đục trong b
 
 - `N1 06:40` Ghép bơm thứ hai sớm theo dự báo
 - `N1 08:54` Tách bơm – một bơm đủ đáp ứng
+- `N1 09:13` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn
 - `N1 09:27` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 6.0 h – chủ động giảm áp
-- `N1 09:29` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn
 - `N1 14:12` BÁO ĐỘNG [LEVEL_LOW] Mức bể thấp (< 1.2 m) – giảm áp tiết kiệm nước
 - `N1 16:04` BÁO ĐỘNG [LEVEL_STOP] Mức bể < 0.6 m – kịch bản dừng bơm chống chạy khô
 - `N1 21:09` Mức bể hồi phục > 1.5 m – cho phép chạy bơm lại
@@ -406,7 +406,7 @@ Mất mạng 20 giờ (20:00 ngày 1 – 16:00 ngày 2). Trong lúc mất mạng
 | Tiết kiệm so với lịch cố định | – | 34,6 % | 35,7 % |
 | Suất điện năng (kWh/m³ cấp vào mạng) | 0,177 | 0,117 | 0,115 |
 | Nước cấp vào mạng (m³) | 837 | 832 | 830 |
-| Rò rỉ trên mạng (m³) | 90,1 | 69,7 | 67,4 |
+| Rò rỉ trên mạng (m³) | 90,1 | 69,7 | 67,3 |
 | Thiếu nước thực sự – bồn mái cạn (m³) | 0,0 | 0,0 | 0,0 |
 | Áp lực ngoài dải – tổng (phút) | 1429 | 496 | 482 |
 |   · áp điểm bất lợi < 1,4 bar (phút) | 1012 | 496 | 482 |
@@ -418,7 +418,7 @@ Mất mạng 20 giờ (20:00 ngày 1 – 16:00 ngày 2). Trong lúc mất mạng
 | Số lần khởi động bơm (P-01 + P-02) | 6 (3 + 3) | 4 (1 + 3) | 5 (1 + 4) |
 | Giờ chạy P-01 / P-02 (h) | 22,0 / 22,0 | 30,1 / 20,3 | 30,0 / 23,2 |
 | Thời gian bơm chạy khô (phút) | 0,0 | 0,0 | 0,0 |
-| Thời gian phát hiện sự cố | không phát hiện; không phát hiện | 416 phút; 33 phút | 421 phút; 11 phút |
+| Thời gian phát hiện sự cố | không phát hiện; không phát hiện | 416 phút; 33 phút | 421 phút; 3 phút |
 
 | Chỉ số truyền thông & đồng bộ | Cơ bản | Nâng cao |
 |---|---:|---:|
@@ -455,7 +455,7 @@ Hợp nhất kịch bản khi đồng bộ (mức nâng cao):
 - `N2 02:00` HMI tại trạm (KTV tại trạm (HMI)): level.conserve_m=1.6
 - `N2 05:01` BÁO ĐỘNG [CL_WARN] Clo dư 0.30 mg/L ngoài dải làm việc
 - `N2 05:35` Bộ đệm đạt 80% – nén nửa dữ liệu cũ (gộp cặp bản ghi), còn 2595 bản ghi
-- `N2 06:11` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 6.0 h – chủ động giảm áp
+- `N2 06:03` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 5.9 h – chủ động giảm áp
 - `N2 06:33` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn
 - `N2 07:59` Bộ đệm đạt 80% – nén nửa dữ liệu cũ (gộp cặp bản ghi), còn 2595 bản ghi
 - `N2 10:22` Bộ đệm đạt 80% – nén nửa dữ liệu cũ (gộp cặp bản ghi), còn 2595 bản ghi
@@ -573,11 +573,12 @@ Bảy ngày (có cuối tuần). Dùng để so sánh kWh, kWh/m³, số lần k
 - `N1 08:54` Tách bơm – một bơm đủ đáp ứng
 - `N1 17:00` Mini PC (edge gateway) ngừng hoạt động – mất thu thập, điều khiển, an toàn mềm và truyền thông
 - `N1 17:00` Rơ-le watchdog nhả sau 5 s – biến tần P-01 chuyển PID nội giữ 3.0 bar theo PT-101, bơm còn lại dừng
-- `N1 23:00` BÁO ĐỘNG [GW_WATCHDOG] Mini PC ngừng 360 phút (watchdog phát hiện) – biến tần P-01 chạy PID nội giữ 3.0 bar; đã khởi động lại và tiếp quản
-- `N1 23:00` Mini PC khởi động lại: nạp kịch bản v3, mô hình dự báo và 0 bản ghi đệm từ ổ SSD – tiếp quản không xung, chờ đồng bộ
+- `N1 23:00` BÁO ĐỘNG [GW_WATCHDOG] Mini PC ngừng 360 phút (watchdog phát hiện) – biến tần P-01 chạy PID nội giữ 3.0 bar; đã khởi động lại
+- `N1 23:00` Mini PC khởi động lại: nạp kịch bản v3, mô hình dự báo và 0 bản ghi đệm từ ổ SSD – theo dõi 60 s trước khi tiếp quản
 - `N1 23:00` Khôi phục kết nối sau 0.0 phút – chế độ (c) đồng bộ: gửi bản tin chào, 0 bản ghi đệm
 - `N1 23:00` Hiệu chỉnh đồng hồ gateway: lệch -1.00 s sau thời gian mất mạng
 - `N1 23:00` Đồng bộ hoàn tất sau 4 s – trở lại chế độ (a) bình thường
+- `N1 23:01` Mini PC tiếp quản điều khiển (không xung) – biến tần thôi chạy PID nội
 - `N2 05:59` Luân phiên bơm: P-01 → P-02 (đủ 24 h chạy)
 
 </details>
@@ -597,7 +598,7 @@ Bảy ngày (có cuối tuần). Dùng để so sánh kWh, kWh/m³, số lần k
 | Áp lực ngoài dải – tổng (phút) | 507 | 13 | 24 |
 |   · áp điểm bất lợi < 1,4 bar (phút) | 355 | 13 | 24 |
 |   · áp đầu ra > 4,0 bar (phút) | 152 | 0 | 0 |
-| Thời gian đạt dải áp (%) | 53,0 | 98,8 | 97,7 |
+| Thời gian đạt dải áp (%) | 53,0 | 98,8 | 97,8 |
 | Áp đầu ra lớn nhất (bar) | 4,27 | 4,00 | 4,00 |
 | Số đợt cấp nước không đạt QCVN | 0 | 0 | 0 |
 | Lượng nước không đạt QCVN đã cấp (m³) | 0,0 | 0,0 | 0,0 |
@@ -650,6 +651,55 @@ Bảy ngày (có cuối tuần). Dùng để so sánh kWh, kWh/m³, số lần k
 - `N1 16:00` BÁO ĐỘNG [MANUAL_MODE] Trạm ở chế độ TAY – điều khiển từ xa (trung tâm); kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động
 - `N1 16:00` Lệnh từ xa set_mode (trực tuyến): chuyển sang chế độ TAY từ xa (trung tâm), quyền có hạn 30 phút, tự trở về tự động khi mất kết nối
 - `N1 16:30` Kết thúc chế độ TAY từ xa (trung tâm) sau 30 phút (hết thời hạn quyền điều khiển từ xa) – kịch bản v3 tiếp quản
+
+</details>
+
+## S13 · pH nước nguồn 9,5 trong 8 giờ – giá trị của máy đo pH
+
+06:00 nước nguồn có pH 9,5 kéo dài 8 giờ (sự cố châm hóa chất ở nhà máy nước). Có AIT-203: dừng an toàn khi pH trong bể vượt 8,5 quá 120 s; 14:30 xả bể, 16:30 đặt lại khi nước đã đạt. Tắt AIT-203 ở tab Thiết bị (hoặc python -m trambom run S13 --off AIT-203) để thấy nước pH cao vẫn được cấp ra mạng.
+
+| Chỉ số | Lịch cố định | Thông minh – cơ bản (ngưỡng) | Thông minh – nâng cao (dự báo) |
+|---|---:|---:|---:|
+| Điện năng tiêu thụ (kWh) | 74,0 | 46,4 | 47,4 |
+| Tiết kiệm so với lịch cố định | – | 37,4 % | 36,0 % |
+| Suất điện năng (kWh/m³ cấp vào mạng) | 0,178 | 0,123 | 0,124 |
+| Nước cấp vào mạng (m³) | 415 | 377 | 384 |
+| Rò rỉ trên mạng (m³) | 46,7 | 28,6 | 28,1 |
+| Thiếu nước thực sự – bồn mái cạn (m³) | 0,0 | 0,0 | 0,0 |
+| Áp lực ngoài dải – tổng (phút) | 777 | 539 | 516 |
+|   · áp điểm bất lợi < 1,4 bar (phút) | 475 | 539 | 516 |
+|   · áp đầu ra > 4,0 bar (phút) | 302 | 0 | 0 |
+| Thời gian đạt dải áp (%) | 46,0 | 62,6 | 64,2 |
+| Áp đầu ra lớn nhất (bar) | 4,29 | 3,66 | 3,97 |
+| Số đợt cấp nước không đạt QCVN | 1 | 1 | 1 |
+| Lượng nước không đạt QCVN đã cấp (m³) | 97,7 | 1,2 | 1,2 |
+| Số lần khởi động bơm (P-01 + P-02) | 3 (1 + 2) | 6 (2 + 4) | 5 (2 + 3) |
+| Giờ chạy P-01 / P-02 (h) | 17,0 / 5,0 | 17,8 / 7,7 | 17,5 / 7,6 |
+| Thời gian bơm chạy khô (phút) | 0,0 | 0,0 | 0,0 |
+| Thời gian phát hiện sự cố | không phát hiện | 193 phút | 193 phút |
+
+![S13 · pH nước nguồn 9,5 trong 8 giờ – giá trị của máy đo pH](img/S13.png)
+
+<details><summary>Diễn biến chính (mức nâng cao)</summary>
+
+- `N1 06:40` Ghép bơm thứ hai sớm theo dự báo
+- `N1 08:54` Tách bơm – một bơm đủ đáp ứng
+- `N1 09:12` BÁO ĐỘNG [PH_WARN] pH 8.01  ngoài dải làm việc
+- `N1 12:06` BÁO ĐỘNG [PH_TRIP] pH vượt ngưỡng QCVN (8.51 ) quá 120 s
+- `N1 12:06` BÁO ĐỘNG [SAFE_STOP] DỪNG AN TOÀN: pH không đạt – dừng bơm, đóng van MV-02
+- `N1 12:06` Ưu tiên an toàn: chặn lệnh chạy 1 bơm của kịch bản (dừng an toàn do pH)
+- `N1 14:30` Lệnh từ xa flush_tank (trực tuyến): mở van xả VX-01 tới mức 1.4 m
+- `N1 15:41` Xả bể kết thúc ở mức 1.40 m
+- `N1 16:30` Kết thúc dừng an toàn (lệnh đặt lại) – mở van đầu ra, chạy lại bơm
+- `N1 16:30` Lệnh từ xa reset_safe_stop (trực tuyến): Đã đặt lại dừng an toàn
+- `N1 16:30` Cấp nước trở lại sau 264 phút ngừng – bồn mái nạp bù, tạm dừng học dự báo và phát hiện bất thường 6.6 h
+- `N1 16:31` Ghép bơm thứ hai (bơm chính đã max tần số)
+- `N1 17:22` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 5.9 h – chủ động giảm áp
+- `N1 18:10` BÁO ĐỘNG [LEVEL_LOW] Mức bể thấp (< 1.2 m) – giảm áp tiết kiệm nước
+- `N1 19:31` BÁO ĐỘNG [LEVEL_STOP] Mức bể < 0.6 m – kịch bản dừng bơm chống chạy khô
+- `N1 21:35` Mức bể hồi phục > 1.5 m – cho phép chạy bơm lại
+- `N1 21:35` Cấp nước trở lại sau 124 phút ngừng – bồn mái nạp bù, tạm dừng học dự báo và phát hiện bất thường 3.1 h
+- `N1 21:36` Ghép bơm thứ hai (bơm chính đã max tần số)
 
 </details>
 

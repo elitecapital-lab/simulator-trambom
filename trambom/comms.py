@@ -79,6 +79,7 @@ class CommsClient:
             elif typ == "evt_ack":
                 ids = set(msg["eseqs"])
                 self.events = [e for e in self.events if e["eseq"] not in ids]
+                self.gw.on_events_acked(ids, t)
             elif typ == "cmd":
                 self.gw.handle_command(msg["cmd"], t, "trực tuyến")
             elif typ == "script":

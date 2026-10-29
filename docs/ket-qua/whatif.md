@@ -4,9 +4,11 @@ Sinh tự động bởi `python -m trambom options`.
 
 | Hạng mục (tắt đi để thử) | Kịch bản · mức | Chỉ số | Có lắp | Không lắp |
 |---|---|---|---:|---:|
-| **Rơ-le watchdog + PID nội biến tần** `VFD_PID_fallback` | S11 · cơ bản | Áp ngoài dải dịch vụ (phút) | 1 | 213 |
+| **Rơ-le watchdog + PID nội biến tần** `VFD_PID_fallback` | S11 · cơ bản | Áp ngoài dải dịch vụ (phút) | 1 | 362 |
+|  |  | Áp nhỏ nhất tại điểm bất lợi (bar) | 1,33 | -0,39 |
+|  |  | Nước dân thiếu (bồn mái cạn) (m³) | 0,0 | 0,0 |
+| **Rơ-le watchdog + PID nội biến tần – I/O cấu hình giữ lệnh cuối** `VFD_PID_fallback` | S11 · cơ bản | Áp ngoài dải dịch vụ (phút) | 1 | 213 |
 |  |  | Áp nhỏ nhất tại điểm bất lợi (bar) | 1,33 | 0,53 |
-|  |  | Điện năng (kWh) | 52,4 | 48,5 |
 | **Cảm biến áp lực thứ hai PT-102** `PT-102` | S5 · cơ bản | Áp đầu ra > 4,0 bar (phút) | 0 | 119 |
 |  |  | Áp đầu ra lớn nhất (bar) | 4,16 | 4,56 |
 |  |  | Thời gian phát hiện sự cố (phút) | 0,1 (PT_DEVIATION) | không phát hiện |
@@ -17,6 +19,10 @@ Sinh tự động bởi `python -m trambom options`.
 |  |  | Thời gian phát hiện sự cố (phút) | 42,3 (NTU_WARN) | không phát hiện |
 | **Máy đo clo dư online AIT-201** `AIT-201` | S9 · cơ bản | Nước không đạt QCVN đã cấp (m³) | 1,4 | 26,4 |
 |  |  | Thời gian phát hiện sự cố (phút) | 415,8 (CL_WARN) | không phát hiện |
+| **Máy đo pH online AIT-203** `AIT-203` | S13 · cơ bản | Nước không đạt QCVN đã cấp (m³) | 1,2 | 59,4 |
+|  |  | Thời gian phát hiện sự cố (phút) | 192,9 (PH_WARN) | không phát hiện |
+| **Van điện đầu ra MV-02** `MV-02` | S4 · cơ bản | Nước không đạt QCVN đã cấp (m³) | 0,4 | 0,4 |
+|  |  | Áp ngoài dải dịch vụ (phút) | 320 | 320 |
 | **Modem 4G có SMS dự phòng** `SMS` | S9 · cơ bản | Báo động nghiêm trọng tới người trực chậm nhất (phút) | 0,0 | 294,8 |
-| **Đầu ra xung của đồng hồ nước vào FT-100** `FT-100_pulse` | S6 · nâng cao | Thời gian phát hiện sự cố (phút) | 27,0 (TTE_LOW) | 26,0 (SUPPLY_LOST) |
+| **Đầu ra xung của đồng hồ nước vào FT-100** `FT-100_pulse` | S6 · nâng cao | Thời gian phát hiện sự cố (phút) | 13,9 (SUPPLY_LOST) | 26,0 (SUPPLY_LOST) |
 |  |  | Áp ngoài dải dịch vụ (phút) | 487 | 487 |

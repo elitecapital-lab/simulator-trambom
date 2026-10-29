@@ -7,7 +7,7 @@
   "metrics": [
    "t_out_min",
    "p_crit_min",
-   "energy_kwh"
+   "unserved_m3"
   ],
   "with": {
    "t_out_min": 0.58333,
@@ -15,12 +15,51 @@
    "t_low_min": 0.58333,
    "p_out_max": 3.65939,
    "p_crit_min": 1.33171,
-   "energy_kwh": 52.35763,
+   "energy_kwh": 52.36869,
    "quality_viol_m3": 0.0,
    "detect_min": 0.86667,
    "detect_how": "máy chủ mất nhịp tim (LWT)",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
+  },
+  "without": {
+   "t_out_min": 362.0,
+   "t_high_min": 0.0,
+   "t_low_min": 362.0,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.3924,
+   "energy_kwh": 46.73973,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.86667,
+   "detect_how": "máy chủ mất nhịp tim (LWT)",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
+  }
+ },
+ {
+  "option": "VFD_PID_fallback",
+  "label": "Rơ-le watchdog + PID nội biến tần – I/O cấu hình giữ lệnh cuối",
+  "scenario": "S11",
+  "level": "basic",
+  "metrics": [
+   "t_out_min",
+   "p_crit_min"
+  ],
+  "with": {
+   "t_out_min": 0.58333,
+   "t_high_min": 0.0,
+   "t_low_min": 0.58333,
+   "p_out_max": 3.65939,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 52.36869,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.86667,
+   "detect_how": "máy chủ mất nhịp tim (LWT)",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 213.33333,
@@ -28,12 +67,13 @@
    "t_low_min": 213.33333,
    "p_out_max": 3.65939,
    "p_crit_min": 0.53101,
-   "energy_kwh": 48.52189,
+   "energy_kwh": 48.53297,
    "quality_viol_m3": 0.0,
    "detect_min": 0.86667,
    "detect_how": "máy chủ mất nhịp tim (LWT)",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  },
  {
@@ -57,7 +97,8 @@
    "detect_min": 0.15,
    "detect_how": "PT_DEVIATION",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 119.68333,
@@ -70,7 +111,8 @@
    "detect_min": null,
    "detect_how": null,
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  },
  {
@@ -94,7 +136,8 @@
    "detect_min": 0.21667,
    "detect_how": "PT_DEVIATION",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 1.36667,
@@ -107,7 +150,8 @@
    "detect_min": 0.5,
    "detect_how": "PT_STUCK_PT-101",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  },
  {
@@ -129,8 +173,9 @@
    "quality_viol_m3": 0.37885,
    "detect_min": 42.31667,
    "detect_how": "NTU_WARN",
-   "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "notify_max_min": 0.03333,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 0.28333,
@@ -143,7 +188,8 @@
    "detect_min": null,
    "detect_how": null,
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  },
  {
@@ -166,7 +212,8 @@
    "detect_min": 415.83333,
    "detect_how": "CL_WARN",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 0.48333,
@@ -179,7 +226,84 @@
    "detect_min": null,
    "detect_how": null,
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
+  }
+ },
+ {
+  "option": "AIT-203",
+  "label": "Máy đo pH online AIT-203",
+  "scenario": "S13",
+  "level": "basic",
+  "metrics": [
+   "quality_viol_m3",
+   "detect_min"
+  ],
+  "with": {
+   "t_out_min": 538.6,
+   "t_high_min": 0.0,
+   "t_low_min": 538.6,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.54669,
+   "energy_kwh": 46.36581,
+   "quality_viol_m3": 1.16763,
+   "detect_min": 192.95,
+   "detect_how": "PH_WARN",
+   "notify_max_min": 0.03333,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
+  },
+  "without": {
+   "t_out_min": 0.28333,
+   "t_high_min": 0.0,
+   "t_low_min": 0.28333,
+   "p_out_max": 3.65939,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 44.893,
+   "quality_viol_m3": 59.43056,
+   "detect_min": null,
+   "detect_how": null,
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
+  }
+ },
+ {
+  "option": "MV-02",
+  "label": "Van điện đầu ra MV-02",
+  "scenario": "S4",
+  "level": "basic",
+  "metrics": [
+   "quality_viol_m3",
+   "t_out_min"
+  ],
+  "with": {
+   "t_out_min": 319.5,
+   "t_high_min": 0.0,
+   "t_low_min": 319.5,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.57496,
+   "energy_kwh": 44.0198,
+   "quality_viol_m3": 0.37885,
+   "detect_min": 42.31667,
+   "detect_how": "NTU_WARN",
+   "notify_max_min": 0.03333,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
+  },
+  "without": {
+   "t_out_min": 319.53333,
+   "t_high_min": 0.0,
+   "t_low_min": 319.53333,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.3924,
+   "energy_kwh": 44.05455,
+   "quality_viol_m3": 0.40049,
+   "detect_min": 42.31667,
+   "detect_how": "NTU_WARN",
+   "notify_max_min": 0.03333,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  },
  {
@@ -201,7 +325,8 @@
    "detect_min": 415.83333,
    "detect_how": "CL_WARN",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 495.93333,
@@ -213,8 +338,9 @@
    "quality_viol_m3": 1.41675,
    "detect_min": 415.83333,
    "detect_how": "CL_WARN",
-   "notify_max_min": 294.76667,
-   "dry_run_min": 0.0
+   "notify_max_min": 294.83333,
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  },
  {
@@ -234,10 +360,11 @@
    "p_crit_min": -0.3924,
    "energy_kwh": 37.13212,
    "quality_viol_m3": 0.0,
-   "detect_min": 27.0,
-   "detect_how": "TTE_LOW",
+   "detect_min": 13.86667,
+   "detect_how": "SUPPLY_LOST",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   },
   "without": {
    "t_out_min": 487.13333,
@@ -250,7 +377,8 @@
    "detect_min": 25.98333,
    "detect_how": "SUPPLY_LOST",
    "notify_max_min": 0.0,
-   "dry_run_min": 0.0
+   "dry_run_min": 0.0,
+   "unserved_m3": 0.0
   }
  }
 ]

@@ -35,13 +35,14 @@ Ba phương án chạy song song trong cùng một mô phỏng, với **cùng ch
 | S3b · Kịch bản mới bị lỗi – tự động quay lui | 32 / 20 / 22 | 36 %, 32 % | 400 / 4 / 0 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 2 / 1 / 1 | – / – / – |
 | S4 · Sự cố độ đục – cảnh báo và dừng an toàn | 74 / 44 / 43 | 41 %, 42 % | 777 / 320 / 318 | 1; 65,5 / 1; 0,4 / 1; 0,5 | 3 / 3 / 3 | không phát hiện / 42 phút / 43 phút |
 | S5 · Cảm biến áp lực PT-101 bị kẹt – áp lực vượt ngưỡng | 32 / 22 / 20 | 29 %, 38 % | 400 / 0 / 0 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 2 / 1 / 1 | – / 0 phút / 0 phút |
-| S6 · Mất nước nguồn 10 giờ – mức bể thấp | 51 / 38 / 37 | 24 %, 27 % | 935 / 493 / 487 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 5 / 3 / 3 | 450 phút / 29 phút / 27 phút |
+| S6 · Mất nước nguồn 10 giờ – mức bể thấp | 51 / 38 / 37 | 24 %, 27 % | 935 / 493 / 487 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 5 / 3 / 3 | 450 phút / 14 phút / 14 phút |
 | S7 · Hỏng bơm P-01 giờ cao điểm – chuyển bơm dự phòng | 42 / 45 / 43 | -5 %, -2 % | 1232 / 1 / 0 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 4 / 1 / 1 | 525 phút / 0 phút / 0 phút |
 | S8 · Vỡ ống ban đêm – phát hiện bất thường lưu lượng | 78 / 58 / 57 | 25 %, 26 % | 910 / 34 / 34 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 3 / 2 / 3 | không phát hiện / không phát hiện / 15 phút |
-| S9 · Tổng hợp DOK3: mất mạng dài + clo giảm + mất nguồn | 148 / 97 / 95 | 35 %, 36 % | 1429 / 496 / 482 | 1; 29,0 / 1; 1,4 / 1; 2,5 | 6 / 4 / 5 | không phát hiện; không phát hiện / 416 phút; 33 phút / 421 phút; 11 phút |
+| S9 · Tổng hợp DOK3: mất mạng dài + clo giảm + mất nguồn | 148 / 97 / 95 | 35 %, 36 % | 1429 / 496 / 482 | 1; 29,0 / 1; 1,4 / 1; 2,5 | 6 / 4 / 5 | không phát hiện; không phát hiện / 416 phút; 33 phút / 421 phút; 3 phút |
 | S10 · Một tuần vận hành – so sánh điện năng | 527 / 317 / 308 | 40 %, 42 % | 5292 / 1 / 0 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 21 / 15 / 18 | – / – / – |
 | S11 · Mini PC treo 6 giờ – dự phòng bằng PID nội biến tần | 79 / 52 / 51 | 33 %, 35 % | 1121 / 1 / 1 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 4 / 2 / 2 | – / 1 phút / 1 phút |
 | S12 · Điều khiển bơm từ xa và tại chỗ (HMI) – quyền điều khiển, liên động | 53 / 32 / 31 | 40 %, 42 % | 507 / 13 / 24 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 3 / 3 / 3 | – / – / – |
+| S13 · pH nước nguồn 9,5 trong 8 giờ – giá trị của máy đo pH | 74 / 46 / 47 | 37 %, 36 % | 777 / 539 / 516 | 1; 97,7 / 1; 1,2 / 1; 1,2 | 3 / 6 / 5 | không phát hiện / 193 phút / 193 phút |
 
 Đọc cột tiết kiệm cùng với lượng nước cấp được: ở S7, lịch cố định tốn ít điện hơn (42 kWh so với 45 kWh) chỉ vì không bơm được nước từ 08:00 đến 16:30 (cấp 271 m³ so với 430 m³). Suất điện năng mới là thước đo công bằng: 0,156 so với 0,104 kWh/m³.
 

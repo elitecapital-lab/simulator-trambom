@@ -211,7 +211,7 @@ class App {
   }
   view() {
     const g = this.st.gw;
-    return { plant: this.st.plant, sig: g.sig, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
+    return { plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
   }
   _syncHeader() {
     document.getElementById('btn-play').textContent = this.running ? 'Tạm dừng' : 'Chạy';
@@ -244,18 +244,19 @@ class App {
     const g = this.st.gw, pl = this.st.plant, sig = g.sig || {}, sc = this.scene3d, A = g.alarms.active;
     const has = (p) => [...A.keys()].some((k) => k.startsWith(p));
     sc.setLabel('PT-101', fmt(sig.p1, 2, 'bar'), has('SENSOR_FAULT_PT-101') || g.sig_proc.faulty['PT-101']);
-    sc.setLabel('PT-102', fmt(sig.p2, 2, 'bar'), has('SENSOR_FAULT_PT-102') || has('P_HIGH'));
+    const inst = g.sig_proc.installed;
+    sc.setLabel('PT-102', inst.has('PT-102') ? fmt(sig.p2, 2, 'bar') : 'không lắp', inst.has('PT-102') && (has('SENSOR_FAULT_PT-102') || has('P_HIGH')));
     sc.setLabel('FT-101', fmt(sig.q_f, 1, 'm³/h'));
-    sc.setLabel('FT-100', fmt(sig.q_in_f, 1, 'm³/h'), has('SUPPLY_LOST'));
+    sc.setLabel('FT-100', (inst.has('FT-100') && !has('SENSOR_FAULT_FT-100') ? '' : '≈') + fmt(sig.q_in_f, 1, 'm³/h'), has('SUPPLY_LOST'));
     sc.setLabel('LT-101', fmt(sig.level, 2, 'm'), has('LEVEL'));
     sc.setLabel('T-01', `${fmt(pl.volume(), 0)} m³`, has('LEVEL'));
-    sc.setLabel('AIT-201', fmt(sig.cl, 2, 'mg/L'), has('CL_'));
-    sc.setLabel('AIT-202', fmt(sig.ntu, 2, 'NTU'), has('NTU_'));
-    sc.setLabel('AIT-203', fmt(sig.ph, 2), has('PH_'));
+    sc.setLabel('AIT-201', inst.has('AIT-201') ? fmt(sig.cl, 2, 'mg/L') : 'không lắp', has('CL_'));
+    sc.setLabel('AIT-202', inst.has('AIT-202') ? fmt(sig.ntu, 2, 'NTU') : 'không lắp', has('NTU_'));
+    sc.setLabel('AIT-203', inst.has('AIT-203') ? fmt(sig.ph, 2) : 'không lắp', has('PH_'));
     pl.pumps.forEach((pu, i) => sc.setLabel(pu.tag, pu.fault ? 'LỖI' : pu.running ? `${fmt(pu.f, 1)} Hz · ${fmt(pu.kw, 2)} kW` : 'dừng', pu.fault));
     sc.setLabel('PI-101/102', `${fmt(pl.pumps[0].gauge, 1)} / ${fmt(pl.pumps[1].gauge, 1)} bar`);
     sc.setLabel('HT-01', fmt(pl.htWaterL(), 0, 'L'));
-    sc.setLabel('MV-02', pl.outlet_frac > 0.99 ? 'mở' : pl.outlet_frac < 0.01 ? 'ĐÓNG' : `${fmt(pl.outlet_frac * 100, 0)} %`, pl.outlet_frac < 0.99);
+    sc.setLabel('MV-02', this.cfg.hardware['MV-02'] === false ? 'không lắp' : pl.outlet_frac > 0.99 ? 'mở' : pl.outlet_frac < 0.01 ? 'ĐÓNG' : `${fmt(pl.outlet_frac * 100, 0)} %`, pl.outlet_frac < 0.99);
     sc.setLabel('VX-01', pl.drain_open ? 'ĐANG XẢ' : 'đóng', pl.drain_open);
     sc.setLabel('PSV-01', pl.q_relief > 0 ? `xả ${fmt(pl.q_relief, 1)} m³/h` : 'đóng', pl.q_relief > 0);
     sc.setLabel('FV-01', pl.q_in > 0.1 ? 'mở' : 'đóng');

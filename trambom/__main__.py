@@ -7,7 +7,7 @@ Lệnh:
   compare [--scenarios ...]    chạy nhiều kịch bản ở cả hai mức, xuất báo cáo Markdown + PNG
   network [--hours 24]         mô phỏng 4 trạm trong mạng lưới, in bảng điều hành tổng quát
   options                      so sánh "có lắp / không lắp" từng thiết bị giải pháp & khuyến nghị
-  run S5 --off PT-102          chạy kịch bản khi bỏ bớt thiết bị (PT-102, FT-100_pulse, AIT-201/202/203, SMS, VFD_PID_fallback)
+  run S5 --off PT-102          chạy kịch bản khi bỏ bớt thiết bị (PT-102, FT-100_pulse, AIT-201/202/203, MV-02, SMS, VFD_PID_fallback)
   check-student <file.py>      chấm kịch bản theo ngưỡng của học viên
   web [--port 8000]            chạy máy chủ web tĩnh cho bản mô phỏng 3D
 """
@@ -163,7 +163,7 @@ def cmd_options(args):
     from .whatif import run_all, table_md
     t0 = time.time()
     print("Chạy các cặp có lắp / không lắp ...")
-    rows = run_all(args.jobs, lambda job: print("  xong %s %s/%s %s sau %.0f s" % (job[0], job[1], job[2], "có" if job[3] else "không", time.time() - t0)))
+    rows = run_all(args.jobs, lambda job: print("  xong %s %s/%s %s%s sau %.0f s" % (job[0], job[1], job[2], "có" if job[3] else "không", (" " + str(dict(job[4]))) if job[4] else "", time.time() - t0)))
     md = table_md(rows)
     print()
     print(md)
@@ -217,7 +217,7 @@ def main(argv=None):
     p.add_argument("--hours", type=float)
     p.add_argument("--dt", type=float)
     p.add_argument("--script", help="file kịch bản học viên (hàm dieu_khien)")
-    p.add_argument("--off", help="thiết bị không lắp, phân cách bằng dấu phẩy: PT-102,FT-100_pulse,AIT-201,AIT-202,AIT-203,SMS,VFD_PID_fallback")
+    p.add_argument("--off", help="thiết bị không lắp, phân cách bằng dấu phẩy: PT-102,FT-100_pulse,AIT-201,AIT-202,AIT-203,MV-02,SMS,VFD_PID_fallback")
     p.add_argument("--out")
     p = sub.add_parser("compare")
     p.add_argument("--scenarios")

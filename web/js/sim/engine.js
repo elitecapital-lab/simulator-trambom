@@ -2,7 +2,7 @@
 import { FixedSchedule } from './baseline.js';
 import { Disturbances } from './demand.js';
 import { GatewayFallback } from './fallback.js';
-import { Gateway, MANUAL_CMDS } from './gateway.js';
+import { Gateway, MANUAL_CMDS, hwOn } from './gateway.js';
 import { KpiTracker } from './kpi.js';
 import { Link } from './link.js';
 import { Plant } from './physics.js';
@@ -40,6 +40,7 @@ export class StationSim {
     this.kpi = new KpiTracker(cfg); this.hist = new History(cfg.sim.history_period_s); this.level_min = 1e9;
     this.gw = null; this.base = null; this.server = server; this._alarm_seen = 0; this.level = level;
     this.gw_dead = null; this.gw_down_s = 0;
+    this.has_mv02 = kind !== 'smart' || hwOn(cfg, 'MV-02');
     if (kind === 'smart') {
       this.sensors = new SensorSet(cfg, this.station, seed);
       this.link = new Link(cfg, this.station.seed_offset ?? 0);
@@ -69,7 +70,12 @@ export class StationSim {
       const meas = this.sensors.read(pl, dt, t);
       this.meas = meas;
       if (this.gw_dead === null) out = this.gw.step(t, dt, meas);
-      else { this.link.recvGateway(t); out = this.gw_dead.step(t, dt, meas); } // bản tin tới mini PC đang treo bị mất
+      else if (this.gw_dead.restarted) {
+        // mini PC đã khởi động lại: theo dõi trong khi PID nội biến tần vẫn điều khiển
+        this.gw.step(t, dt, meas);
+        out = this.gw_dead.step(t, dt, meas);
+        if (this.gw.observe_until === null) this.gw_dead = null;
+      } else { this.link.recvGateway(t); out = this.gw_dead.step(t, dt, meas); } // bản tin tới mini PC đang treo bị mất
       lsll = meas['LSLL-101'];
       const hist = this.gw.alarms.history;
       while (this._alarm_seen < hist.length) {
@@ -87,7 +93,7 @@ export class StationSim {
       lsll = this.lsll;
     }
     pl.pumps.forEach((pu, i) => { pu.cmd_run = Boolean(out.run[i]) && !lsll; pu.f_ref = out.f_ref[i]; });
-    pl.outlet_cmd = out.outlet_open; pl.drain_open = out.drain_open;
+    pl.outlet_cmd = this.has_mv02 ? out.outlet_open : true; pl.drain_open = out.drain_open;
     pl.step(dt, d);
     this.kpi.update(t, dt, pl);
     if (pl.level < this.level_min) this.level_min = pl.level;
@@ -95,7 +101,7 @@ export class StationSim {
     if (this.hist.due(this.t)) this.hist.add(this.snapshot());
   }
   failGateway(t) {
-    if (this.gw_dead !== null) return;
+    if (this.gw_dead !== null && !this.gw_dead.restarted) return;
     this.gw_dead = new GatewayFallback(this.cfg, this.gw, this.plant, t);
     const e = { t, level: 'critical', text: 'Mini PC (edge gateway) ngừng hoạt động – mất thu thập, điều khiển, an toàn mềm và truyền thông' };
     this.gw.logs.push(e); if (this.gw.onLog) this.gw.onLog(e);
@@ -103,8 +109,8 @@ export class StationSim {
   }
   restoreGateway(t) {
     const fb = this.gw_dead;
-    if (fb === null) return;
-    this.gw_dead = null; this.gw_down_s += t - fb.t0;
+    if (fb === null || fb.restarted) return;
+    fb.restarted = true; this.gw_down_s += t - fb.t0; // mạch dự phòng điều khiển tới khi mini PC tiếp quản
     this.gw.restart(t, fb.t0, this.plant.pumps.map((pu) => ({ running: pu.running, f: pu.f })), fb.note());
   }
   snapshot() {
@@ -130,9 +136,11 @@ export class StationSim {
       const g = this.gw; const c = g.comms.stats;
       s.alarms_raised = { ...g.alarms.raised_count }; s.comms = { ...c }; s.forecast_mape = g.forecaster.mape(); s.sms = c.sms; s.script_version = g.script.version;
       s.manual_min = g.manual_s / 60.0;
-      s.gw_down_min = (this.gw_down_s + (this.gw_dead ? this.t - this.gw_dead.t0 : 0)) / 60.0;
+      const dead = this.gw_dead !== null && !this.gw_dead.restarted;
+      s.gw_down_min = (this.gw_down_s + (dead ? this.t - this.gw_dead.t0 : 0)) / 60.0;
       const delays = g.notify.map((n) => ((n.t_notified ?? this.t) - n.t) / 60.0);
-      s.notify = { critical: delays.length, max_delay_min: delays.length ? Math.max(...delays) : 0.0, via: [...new Set(g.notify.map((n) => n.via))].sort() };
+      s.notify = { critical: delays.length, max_delay_min: delays.length ? Math.max(...delays) : 0.0,
+        via: [...new Set(g.notify.map((n) => n.via ?? (n.t_notified !== null ? 'IP' : 'chưa gửi')))].sort() };
       if (this.server) {
         const st = this.server.stations[this.sid];
         s.server_records = st.records; s.completeness = c.generated ? st.records / c.generated : 1.0;
@@ -157,12 +165,18 @@ export function dispatchEvent(ev, t, smart, fixed, server) {
   else if (typ === 'link_down') smart.link.setUp(false, t);
   else if (typ === 'link_up') smart.link.setUp(true, t);
   else if (typ === 'server_command') {
-    const ttl = ev.ttl_s ?? (MANUAL_CMDS.includes(ev.cmd.type) ? smart.cfg.gateway.manual_cmd_ttl_s : 900.0);
+    const ttl = ev.ttl_s ?? (MANUAL_CMDS.includes(ev.cmd.type) ? smart.cfg.gateway.manual_cmd_ttl_s : 900.0); // null/thiếu → mặc định (như Python)
     server.sendCommand(sid, ev.cmd.type, ev.cmd.args ?? {}, t, ttl);
   }
   else if (typ === 'server_publish') server.publishScript(sid, ev.patch, t, ev.by ?? 'Điều độ viên', ev.reason ?? '', ev.strategy ?? null);
   else if (typ === 'local_edit') smart.gw.localEdit(ev.patch, t, ev.by ?? 'HMI', ev.reason ?? '');
-  else if (typ === 'local_command') smart.gw.localCommand(ev.cmd.type, ev.cmd.args ?? {}, t);
+  else if (typ === 'local_command') {
+    if (smart.gw_dead && !smart.gw_dead.restarted) {
+      // HMI-01 là trang web do mini PC phục vụ: mini PC treo thì thao tác HMI không tới được bộ điều khiển
+      const e = { t, level: 'alarm', text: `HMI-01 mất kết nối bộ điều khiển (mini PC ngừng) – bỏ qua lệnh ${ev.cmd.type}` };
+      smart.gw.logs.push(e); if (smart.gw.onLog) smart.gw.onLog(e);
+    } else smart.gw.localCommand(ev.cmd.type, ev.cmd.args ?? {}, t);
+  }
   else if (typ === 'gateway_fail') smart.failGateway(t);
   else if (typ === 'gateway_restore') smart.restoreGateway(t);
 }
@@ -183,7 +197,7 @@ export class TwinSim {
     this.smart.step();
     if (this.fixed) this.fixed.step();
     this.server.step(t);
-    if (this.smart.gw_dead && !this.server.stations[this.smart.sid].online) this.smart.kpi.detectKind(t, 'gateway_fail', 'máy chủ mất nhịp tim (LWT)');
+    if (this.smart.gw_dead && !this.smart.gw_dead.restarted && !this.server.stations[this.smart.sid].online) this.smart.kpi.detectKind(t, 'gateway_fail', 'máy chủ mất nhịp tim (LWT)');
     this.t = this.smart.t;
   }
   run(hours = null) {

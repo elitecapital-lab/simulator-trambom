@@ -47,8 +47,8 @@ Kịch bản đã lưu là **tham số + luật** được kiểm thử trước
 | Dự phòng thiết bị | 2 bơm luân phiên; chuyển bơm dự phòng tức thì; giới hạn khởi động | S7 |
 | Dự phòng kịch bản | Kịch bản học viên lỗi → kịch bản dựng sẵn; dự báo kém → theo ngưỡng; kịch bản mới xấu → quay lui | S3b, `test_broken_student_script_falls_back_to_builtin` |
 | Dự phòng truyền thông | SMS cho báo động nghiêm trọng; bộ đệm + phát lại; LWT | S2, S9 |
-| Dự phòng bộ điều khiển | Mini PC treo → rơ-le watchdog WDR-01 nhả sau 5 s → biến tần chạy PID nội 3,0 bar theo PT-101 (qua bộ chia tín hiệu); trạm đang dừng an toàn thì giữ dừng; khởi động lại → nạp kịch bản và bộ đệm từ SSD, đồng bộ (c) | S11; tắt `hardware.VFD_PID_fallback` để thấy I/O giữ lệnh cuối (áp ngoài dải 213 phút thay vì 1 phút) |
-| Điều khiển tay an toàn | Quyền tay từ xa có thời hạn, tự hủy khi mất mạng; quyền tại chỗ ưu tiên; liên động và giới hạn áp vẫn áp dụng | S12 |
+| Dự phòng bộ điều khiển | Mini PC treo → rơ-le watchdog WDR-01 nhả sau 5 s (trước khi I/O hết thời gian chờ ở 10 s) → biến tần của bơm đang chạy (KA-DUTY) chạy PID nội 3,0 bar theo cảm biến riêng (VFD-01 ← PT-101, VFD-02 ← PT-102); trạm đang dừng an toàn thì giữ dừng (K-SS); khởi động lại → hủy phiên tay cũ, theo dõi 60 s, tiếp quản không xung, đồng bộ (c) | S11; tắt `hardware.VFD_PID_fallback` để thấy hậu quả: áp ngoài dải 362 phút khi I/O đưa lệnh chạy về 0 (mặc định), 213 phút khi I/O giữ lệnh cuối, thay vì 1 phút |
+| Điều khiển tay an toàn | Quyền tay từ xa có thời hạn, tự hủy khi mất mạng; quyền tại chỗ ưu tiên và không bị hủy khi mất mạng; liên động và giới hạn áp vẫn áp dụng | S12 |
 | Chế độ suy giảm theo thời gian mất mạng | Biên áp tăng sau 24 h; có thể mở rộng: tắt ngủ đông, giảm số lần ghép/tách | `script.params.offline` |
 | Con người | Lượt kiểm tra định kỳ vẫn cần thiết; quy trình xả bể, đặt lại có hướng dẫn | Lệnh `flush_tank`, `reset_safe_stop` (S4) |
 

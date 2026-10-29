@@ -246,6 +246,9 @@ class Controller:
             self.conserve = 2
         gw.alarms.set_hyst(t, dt, "LEVEL_LOW", level < lv["conserve_m"], level > lv["conserve_m"] + 0.05, "warning",
                            "Mức bể thấp (< %.1f m) – giảm áp tiết kiệm nước" % lv["conserve_m"], 5.0, 60.0)
+        hi = gw.cfg["safety"]["level_high_m"]
+        gw.alarms.set_hyst(t, dt, "LEVEL_HIGH", level > hi, level < hi - 0.05, "warning",
+                           "Mức bể > %.1f m – nghi van phao FV-01 kẹt mở, sắp tràn" % hi, 60.0, 60.0)
         if t >= self.next_tte:
             # dự báo thời gian cạn bể: thể tích còn dùng được / (lưu lượng ra dự báo 3 h tới - lưu lượng vào)
             self.next_tte = t + 60.0
@@ -323,8 +326,8 @@ class Controller:
             self.p_set = p_set
             return {"n": 0, "f_ref": 0.0, "order": [self.duty, 1 - self.duty], "p_set": p_set}
 
-        # ---- chế độ TAY: kịch bản tạm ngưng (đầu ra do người vận hành đặt); trạng thái được đặt lại để tiếp quản êm ----
-        if gw.manual is not None:
+        # ---- chế độ TAY hoặc đang theo dõi sau khởi động lại: kịch bản tạm ngưng; trạng thái được đặt lại để tiếp quản êm ----
+        if gw.manual is not None or gw.observe_until is not None:
             self.n = 0
             self.I = f_min
             self.stage_timer = 0.0

@@ -21,10 +21,17 @@ export class SafetyLayer {
     if (key === 'ntu') return [-1e9, s.ntu_warn, -1e9, s.ntu_trip, s.ntu_delay_s];
     return [s.ph_warn_low, s.ph_warn_high, s.ph_trip_low, s.ph_trip_high, s.ph_delay_s];
   }
-  qualityOkForReset(sig) {
-    const s = this.s; const { cl, ntu, ph } = sig;
-    if (cl === null || ntu === null || ph === null) return false;
-    return s.cl_trip_low + 0.05 <= cl && cl <= s.cl_trip_high - 0.05 && ntu < s.ntu_reset_max && s.ph_trip_low + 0.2 <= ph && ph <= s.ph_trip_high - 0.2;
+  // Chỉ xét các máy phân tích thực sự được lắp; máy đã lắp mà mất tín hiệu thì chưa cho đặt lại
+  qualityOkForReset(sig, installed = null) {
+    const s = this.s;
+    const ok = { cl: (v) => s.cl_trip_low + 0.05 <= v && v <= s.cl_trip_high - 0.05, ntu: (v) => v < s.ntu_reset_max,
+      ph: (v) => s.ph_trip_low + 0.2 <= v && v <= s.ph_trip_high - 0.2 };
+    for (const [key, tag] of Object.entries(QUALITY_TAGS)) {
+      if (installed !== null && !installed.has(tag)) continue;
+      const v = sig[key];
+      if (v === null || v === undefined || !ok[key](v)) return false;
+    }
+    return true;
   }
   requestReset(t, gw) {
     if (this.lockout && !this.safe_stop) {
@@ -105,7 +112,7 @@ export class SafetyLayer {
         }
       }
     }
-    if (this.qualityOkForReset(sig)) this.ok_timer += dt; else this.ok_timer = 0;
+    if (this.qualityOkForReset(sig, installed)) this.ok_timer += dt; else this.ok_timer = 0;
     if (this.safe_stop && this.q_auto && this.ok_timer >= s.quality_reset_hold_s) this._clearSafeStop(t, gw, 'tự động theo cấu hình');
     let block = '';
     if (this.lockout) block = 'khóa sau nhiều lần cắt áp cao';

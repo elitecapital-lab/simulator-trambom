@@ -1,5 +1,6 @@
 // Các bảng của khung nổi bên phải (mở từ thanh chức năng) + bảng so sánh KPI. Cập nhật ~4 lần/giây từ main.js.
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
+import { ackAlarm, sortedAlarms, viNum } from './ops.js';
 import { TEMPLATE_SOLUTION, TEMPLATE_TODO } from './student-template.js';
 import { TwinSim } from '../sim/engine.js';
 
@@ -25,6 +26,10 @@ export const HW_OPTS = [
   ['FT-100_pulse', 'Đầu phát xung cho đồng hồ nước vào FT-100', 'Không có: ước lượng lưu lượng vào bằng cân bằng khối lượng (LT-101 + FT-101).', 'S6', 'advanced'],
 ];
 const STRAT_TXT = { threshold: 'theo ngưỡng', predictive: 'dự báo', fallback: 'dự phòng (dự báo kém → ngưỡng)', custom: 'kịch bản học viên' };
+// đặt chữ chỉ khi đổi (thẻ thông tin cập nhật mỗi nhịp mà không dựng lại)
+const T = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
+/** Nội dung chip chế độ: giữ chữ "(d)" viết thường dù chip in hoa. */
+export const modeChipTxt = (s) => { const m = /^(\([a-z]\))(.*)$/.exec(s); return m ? [h('span', { class: 'ml' }, m[1]), m[2]] : [s]; };
 
 export class Panels {
   constructor(app) { this.app = app; this.cells = {}; this.logFilter = 'all'; this.logSeen = 0; }
@@ -38,7 +43,8 @@ export class Panels {
     c.gwmode = h('span'); c.comms = h('span'); c.script = h('span'); c.strategy = h('span'); c.override = h('span'); c.bufTxt = h('span');
     c.bufBar = h('i'); c.bufMeter = h('div', { class: 'meter' }, c.bufBar);
     pane.append(
-      h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Báo động đang hoạt động (gateway)'), c.alarms),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('span', { class: 'lbl' }, 'Báo động đang hoạt động (gateway)'),
+        h('button', { class: 'linkbtn', type: 'button', onclick: () => this.app.tab('alarm'), title: 'Danh sách đầy đủ, lịch sử và xác nhận tất cả' }, 'Mở Báo động ›')), c.alarms),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Edge gateway GW-01'),
         h('table', { class: 'kv fixed' }, h('tbody', {},
           h('tr', {}, h('td', {}, 'Chế độ'), h('td', {}, c.gwmode)),
@@ -59,8 +65,8 @@ export class Panels {
   updateMonitor() {
     const a = this.app, gw = a.st.gw, pl = a.st.plant, sig = gw.sig || {}, c = this.cells;
     const mode = gw.mode(), dead = a.st.gw_dead, ctl = gw.controlSrc();
-    c.gwmode.replaceChildren(dead ? h('span', { class: 'chip critical' }, 'Mini PC ngừng – ' + dead.note())
-      : h('span', { class: 'chip ' + { a: 'good', b: 'warning', c: 'info', d: 'critical' }[mode] }, MODE_TXT[mode]),
+    c.gwmode.replaceChildren(dead ? h('span', { class: 'chip critical' }, 'Mini PC ngừng – ' + viNum(dead.note()))
+      : h('span', { class: 'chip ' + { a: 'good', b: 'warning', c: 'info', d: a.modeSev() === 'warn' ? 'warning' : 'critical' }[mode] }, ...modeChipTxt(MODE_TXT[mode])),
       !dead && ctl !== 'auto' ? h('span', { class: 'chip warning', style: 'margin-left:4px' }, ctl === 'remote' ? 'TAY từ xa' : 'TAY tại chỗ') : '');
     const cs = gw.comms.state;
     c.comms.textContent = dead ? 'Ngừng gửi – máy chủ phát hiện qua LWT' : COMMS_TXT[cs] + (gw.offline_since !== null ? ` · ${fmt((a.st.t - gw.offline_since) / 60, 0)} phút` : '');
@@ -86,16 +92,24 @@ export class Panels {
     set('kw', fmt(pl.kw, 2)); set('kwh', fmt(a.st.kpi.energy_kwh, 1));
     pl.pumps.forEach((pu, i) => { c['pu' + i].textContent = (pu.fault ? 'LỖI' : pu.running ? 'chạy' : 'dừng') + ` · ${fmt(pu.f, 1)} Hz · ${fmt(pu.amps, 1)} A · ${pu.starts} lần · ${fmt(pu.run_s / 3600, 1)} h`; });
     set('mv', fmt(pl.outlet_frac * 100, 0)); set('ht', fmt(pl.htWaterL(), 0)); set('back', fmt(pl.backlog, 1));
-    const list = [...gw.alarms.active.values()].sort((x, y) => ({ critical: 0, alarm: 1, warning: 2, info: 3 }[x.sev] - { critical: 0, alarm: 1, warning: 2, info: 3 }[y.sev]));
-    const key = list.map((x) => x.code + x.acked).join(',');
+    // xác nhận qua ackAlarm như bảng Báo động: mini PC ngừng thì HMI-01 không xác nhận được
+    const list = sortedAlarms([...gw.alarms.active.values()]), deadB = Boolean(dead);
+    const key = list.map((x) => x.code + x.acked).join(',') + '|' + deadB;
     if (key !== this._alarmKey) {
       this._alarmKey = key;
       c.alarms.replaceChildren(...(list.length ? list.map((al) => h('div', { class: 'alarm-row' },
         h('span', { class: 'chip ' + al.sev }, SEV_LABEL[al.sev]),
-        h('div', { class: 'msg' }, h('b', {}, al.code + ' '), al.msg, h('div', { class: 'when' }, tShort(al.t) + (al.acked ? ' · đã xác nhận' : ''))),
-        al.acked ? h('span') : h('button', { class: 'btn small', onclick: () => gw.alarms.ack(al.code, a.st.t) }, 'Xác nhận'))) : [h('p', { class: 'note' }, 'Không có báo động.')]));
+        h('div', { class: 'msg' }, h('b', {}, al.code + ' '), viNum(al.msg), h('div', { class: 'when' }, tShort(al.t) + (al.acked ? ' · đã xác nhận' : ''))),
+        al.acked ? h('span') : h('button', { class: 'btn small', disabled: deadB, title: deadB ? 'Mini PC đang ngừng – HMI-01 không xác nhận được báo động' : 'Xác nhận tại trạm (HMI-01)', onclick: () => ackAlarm(a, 'local', al.code) }, 'Xác nhận')))
+        : [h('p', { class: 'note' }, 'Không có báo động.')]));
     }
-    this.app.setBadge('mon', list.filter((x) => !x.acked && x.sev !== 'info').length);
+    this.updateAlarmBadge();
+  }
+  /** Số báo động chưa xác nhận (trừ mức thông tin) trên nút Báo động của dock – tính mỗi nhịp, không dựng DOM. */
+  updateAlarmBadge() {
+    let n = 0;
+    for (const x of this.app.st.gw.alarms.active.values()) if (!x.acked && x.sev !== 'info') n++;
+    this.app.setBadge('mon', n);
   }
 
   // ---------------- Sự cố ----------------
@@ -285,7 +299,7 @@ export class Panels {
       h('div', {}, h('b', {}, fmt(tot.smart_nrw_pct, 1) + ' %'), h('span', {}, `rò rỉ / nước cấp · cố định ${fmt(tot.fixed_nrw_pct, 1)} %`)));
     this.stTable.replaceChildren(...net.smart.map((s) => {
       const st = srv.stations[s.sid], l = st.last || {};
-      return h('tr', {}, h('td', {}, s.sid), h('td', {}, h('span', { class: 'chip ' + (st.online ? ({ a: 'good', b: 'warning', c: 'info', d: 'critical' }[l.mode] || 'good') : 'off') }, st.online ? '(' + (l.mode || 'a') + ')' : 'mất')),
+      return h('tr', {}, h('td', {}, s.sid), h('td', {}, h('span', { class: 'chip ' + (st.online ? ({ a: 'good', b: 'warning', c: 'info', d: 'critical' }[l.mode] || 'good') : 'off') }, ...(st.online ? modeChipTxt('(' + (l.mode || 'a') + ')') : ['mất']))),
         h('td', { class: 'num' }, fmt(l.p, 2)), h('td', { class: 'num' }, fmt(l.q, 1)), h('td', { class: 'num' }, fmt(l.kw, 2)), h('td', { class: 'num' }, fmt(l.kwh, 1)));
     }));
     const al = [...srv.alarms.values()].sort((x, y) => y.t - x.t);
@@ -293,7 +307,7 @@ export class Panels {
     if (key !== this._calKey) {
       this._calKey = key;
       this.centralAlarms.replaceChildren(...(al.length ? al.slice(0, 30).map((x) => h('div', { class: 'alarm-row' }, h('span', { class: 'chip ' + x.sev }, SEV_LABEL[x.sev] ?? x.sev),
-        h('div', { class: 'msg' }, h('b', {}, `${x.station} · ${x.code} `), x.msg, h('div', { class: 'when' }, tShort(x.t) + (x.acked ? ' · đã xác nhận' : ''))),
+        h('div', { class: 'msg' }, h('b', {}, `${x.station} · ${x.code} `), viNum(x.msg), h('div', { class: 'when' }, tShort(x.t) + (x.acked ? ' · đã xác nhận' : ''))),
         x.acked || x.code === 'STATION_OFFLINE' ? h('span') : h('button', { class: 'btn small', onclick: () => srv.ackAlarm(x.station, x.code, a.st.t) }, 'Xác nhận'))) : [h('p', { class: 'note' }, 'Không có cảnh báo tập trung.')]));
     }
     const up = net.smart.reduce((s, x) => s + x.link.bytes_up, 0), dn = net.smart.reduce((s, x) => s + x.link.bytes_down, 0);
@@ -318,7 +332,7 @@ export class Panels {
     if (f === 'all' || f === 'srv') items = items.concat(sl.slice(-200).map((l) => ({ ...l, src: 'SV' })));
     if (f === 'alarm') items = items.filter((l) => ['alarm', 'critical', 'safety', 'warning'].includes(l.level));
     items.sort((x, y) => y.t - x.t);
-    this.logBox.replaceChildren(...items.slice(0, 250).map((l) => h('div', { class: l.level }, h('span', { class: 't' }, `${tShort(l.t)} ${l.src}`), l.text)));
+    this.logBox.replaceChildren(...items.slice(0, 250).map((l) => h('div', { class: l.level }, h('span', { class: 't' }, `${tShort(l.t)} ${l.src}`), viNum(l.text))));
   }
 
   // ---------------- Bài học ----------------
@@ -392,60 +406,89 @@ export class Panels {
     this.eqCounts = h('div', { class: 'row' });
     this.eqList = h('div');
     this.hwBox = h('div');
-    this.wiOut = h('div');
     pane.append(
       h('p', { class: 'note' }, 'Phân biệt rõ thiết bị nhà máy ĐÃ CÓ, thiết bị GIẢI PHÁP đưa vào (mini PC tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ) và thiết bị KHUYẾN NGHỊ để hệ thống vận hành trơn tru. Nút Hiển thị trên thanh chức năng lọc và tô màu đúng nhóm trong cảnh 3D.'),
       h('div', { class: 'sec' }, this.eqCounts),
       this.hwDetails = h('details', { class: 'sec hw-details' }, h('summary', { class: 'lbl' }, 'Thử bỏ bớt thiết bị – mô phỏng “nếu không lắp”'),
-        h('p', { class: 'note' }, 'Bỏ chọn rồi bấm "Áp dụng" để chạy lại kịch bản hiện tại; hoặc bấm "So sánh" để chạy nhanh hai phương án có/không lắp trên kịch bản gợi ý.'), this.hwBox),
-      this.wiOut,
-      h('div', { class: 'sec' }, this.eqList));
+        h('p', { class: 'note' }, 'Bỏ chọn rồi bấm "Áp dụng" để chạy lại kịch bản hiện tại; hoặc bấm "So sánh" để chạy nhanh hai phương án có/không lắp trên kịch bản gợi ý (kết quả hiện ngay dưới tùy chọn).'), this.hwBox),
+      h('div', { class: 'sec' }, h('p', { class: 'note' }, 'Nhấp một thiết bị để xem thông số và chỉ vị trí của nó trong cảnh 3D.'), this.eqList));
     this._buildHw();
     this.updateEquipment(true);
   }
   _buildHw() {
     const a = this.app, hw = a.cfg.hardware;
-    this.hwChecks = {};
-    const rows = HW_OPTS.map(([k, label, desc, sc, lvl]) => {
+    this.hwChecks = {}; this.wi = {};
+    const rows = HW_OPTS.flatMap(([k, label, desc, sc, lvl]) => {
       const cb = h('input', { type: 'checkbox', checked: hw[k] !== false, 'aria-label': label });
       this.hwChecks[k] = cb;
-      return h('label', { class: 'hw-opt' }, cb, h('span', {}, h('b', {}, label), h('small', {}, desc),
-        h('button', { class: 'btn small', type: 'button', onclick: (e) => { e.preventDefault(); this.whatIf(k, sc, lvl); } }, `So sánh trên ${sc}`)));
+      // nút trong <label>: dùng aria-disabled thay cho disabled để cú nhấp khi đang chạy không bật/tắt ô chọn
+      const btn = h('button', { class: 'btn small wi-btn', type: 'button', onclick: (e) => { e.preventDefault(); this.whatIf(k, sc, lvl); } }, `So sánh trên ${sc}`);
+      const out = h('div', { class: 'wi-out', hidden: true });
+      this.wi[k] = { btn, out, txt: btn.textContent };
+      return [h('label', { class: 'hw-opt' }, cb, h('span', {}, h('b', {}, label), h('small', {}, desc), btn)), out];
     });
     this.hwBox.replaceChildren(...rows, h('div', { class: 'row', style: 'margin-top:6px' },
       h('button', { class: 'btn primary', onclick: () => { const o = {}; for (const [k, cb] of Object.entries(this.hwChecks)) o[k] = cb.checked; a.applyHardware(o); } }, 'Áp dụng & chạy lại'),
       h('button', { class: 'btn', onclick: () => { for (const cb of Object.values(this.hwChecks)) cb.checked = true; a.applyHardware(Object.fromEntries(HW_OPTS.map((x) => [x[0], true]))); } }, 'Lắp đủ')));
   }
-  /** Chạy nhanh 2 phương án (có / không lắp) bằng lõi JS, chia nhỏ để không treo trình duyệt. */
+  /** Cuộn khung bảng vừa đủ để thấy el (không dùng scrollIntoView – tránh cuộn các khung cha overflow:hidden). */
+  _reveal(el) {
+    const pane = el.closest('.pane');
+    if (!pane || el.hidden) return;
+    const r = el.getBoundingClientRect(), pr = pane.getBoundingClientRect();
+    let dy = 0;
+    if (r.bottom > pr.bottom - 8) dy = Math.min(r.bottom - pr.bottom + 8, r.top - pr.top - 40);
+    else if (r.top < pr.top + 8) dy = r.top - pr.top - 8;
+    if (Math.abs(dy) > 1) pane.scrollBy({ top: dy, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+  /**
+   * Chạy nhanh 2 phương án (có / không lắp) bằng lõi JS, chia nhỏ để không treo trình duyệt. Tiến độ và kết quả hiện ngay dưới
+   * tùy chọn được bấm; nút báo "Đang chạy… n %" và bỏ qua cú bấm lặp; bấm "So sánh" của tùy chọn khác thì hủy lần chạy cũ.
+   */
   whatIf(opt, scId, level) {
-    const a = this.app;
+    const a = this.app, W = this.wi[opt];
+    if (!W || this._wiRun?.opt === opt) return;
     const sc = a.scenarios.find((s) => s.id === scId);
-    if (!sc || scId === 'S0') { this.wiOut.replaceChildren(h('p', { class: 'note' }, 'Chưa có kịch bản riêng cho tùy chọn này – hãy bỏ chọn rồi tiêm lỗi pH ở mục Sự cố.')); return; }
-    const token = (this._wiToken = (this._wiToken ?? 0) + 1); // lần bấm mới hủy lần chạy cũ
+    const show = (...kids) => { W.out.replaceChildren(...kids); W.out.hidden = false; requestAnimationFrame(() => this._reveal(W.out)); };
+    if (!sc || scId === 'S0') { show(h('p', { class: 'note' }, 'Chưa có kịch bản riêng cho tùy chọn này – hãy bỏ chọn rồi tiêm lỗi pH ở mục Sự cố.')); return; }
+    if (this._wiRun) this._wiEnd(this._wiRun, true);
+    const run = this._wiRun = { opt };
     const mk = (inst) => { const cfg = structuredClone(a.cfg); cfg.hardware[opt] = inst; return new TwinSim(cfg, sc, level, { withFixed: false }); };
     const sims = [mk(true), mk(false)];
     const n = Math.round((sc.duration_h ?? 24) * 3600 / sims[0].dt);
     let i = 0;
     const label = HW_OPTS.find((x) => x[0] === opt)[1];
-    const prog = h('p', { class: 'note' });
-    this.wiOut.replaceChildren(prog);
+    const bar = h('i', { style: 'width:0%' }), prog = h('span');
+    W.btn.setAttribute('aria-disabled', 'true'); W.btn.setAttribute('aria-busy', 'true'); W.btn.classList.add('busy');
+    T(W.btn, 'Đang chạy… 0 %');
+    show(h('div', { class: 'wi-prog' }, h('p', { class: 'note' }, prog), h('div', { class: 'meter' }, bar)));
     const tick = () => {
-      if (token !== this._wiToken) return;
+      if (this._wiRun !== run) return;
       const t0 = performance.now();
       while (i < n && performance.now() - t0 < 60) { sims[0].step(); sims[1].step(); i++; }
-      prog.textContent = `Đang chạy ${scId} (${level === 'basic' ? 'cơ bản' : 'nâng cao'}) có/không “${label}”: ${Math.round(100 * i / n)} %`;
+      const pct = Math.round(100 * i / n);
+      T(prog, `Đang chạy ${scId} (${level === 'basic' ? 'cơ bản' : 'nâng cao'}) có/không “${label}”: ${pct} %`);
+      T(W.btn, `Đang chạy… ${pct} %`); bar.style.width = pct + '%';
       if (i < n) { setTimeout(tick, 0); return; }
+      this._wiEnd(run);
       const [A, B] = sims.map((s) => s.result().smart);
       const det = (s) => { const x = s.incidents[0]; return x ? (x.detected === null ? 'không phát hiện' : fmt((x.detected - x.t) / 60, 1, 'phút') + ' (' + x.how + ')') : '–'; };
       const rows = [['Áp ngoài dải dịch vụ', fmt(A.t_out_min, 0, 'phút'), fmt(B.t_out_min, 0, 'phút')], ['Áp đầu ra > 4,0 bar', fmt(A.t_high_min, 0, 'phút'), fmt(B.t_high_min, 0, 'phút')],
         ['Áp đầu ra lớn nhất', fmt(A.p_out_max, 2, 'bar'), fmt(B.p_out_max, 2, 'bar')], ['Áp điểm bất lợi nhỏ nhất', fmt(A.p_crit_min, 2, 'bar'), fmt(B.p_crit_min, 2, 'bar')],
         ['Nước không đạt QCVN đã cấp', fmt(A.quality_viol_m3, 1, 'm³'), fmt(B.quality_viol_m3, 1, 'm³')], ['Báo động khẩn tới tổ trực chậm nhất', fmt(A.notify.max_delay_min, 0, 'phút'), fmt(B.notify.max_delay_min, 0, 'phút')],
         ['Phát hiện sự cố sau', det(A), det(B)], ['Điện năng', fmt(A.energy_kwh, 1, 'kWh'), fmt(B.energy_kwh, 1, 'kWh')]];
-      this.wiOut.replaceChildren(h('p', { class: 'note' }, h('b', {}, `${sc.name}`), ` – “${label}”`),
+      show(h('p', { class: 'note' }, h('b', {}, `${sc.name}`), ` – “${label}”`),
         h('div', { class: 'kpi-wrap' }, h('table', { class: 'kv' }, h('thead', {}, h('tr', {}, h('th', {}, 'Chỉ số'), h('th', {}, 'Có lắp'), h('th', {}, 'Không lắp'))),
           h('tbody', {}, ...rows.map(([k, x, y]) => h('tr', { class: x !== y ? 'diff' : '' }, h('td', {}, k), h('td', { class: 'num' }, x), h('td', { class: 'num' }, y)))))));
     };
     setTimeout(tick, 0);
+  }
+  _wiEnd(run, cancelled = false) {
+    const W = this.wi[run.opt];
+    if (this._wiRun === run) this._wiRun = null;
+    W.btn.removeAttribute('aria-disabled'); W.btn.removeAttribute('aria-busy'); W.btn.classList.remove('busy');
+    T(W.btn, W.txt);
+    if (cancelled) W.out.replaceChildren(h('p', { class: 'note' }, 'Đã dừng – đang chạy so sánh cho tùy chọn khác.'));
   }
   updateEquipment(force = false) {
     if (!this.eqList) return;
@@ -457,25 +500,35 @@ export class Panels {
     this.eqCounts.replaceChildren(...['hien_trang', 'giai_phap', 'khuyen_nghi'].map((s) => h('button', { class: 'btn small' + (scope === s ? ' on' : ''), onclick: () => a.setScope(scope === s ? 'all' : s) },
       h('i', { class: 'sdot s-' + s }), `${SCOPE_TXT[s]} · ${cnt(s)}`)));
     const groups = ['hien_trang', 'giai_phap', 'khuyen_nghi'].filter((s) => scope === 'all' || s === scope);
+    const pick = (tag) => { a.openDrawer(tag); a.showInScene(tag); };
     this.eqList.replaceChildren(...groups.map((s) => h('div', { class: 'eq-group s-' + s },
       h('div', { class: 'row' }, h('span', { class: 'schip s-' + s }, SCOPE_TXT[s]), h('span', { class: 'note' }, SCOPE_DESC[s])),
-      ...comps.filter((c) => c.scope === s).map((c) => h('div', { class: 'eq-row', role: 'button', tabindex: 0, onclick: () => a.openDrawer(c.tag), onkeydown: (e) => { if (e.key === 'Enter') a.openDrawer(c.tag); } },
+      ...comps.filter((c) => c.scope === s).map((c) => h('div', { class: 'eq-row', role: 'button', tabindex: 0, title: 'Xem thông số và chỉ vị trí trong cảnh 3D', onclick: () => pick(c.tag), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(c.tag); } } },
         h('b', {}, c.tag), h('span', {}, c.name, h('small', {}, c.role ?? '')), h('span', { class: 'note' }, [CHANGE_TXT[c.change], PRIO_TXT[c.priority]].filter(Boolean).join(' · ')))))));
   }
 
+  /**
+   * Thẻ thông tin thiết bị (dựng một lần cho mỗi thiết bị). Trả về { tag, el, update, focusEl }: update() chỉ ghi lại các ô
+   * "Giá trị hiện tại" khi chữ đổi, không dựng lại thẻ – giữ tiêu điểm bàn phím và vùng chữ đang chọn.
+   */
   componentInfo(tag) {
-    const comp = this.app.components.find((c) => c.tag === tag);
+    const a = this.app, comp = a.components.find((c) => c.tag === tag);
     if (!comp) return null;
-    const live = this.app.liveValues(tag);
+    const live = a.liveValues(tag), cells = live.map(() => h('td', { class: 'num' }));
     const sc = comp.scope;
     const scopeRows = [['Vai trò', comp.role], ['Giao tiếp với mini PC', comp.interface], ['Thông số điển hình', comp.spec], ['Nếu không có', comp.if_missing], ['Khi hỏng / dự phòng', comp.fallback], ['Thử trong mô phỏng', comp.sim]].filter((x) => x[1]);
-    return h('div', {},
-      h('div', { class: 'row', style: 'justify-content:space-between' }, h('h3', {}, `${comp.tag} · ${comp.name}`), h('button', { class: 'btn small', onclick: () => this.app.closeDrawer() }, 'Đóng')),
+    const title = h('h3', { id: 'drawer-title', tabindex: '-1' }, `${comp.tag} · ${comp.name}`);
+    const in3d = a.scene3d?.byTag?.has(tag) ? h('button', { class: 'btn small', type: 'button', title: 'Tô sáng và đưa camera tới thiết bị trong cảnh 3D', onclick: () => a.showInScene(tag, true) }, 'Xem trong 3D') : '';
+    const update = () => { const L = a.liveValues(tag); cells.forEach((td, i) => T(td, viNum(L[i]?.[1] ?? '–'))); };
+    const el = h('div', {},
+      h('div', { class: 'dr-head' }, title, h('span', { class: 'dr-act' }, in3d, h('button', { class: 'btn small', type: 'button', title: 'Đóng (Esc)', onclick: () => a.closeDrawer() }, 'Đóng'))),
       sc ? h('div', { class: 'row', style: 'margin:4px 0' }, h('span', { class: 'schip s-' + sc }, SCOPE_TXT[sc]), comp.change ? h('span', { class: 'schip light' }, CHANGE_TXT[comp.change]) : '', comp.priority ? h('span', { class: 'schip light' }, PRIO_TXT[comp.priority]) : '') : '',
       h('p', { class: 'note' }, comp.group + ' — ' + comp.desc),
       scopeRows.length ? h('table', { class: 'kv fixed' }, h('tbody', {}, ...scopeRows.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'wrap' }, v))))) : '',
       (comp.params ?? []).length ? h('table', { class: 'kv' }, h('tbody', {}, ...comp.params.map(([k, v, u]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, v + (u && u !== '–' ? ' ' + u : '')))))) : '',
       comp.range ? h('p', {}, h('b', {}, 'Dải làm việc: '), comp.range) : '',
-      live.length ? h('table', { class: 'kv' }, h('thead', {}, h('tr', {}, h('th', {}, 'Giá trị hiện tại'), h('th', {}, ''))), h('tbody', {}, ...live.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, v))))) : '');
+      live.length ? h('table', { class: 'kv' }, h('thead', {}, h('tr', {}, h('th', {}, 'Giá trị hiện tại'), h('th', {}, ''))), h('tbody', {}, ...live.map(([k], i) => h('tr', {}, h('td', {}, k), cells[i])))) : '');
+    update();
+    return { tag, el, update, focusEl: title };
   }
 }

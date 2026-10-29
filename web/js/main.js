@@ -6,6 +6,7 @@ import { Control3D } from './ui/control3d.js';
 import { h, fmt } from './ui/dom.js';
 import { HmiView } from './ui/hmi.js';
 import { Intro } from './ui/intro.js';
+import { viNum } from './ui/ops.js';
 import { Panels } from './ui/panels.js';
 import { StationScene } from './ui/scene3d.js';
 import { ico, PANES, Shell } from './ui/shell.js';
@@ -22,7 +23,7 @@ const SPEEDS = [1, 10, 60, 300, 1200, 3600];
 const setText = (el, s) => { if (el.textContent !== s) el.textContent = s; };
 const WINDOWS = [['6 h', 6 * 3600], ['24 h', 86400], ['Tất cả', Infinity]];
 const MODE_BANNER = {
-  x: (a) => `MINI PC NGỪNG – ${a.st.gw_dead.note().replace(/(\d)\.(\d)/g, '$1,$2')} · mất dừng an toàn theo chất lượng, ghép bơm, đo xa`,
+  x: (a) => `MINI PC NGỪNG – ${a.st.gw_dead.note()} · mất dừng an toàn theo chất lượng, ghép bơm, đo xa`,
   b: (a) => `(b) MẤT KẾT NỐI – gateway tự vận hành bằng kịch bản v${a.st.gw.script.version} đã lưu · đệm ${a.st.gw.comms.buf.length} bản ghi · cộng biên áp +${fmt(a.st.gw.script.params.offline.margin_bar, 1)} bar`,
   c: (a) => `(c) ĐANG ĐỒNG BỘ – phát lại ${a.st.gw.comms.buf.length} bản ghi đệm, hợp nhất kịch bản, nhận lệnh còn hạn`,
   d: (a) => {
@@ -118,6 +119,8 @@ class App {
     this.hmi.show(hmi);
     if (!hmi) requestAnimationFrame(() => { this.scene3d.resize(); this.shell.update(true); this._labels(); this.updateCharts(); });
     this._syncView();
+    // màn HMI tự có đồng hồ và chế độ: thanh trên ẩn các mục trùng (app.css) → xếp lại cho vừa
+    this.shell.refit?.(); this.shell._fitHud?.();
   }
   /** Nhấp vào thiết bị trong cảnh 3D: thiết bị điều khiển được thì mở bảng điều khiển nổi, còn lại mở thẻ thông tin. */
   onPick(tag) { if (!this.ctl3d.open(tag)) this.openDrawer(tag); }
@@ -222,6 +225,13 @@ class App {
     if (ts - this._lastChart > 600) { this._lastChart = ts; this.updateCharts(); }
     requestAnimationFrame((t) => this.loop(t));
   }
+  /** Màu của chế độ (d) theo mức nghiêm trọng cao nhất: 'crit' khi dừng an toàn / cắt bơm / khóa chạy khô hoặc có báo động mức báo động–khẩn; 'warn' khi chỉ có cảnh báo. */
+  modeSev() {
+    const g = this.st.gw;
+    if (this.st.gw_dead || ['trip', 'safe_stop', 'level_stop'].includes(g.safety.state)) return 'crit';
+    for (const x of g.alarms.active.values()) if (x.sev === 'alarm' || x.sev === 'critical') return 'crit';
+    return 'warn';
+  }
   view() {
     const g = this.st.gw;
     return { plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
@@ -234,18 +244,16 @@ class App {
     const clk = fmtClock(this.st.t, this.cfg.sim.start_dow), cm = clk.match(/^(.*\S)\s+(\d\d:\d\d:\d\d)$/);
     setText(document.getElementById('clock-t'), cm ? cm[2] : clk); setText(document.getElementById('clock-d'), cm ? cm[1] : '');
     const real = this.running ? Math.round(this._stepsRate ?? 0) : 0;
-    setText(document.getElementById('speed-real'), this.running && real < this.speed * 0.8 ? `thực ×${real}` : '');
-    const mode = this.st.gw_dead ? 'x' : this.st.gw.mode();
-    document.querySelectorAll('#modes .mode').forEach((m) => m.classList.toggle('on', m.dataset.m === mode));
-    // tên chế độ / ngày đổi độ rộng thanh trên → xếp lại cho vừa một hàng
-    const fitKey = mode + (cm ? cm[1] : '');
-    if (fitKey !== this._fitKey) { this._fitKey = fitKey; this.shell.refit?.(); }
+    this.shell.setRealSpeed(this.running && real < this.speed * 0.8 ? `thực ×${real}` : '');
+    const mode = this.st.gw_dead ? 'x' : this.st.gw.mode(), warnD = mode === 'd' && this.modeSev() === 'warn';
+    // độ rộng chip chế độ cố định (app.css) nên thanh trên không phải xếp lại khi chế độ đổi
+    document.querySelectorAll('#modes .mode').forEach((m) => { m.classList.toggle('on', m.dataset.m === mode); if (m.dataset.m === 'd') m.classList.toggle('warn', warnD); });
     // dải thông báo chế độ (b/c/d/x) – chỉ dựng lại khi nội dung đổi
     const bn = this.banner;
     this._bnMode = mode;
     if (mode === 'a') { bn.hidden = true; document.documentElement.style.setProperty('--banner-h', '0px'); }
     else {
-      const cls = 'banner ' + (mode === 'x' ? 'd' : mode), txt = MODE_BANNER[mode](this);
+      const cls = 'banner ' + (mode === 'x' ? 'd' : warnD ? 'dw' : mode), txt = viNum(MODE_BANNER[mode](this));
       if (bn.className !== cls) bn.className = cls;
       if (bn._t !== txt) { bn._t = txt; bn.replaceChildren(ico('alert'), h('span', { class: 'bn-t' }, txt), h('span', { class: 'bn-more' }, 'Chi tiết')); bn.title = txt + ' – nhấp để xem chi tiết'; }
       bn.hidden = false;
@@ -266,7 +274,8 @@ class App {
   _updatePanels(force) {
     if (!this.st) return;
     const P = this.panels, cur = this.viewMode === 'hmi' ? null : this.curTab;
-    P.updateMonitor();
+    // bảng Giám sát chỉ dựng khi đang mở; số báo động trên nút dock tính riêng (rẻ) mỗi nhịp
+    if (force || cur === 'mon') P.updateMonitor(); else P.updateAlarmBadge();
     if (force || cur === 'fault') P.updateFaults();
     if (cur === 'script') P.updateScript();
     if (cur === 'center' || force) P.updateCenter();
@@ -304,7 +313,7 @@ class App {
     pl.pumps.forEach((pu, i) => sc.setLabel('VFD-0' + (i + 1), pu.fault ? 'LỖI' : pu.running ? `${fmt(pu.f, 1)} Hz · ${fmt(pu.amps, 1)} A` : 'dừng', pu.fault));
     sc.setLabel('WDR-01', dead ? (fb.enabled && fb.active ? 'NHẢ → PID biến tần' : 'NHẢ') : 'giữ (có xung sống)', dead);
     sc.setLabel('EM-101', `${fmt(pl.kw, 2)} kW · ${fmt(this.st.kpi.energy_kwh, 0)} kWh`);
-    sc.setLabel('SA-01/02', 'TỰ ĐỘNG');
+    sc.setLabel('SA-01/02', 'TỰ ĐỘNG (công tắc cứng)'); // công tắc Hand/0/Auto trên cửa tủ – khác chế độ TAY phần mềm
     sc.setLabel('CP-02', dead ? 'BỘ ĐIỀU KHIỂN LỖI' : ctlName, dead || g.controlSrc() !== 'auto');
     sc.setLabel('MPC-01', dead ? 'TREO – watchdog' : { a: '(a) bình thường', b: '(b) tự vận hành', c: '(c) đồng bộ', d: '(d) cảnh báo' }[g.mode()], dead || g.mode() === 'd');
     sc.setLabel('IO-01', dead ? 'mất xung sống' : 'Modbus TCP');
@@ -328,7 +337,7 @@ class App {
       'GW-01': [['Chế độ', this.st.gw_dead ? 'mini PC ngừng' : g.mode()], ['Quyền điều khiển', g.controlSrc()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm', g.comms.buf.length + ' bản ghi']],
       'MPC-01': [['Trạng thái', this.st.gw_dead ? 'treo (watchdog đã nhả)' : 'đang chạy GW-01'], ['Chế độ gateway', g.mode()], ['Quyền điều khiển', g.controlSrc()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm lưu-và-chuyển', g.comms.buf.length + ' bản ghi'], ['Thời gian ngừng lũy kế', fmt((this.st.gw_down_s + (this.st.gw_dead ? this.st.t - this.st.gw_dead.t0 : 0)) / 60, 0, 'phút')]],
       'RT-01': [['Kết nối', g.comms.state], ['Dữ liệu lên', fmt(this.st.link.bytes_up / 1e6, 2, 'MB')], ['SMS đã gửi', String(g.comms.stats.sms)]],
-      'WDR-01': [['Rơ-le', this.st.gw_dead ? 'nhả' : 'giữ'], ['Dự phòng', this.st.gw_dead ? this.st.gw_dead.note() : (this.cfg.hardware.VFD_PID_fallback ? 'sẵn sàng: PID nội ' + fmt(this.cfg.fallback.p_set_bar, 1, 'bar') : 'không lắp – I/O giữ lệnh cuối')]],
+      'WDR-01': [['Rơ-le', this.st.gw_dead ? 'nhả' : 'giữ'], ['Dự phòng', this.st.gw_dead ? viNum(this.st.gw_dead.note()) : (this.cfg.hardware.VFD_PID_fallback ? 'sẵn sàng: PID nội ' + fmt(this.cfg.fallback.p_set_bar, 1, 'bar') : 'không lắp – I/O giữ lệnh cuối')]],
       'EM-101': [['Công suất', fmt(pl.kw, 2, 'kW')], ['Điện năng', fmt(this.st.kpi.energy_kwh, 1, 'kWh')]],
       'HMI-01': [['Quyền điều khiển', g.controlSrc()], ['Mở màn HMI', 'nút "HMI" trên thanh trên cùng']],
     };
@@ -337,24 +346,62 @@ class App {
     return L[tag] || [];
   }
   _initDrawer() {
-    // đang nhấn chuột trong thẻ thông tin thì tạm không làm mới (tránh mất cú nhấp khi nội dung được dựng lại)
-    const d = document.getElementById('drawer');
+    // đang nhấn chuột trong thẻ thông tin thì tạm không ghi số mới (giữ nguyên vùng chữ đang bôi chọn)
+    const d = this.drawerEl = document.getElementById('drawer');
     d.addEventListener('pointerdown', () => { this._drawerHold = true; });
     for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, () => { this._drawerHold = false; });
   }
+  /**
+   * Thẻ thông tin thiết bị: dựng một lần cho mỗi thiết bị, các nhịp sau (refresh) chỉ ghi lại ô "Giá trị hiện tại" khi đổi
+   * nên tiêu điểm bàn phím và vùng chọn chữ không mất. Mở bằng bàn phím thì đưa tiêu điểm vào thẻ; đóng thì trả về nút đã mở.
+   */
   openDrawer(tag, refresh = false) {
-    if (refresh && this._drawerHold) return;
-    const d = document.getElementById('drawer');
-    const el = this.panels.componentInfo(tag);
-    if (!el) return;
-    this.drawerTag = tag;
-    d.replaceChildren(el); d.hidden = false;
-    if (!refresh) d.scrollTop = 0;
+    const d = this.drawerEl, cur = this._drawer;
+    if (refresh) { if (!this._drawerHold && cur && cur.tag === tag && !d.hidden) cur.update(); return; }
+    if (cur && cur.tag === tag && !d.hidden) { cur.update(); return; }
+    const info = this.panels.componentInfo(tag);
+    if (!info) return;
+    const ae = document.activeElement, kbd = Boolean(ae && ae !== document.body && ae.matches?.(':focus-visible'));
+    if (!d.contains(ae)) this._drawerBack = ae && ae !== document.body ? ae : null;
+    this.drawerTag = tag; this._drawer = info;
+    d.replaceChildren(info.el); d.hidden = false; d.scrollTop = 0;
+    if (this.viewMode !== 'hmi' && !this._ctlOpen()) this.scene3d.highlight(tag);
+    if (kbd || d.contains(ae)) info.focusEl.focus({ preventScroll: true });
   }
-  closeDrawer() { this.drawerTag = null; const d = document.getElementById('drawer'); if (d) d.hidden = true; }
+  closeDrawer() {
+    const d = this.drawerEl;
+    if (!d) return;
+    const had = !d.hidden, back = this._drawerBack, inside = d.contains(document.activeElement) || document.activeElement === document.body;
+    this.drawerTag = null; this._drawer = null; this._drawerBack = null; d.hidden = true;
+    if (had && !this._ctlOpen()) this.scene3d?.highlight(null);
+    if (had && inside && back?.isConnected && back.getClientRects().length) back.focus({ preventScroll: true });
+  }
+  /** Bảng điều khiển nổi 3D đang mở (khi đó nó giữ phần tô sáng của cảnh). */
+  _ctlOpen() { const c = this.ctl3d; return Boolean(c && (c.isOpen ? c.isOpen() : c.cur)); }
+  /**
+   * Chỉ thiết bị trong cảnh 3D (từ danh mục Thiết bị / nút "Xem trong 3D"): tô sáng, và đưa camera tới khi thiết bị nằm ngoài
+   * vùng trống giữa HUD, dock, bảng bên phải, hoặc camera đang ở quá xa so với cỡ thiết bị. force: luôn đưa camera tới.
+   */
+  showInScene(tag, force = false) {
+    const sc = this.scene3d;
+    if (!sc?.byTag?.has(tag)) return false;
+    if (this.viewMode === 'hmi') { if (!force) return false; this.setView('3d'); }
+    if (!this._ctlOpen()) sc.highlight(tag);
+    if (force || this._offView(tag)) sc.focus(tag);
+    return true;
+  }
+  _offView(tag) {
+    const sc = this.scene3d, I = this.insets || {}, p = sc.bodyPos(tag, {}), m = 24;
+    if (!p.visible) return true;
+    if (p.x < (I.l || 0) + m || p.x > innerWidth - Math.max(I.r || 0, I.sr || 0) - m || p.y < (I.t || 0) + m || p.y > innerHeight - Math.max(I.b || 0, I.sb || 0) - m) return true;
+    const b = sc._boxOf?.(tag);
+    if (!b || b.isEmpty()) return false;
+    const c = b.min.clone().add(b.max).multiplyScalar(0.5), size = b.max.distanceTo(b.min);
+    return sc.camera.position.distanceTo(c) > Math.max(9, size * 12);
+  }
   toast(msg) {
     const t = document.getElementById('toast');
-    t.textContent = msg; t.hidden = false;
+    t.textContent = viNum(msg); t.hidden = false;
     clearTimeout(this._toastT); this._toastT = setTimeout(() => { t.hidden = true; }, 3200);
   }
   // ---------- biểu đồ ----------

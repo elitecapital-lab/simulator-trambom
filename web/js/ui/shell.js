@@ -2,7 +2,7 @@
 //   thanh trên (thu gọn dần vào menu khi hẹp) · HUD chỉ số chính · thanh chức năng (dock) · bảng nổi bên phải
 //   · bảng biểu đồ trượt từ dưới lên · cửa sổ bật Camera / Hiển thị. Cập nhật theo nhịp 250 ms của main.js.
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
-import { ackAlarm, CTL_NAME, MODE_CHIP, MODE_NAME, sortedAlarms, stationData } from './ops.js';
+import { ackAlarm, CTL_NAME, fmtLease, MODE_CHIP, MODE_NAME, sendCommand, sortedAlarms, stationData, viNum } from './ops.js';
 
 const ICONS = {
   chart: '<path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 6-7"/>',
@@ -75,11 +75,13 @@ export class Shell {
     this.top = $('topbar'); this.menu = $('menu'); this.hudEl = $('hud'); this.dockEl = $('dock'); this.side = $('side'); this.sheet = $('sheet');
     this.sheetBody = $('sheet-body'); this.drawer = $('drawer'); this.root = document.documentElement;
     this.mqMobile = matchMedia('(max-width: 720px), (max-height: 500px)');
+    this.mqLand = matchMedia('(max-height: 500px)'); // điện thoại nằm ngang: bảng biểu đồ mặc định cỡ L, đầu bảng một hàng
     this.paneKey = null; this.sideOpen = false; this.sheetOpen = false; this.sheetTab = 'charts'; this.pop = null; this.labelMode = 1;
     this.ui = { hudMin: false, charts: ['p', 'q', 'kw', 'lv'], size: 'm' };
     try { Object.assign(this.ui, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); } catch (e) { /* bỏ qua */ }
     this.chartSel = new Set(this.ui.charts.filter((k) => CHART_CHIPS.some((c) => c[0] === k)));
     if (!this.chartSel.size) this.chartSel.add('p');
+    this.chartTmp = new Set(); // biểu đồ tạm hiện khi nhấp thẻ HUD – không lưu, bỏ khi đóng bảng
     this._topbar();
     this._dock();
     this._sidePanel();
@@ -90,7 +92,8 @@ export class Shell {
     document.addEventListener('pointerdown', (e) => {
       if (this.pop && !this.pop.el.contains(e.target) && !this.pop.btn.contains(e.target)) this.closePop();
     }, true);
-    this.mqMobile.addEventListener('change', () => { this.closePop(); if (this.mqMobile.matches && this.sideOpen && this.sheetOpen) this.closeSheet(); this._layoutCharts(); });
+    this.mqMobile.addEventListener('change', () => { this.closePop(); if (this.mqMobile.matches && this.sideOpen && this.sheetOpen) this.closeSheet(); this._layoutCharts(); this._fitHud(); this._dockOvf?.(); });
+    this.mqLand.addEventListener('change', () => this.setSize(this._sizeNow(), false));
   }
   _save() {
     this.ui.charts = [...this.chartSel];
@@ -150,11 +153,15 @@ export class Shell {
       for (const el of this.top.children) { if (!el.offsetWidth) continue; const t = el.offsetTop + el.offsetHeight / 2; lo = Math.min(lo, t); hi = Math.max(hi, t); }
       return hi - lo > 12;
     };
+    // đo với tên chế độ dài nhất (.fitw) để khi chế độ đổi giữa chừng thanh không phải xếp lại (chip thu gọn có độ rộng cố định)
+    const modes = $('modes');
     const fit = () => {
       const w = innerWidth;
+      modes.classList.add('fitw');
       for (const s of this.steps) s.on = w <= s.max;
       apply();
       for (const s of this.steps) { if (!wrapped()) break; if (!s.on) { s.on = true; apply(); } }
+      modes.classList.remove('fitw');
     };
     let raf = 0;
     addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(fit); });
@@ -162,6 +169,14 @@ export class Shell {
     document.fonts?.ready.then(fit);
     this.refit = fit;
     fit();
+  }
+  /** Nhãn "thực ×N" (máy không theo kịp tốc độ đặt) gắn vào nút tốc độ đang chọn. */
+  setRealSpeed(s) {
+    const el = this.speedReal ??= document.getElementById('speed-real');
+    T(el, s);
+    if (!s) return;
+    const on = document.querySelector('#speed-seg button.on');
+    if (on && on.offsetParent === el.offsetParent) P(el, 'left', (on.offsetLeft + on.offsetWidth) + 'px');
   }
   /** Nút chạy/tạm dừng: biểu tượng + chữ, chỉ dựng lại khi đổi trạng thái. */
   setPlay(btn, running) {
@@ -201,7 +216,17 @@ export class Shell {
     btn('view', 'Hiển thị', 'eye', 'Nhãn thiết bị, lọc phạm vi, chú giải màu 3D', (e) => this.togglePop(this.popView, this.dk.view, e), 'has-pop');
     for (const k of ['charts', 'kpi', ...Object.keys(PANES), 'manual']) this.dk[k].setAttribute('aria-pressed', 'false');
     for (const k of ['cam', 'view']) { this.dk[k].setAttribute('aria-haspopup', 'dialog'); this.dk[k].setAttribute('aria-expanded', 'false'); }
-    new ResizeObserver(() => this._syncBars?.()).observe(D);
+    // cửa sổ thấp: dock cuộn được – hiện mũi tên mờ ở mép dưới khi còn nút bị khuất
+    const more = this.dkMore = h('button', { class: 'dk-more', type: 'button', tabindex: '-1', 'aria-hidden': 'true', title: 'Còn chức năng phía dưới', hidden: true,
+      onclick: () => D.scrollBy({ top: D.clientHeight * 0.7, behavior: reduced() ? 'auto' : 'smooth' }) }, ico('chev'));
+    D.append(more);
+    this._dockOvf = () => {
+      const ovf = !this.mqMobile.matches && D.scrollHeight > D.clientHeight + 2, down = ovf && D.scrollTop + D.clientHeight < D.scrollHeight - 2;
+      if (more.hidden === down) more.hidden = !down;
+      D.classList.toggle('more-t', ovf && D.scrollTop > 2);
+    };
+    D.addEventListener('scroll', this._dockOvf, { passive: true });
+    new ResizeObserver(() => { this._syncBars?.(); this._dockOvf(); }).observe(D);
   }
   _tip(b) {
     const t = this.tipEl;
@@ -219,12 +244,16 @@ export class Shell {
     b.hidden = !n; T(b, n > 99 ? '99+' : String(n));
     if (k === 'mon') this._alarmCount = n;
   }
+  /**
+   * Nút "Điều khiển TAY" luôn ra lệnh TẠI TRẠM: đang TỰ ĐỘNG → chuyển TAY tại chỗ; trung tâm đang giữ TAY từ xa → giành quyền
+   * TAY tại chỗ (quyền tại trạm ưu tiên); đang TAY tại chỗ → trả về TỰ ĐỘNG. Chú thích của nút nói đúng việc sẽ làm.
+   */
   toggleManual() {
-    const a = this.app, c = a.ctl3d;
-    if (!c || !a.st) return;
+    const a = this.app;
+    if (!a.st) return;
     if (a.st.gw_dead) { a.toast('Mini PC đang ngừng – không thể điều khiển TAY tại chỗ (biến tần đang tự chạy PID nội)'); return; }
     if (a.viewMode === 'hmi') a.setView('3d');
-    c.setManualMode(!c.manualMode);
+    sendCommand(a, 'local', 'set_mode', { mode: a.st.gw.controlSrc() === 'local' ? 'auto' : 'manual' });
     this.update(true);
   }
 
@@ -265,12 +294,12 @@ export class Shell {
     al.dead.textContent = 'Mini PC đang ngừng: danh sách dưới đây là trạng thái cuối cùng gateway ghi nhận; HMI-01 mất kết nối nên không xác nhận được.';
     al.list.replaceChildren(...(list.length ? list.map((x) => h('div', { class: 'al-row sev-' + x.sev + (x.acked ? ' acked' : '') },
       h('span', { class: 'chip ' + x.sev }, SEV_LABEL[x.sev]),
-      h('div', { class: 'msg' }, h('b', { class: 'mono' }, x.code), h('span', {}, x.msg), h('span', { class: 'when' }, tShort(x.t) + (x.acked ? ' · đã xác nhận' : ' · chưa xác nhận'))),
+      h('div', { class: 'msg' }, h('b', { class: 'mono' }, x.code), h('span', {}, viNum(x.msg)), h('span', { class: 'when' }, tShort(x.t) + (x.acked ? ' · đã xác nhận' : ' · chưa xác nhận'))),
       x.acked ? h('span', { class: 'al-ok', title: 'Đã xác nhận' }, '✓') : h('button', { class: 'btn small', disabled: dead, onclick: () => ackAlarm(a, 'local', x.code) }, 'Xác nhận')))
       : [h('p', { class: 'note' }, 'Trạm đang vận hành bình thường – không có báo động.')]));
     const hist = g.alarms.history.slice(-40).reverse();
     al.hist.replaceChildren(...(hist.length ? hist.map((x) => h('div', { class: 'al-h ' + x.action + ' sev-' + x.sev },
-      h('span', { class: 'mono t' }, tShort(x.t)), h('span', { class: 'act' }, x.action === 'raise' ? 'phát sinh' : 'hết'), h('span', { class: 'mono c' }, x.code), h('span', { class: 'm' }, x.msg)))
+      h('span', { class: 'mono t' }, tShort(x.t)), h('span', { class: 'act' }, x.action === 'raise' ? 'phát sinh' : 'hết'), h('span', { class: 'mono c' }, x.code), h('span', { class: 'm', title: viNum(x.msg) }, viNum(x.msg))))
       : [h('p', { class: 'note' }, 'Chưa có báo động nào kể từ đầu mô phỏng.')]));
   }
   togglePane(k) { if (this.sideOpen && this.paneKey === k) this.closePane(); else this.app.tab(k); }
@@ -310,7 +339,7 @@ export class Shell {
     this.chipsEl = document.getElementById('chart-chips');
     this.kpiEl = document.getElementById('kpi');
     this.chartsEl = document.getElementById('charts');
-    this.setSize(this.ui.size, false);
+    this.setSize(this._sizeNow(), false);
     // kéo tay nắm để đổi cỡ; nhấp (không kéo) để đổi S → M → L
     const grip = document.getElementById('sheet-grip');
     let drag = null;
@@ -337,11 +366,13 @@ export class Shell {
       const order = ['s', 'm', 'l'], i = order.indexOf(S.dataset.size);
       if (e.key === 'ArrowUp') { e.preventDefault(); this.setSize(order[Math.min(2, i + 1)]); } else if (e.key === 'ArrowDown') { e.preventDefault(); this.setSize(order[Math.max(0, i - 1)]); }
     });
-    new ResizeObserver(() => { P(this.root, '--sheet-h', Math.round(S.offsetHeight) + 'px'); this._layoutCharts(); }).observe(S);
+    new ResizeObserver(() => { P(this.root, '--sheet-h', Math.round(S.offsetHeight) + 'px'); this._layoutCharts(); this._fitHud(); }).observe(S);
   }
   /** Dựng các nút chọn biểu đồ sau khi main.js tạo xong app.charts. */
   buildChartChips() {
     this.chipBtn = {};
+    // thẻ biểu đồ theo đúng thứ tự các nút chọn
+    for (const [k] of CHART_CHIPS) if (this.app.charts[k]) this.chartsEl.append(this.app.charts[k].card);
     this.chipsEl.replaceChildren(...CHART_CHIPS.filter(([k]) => this.app.charts[k]).map(([k, label]) => {
       const b = h('button', { class: 'fchip', type: 'button', 'aria-pressed': 'false', onclick: () => this.toggleChart(k) }, h('i', { class: 'fchip-dot', 'aria-hidden': 'true' }), label);
       this.chipBtn[k] = b;
@@ -349,21 +380,27 @@ export class Shell {
     }));
     this._applyChartSel();
   }
+  _shown(k) { return this.chartSel.has(k) || this.chartTmp.has(k); }
   toggleChart(k) {
+    if (this.chartTmp.has(k)) { if (this.chartSel.size + this.chartTmp.size === 1) return; this.chartTmp.delete(k); this._applyChartSel(); this.app.updateCharts(); return; }
     if (this.chartSel.has(k)) { if (this.chartSel.size === 1) return; this.chartSel.delete(k); } else this.chartSel.add(k);
     this._applyChartSel(); this._save();
     this.app.updateCharts();
   }
   _applyChartSel() {
-    for (const [k, c] of Object.entries(this.app.charts || {})) c.card.hidden = !this.chartSel.has(k);
-    for (const [k, b] of Object.entries(this.chipBtn || {})) { b.classList.toggle('on', this.chartSel.has(k)); b.setAttribute('aria-pressed', String(this.chartSel.has(k))); }
+    for (const [k, c] of Object.entries(this.app.charts || {})) c.card.hidden = !this._shown(k);
+    for (const [k, b] of Object.entries(this.chipBtn || {})) {
+      const tmp = this.chartTmp.has(k);
+      b.classList.toggle('on', this._shown(k)); b.classList.toggle('tmp', tmp); b.setAttribute('aria-pressed', String(this._shown(k)));
+      b.title = tmp ? 'Đang tạm hiện (mở từ thẻ chỉ số, tự bỏ khi đóng bảng) – bấm để ẩn' : '';
+    }
     this._layoutCharts();
   }
   /** Số cột / số hàng thấy được của lưới biểu đồ theo bề rộng và cỡ bảng; chiều cao canvas theo hàng. */
   _layoutCharts() {
     const body = this.sheetBody, host = this.chartsEl;
     if (!body || !host) return;
-    const n = Math.max(1, this.chartSel.size), w = body.clientWidth - 24, bh = body.clientHeight - 20;
+    const n = Math.max(1, new Set([...this.chartSel, ...this.chartTmp]).size), w = body.clientWidth - 24, bh = body.clientHeight - 20;
     if (w <= 0 || bh <= 0) return;
     const maxCols = Math.max(1, Math.min(4, Math.floor((w + 10) / (this.mqMobile.matches ? 260 : 280))));
     const rowsFit = Math.max(1, Math.floor((bh + 10) / 190));
@@ -373,11 +410,13 @@ export class Shell {
     P(host, '--cols', String(cols));
     P(host, '--row-h', Math.max(170, Math.floor((bh - (rows - 1) * 10) / rows)) + 'px');
   }
+  /** Cỡ bảng biểu đồ: điện thoại nằm ngang mặc định L (không ghi đè lựa chọn đã lưu cho màn hình lớn). */
+  _sizeNow() { return this.mqLand.matches ? (this._landSize || 'l') : this.ui.size; }
   setSize(s, save = true) {
     if (!['s', 'm', 'l'].includes(s)) s = 'm';
-    this.sheet.dataset.size = s; this.ui.size = s;
+    this.sheet.dataset.size = s;
+    if (this.mqLand.matches) this._landSize = s; else { this.ui.size = s; if (save) this._save(); }
     this.sizeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.s === s); b.setAttribute('aria-pressed', String(b.dataset.s === s)); });
-    if (save) this._save();
   }
   toggleSheet(tab) { if (this.sheetOpen && this.sheetTab === tab) this.closeSheet(); else this.openSheet(tab); }
   openSheet(tab = this.sheetTab) {
@@ -391,6 +430,7 @@ export class Shell {
     this.closePop();
     this._syncDock();
     this._layoutCharts();
+    this._fitHud();
     requestAnimationFrame(() => { this._layoutCharts(); if (kpi) this.app.panels.updateKpi(); else this.app.updateCharts(); });
   }
   closeSheet() {
@@ -398,16 +438,18 @@ export class Shell {
     const back = this.sheet.contains(document.activeElement) ? this.dk[this.sheetTab] : null;
     this.sheetOpen = false;
     this.sheet.classList.remove('open'); this.sheet.inert = true; document.body.classList.remove('sheet-open');
+    if (this.chartTmp.size) { this.chartTmp.clear(); this._applyChartSel(); }
     this._syncDock();
+    this._fitHud();
     back?.focus({ preventScroll: true });
   }
   chartsVisible() { return this.sheetOpen && this.sheetTab === 'charts' && this.app.viewMode !== 'hmi'; }
   kpiVisible() { return this.sheetOpen && this.sheetTab === 'kpi' && this.app.viewMode !== 'hmi'; }
   /** Mở bảng biểu đồ, bật và cuộn tới biểu đồ liên quan (nhấp vào thẻ HUD). */
   focusCharts(keys) {
-    let changed = false;
-    for (const k of keys) if (!this.chartSel.has(k) && this.app.charts[k]) { this.chartSel.add(k); changed = true; }
-    if (changed) { this._applyChartSel(); this._save(); }
+    // biểu đồ chưa chọn chỉ hiện tạm (không lưu vào lựa chọn của người dùng)
+    this.chartTmp = new Set(keys.filter((k) => !this.chartSel.has(k) && this.app.charts[k]));
+    this._applyChartSel();
     this.openSheet('charts');
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const card = this.app.charts[keys[0]]?.card;
@@ -453,7 +495,9 @@ export class Shell {
     const toCharts = (...k) => () => this.focusCharts(k);
     this.q = {};
     const qrow = (k, label) => { const r = { dot: h('i', { class: 'qd' }), v: h('b', { class: 'mono' }, '–') }; this.q[k] = r; return h('span', { class: 'q-row' }, r.dot, h('span', { class: 'q-l' }, label), r.v); };
-    const ctl = { name: h('b', { class: 'ctl-name' }, '–'), mode: h('span', { class: 'chip off' }, '–'), pumps: h('span', { class: 'ctl-eq' }) };
+    // chip chế độ: chữ "(d)" giữ viết thường dù chip in hoa
+    const ctl = { name: h('b', { class: 'ctl-name' }, '–'), modeL: h('span', { class: 'ml' }), modeN: h('span', {}, '–'), pumps: h('span', { class: 'ctl-eq' }) };
+    ctl.mode = h('span', { class: 'chip off' }, ctl.modeL, ctl.modeN);
     this.ctlEls = ctl;
     this.pumpEls = cfg.pumps.map((tag) => { const e = { dot: h('i', { class: 'pd' }), t: h('span', {}, '–') }; ctl.pumps.append(h('span', { class: 'pe' }, e.dot, h('b', {}, tag), e.t)); return e; });
     this.valveEl = { dot: h('i', { class: 'pd' }), t: h('span', {}, '–') };
@@ -482,6 +526,23 @@ export class Shell {
     this.hudToggle.setAttribute('aria-expanded', String(!on));
     this.hudToggle.title = on ? 'Hiện các chỉ số chính' : 'Thu gọn các chỉ số chính';
     if (save) this._save();
+    this._fitHud?.();
+  }
+  /**
+   * Bảng biểu đồ mở (màn hình lớn): HUD không được nằm dưới nó. Thu gọn thẻ (bỏ dòng phụ, thước), còn thiếu chỗ thì ẩn bớt thẻ
+   * ít quan trọng – thẻ Điều khiển (TỰ ĐỘNG/TAY) luôn giữ. Gọi khi mở/đóng/đổi cỡ bảng, thu gọn HUD, đổi bố cục.
+   */
+  _fitHud() {
+    const H = this.hudEl, cards = this.hc;
+    if (!H || !cards) return;
+    H.classList.remove('tight');
+    for (const c of Object.values(cards)) c.el.classList.remove('hud-cut');
+    if (!this.sheetOpen || this.mqMobile.matches || this.ui.hudMin || this.app.viewMode === 'hmi') return;
+    const cs = getComputedStyle(this.sheet), top = innerHeight - (parseFloat(cs.bottom) || 0) - this.sheet.offsetHeight - (parseFloat(getComputedStyle(this.root).getPropertyValue('--edge')) || 0);
+    const fits = () => H.getBoundingClientRect().bottom <= top;
+    if (fits()) return;
+    H.classList.add('tight');
+    for (const k of ['kw', 'pcrit', 'q', 'qual', 'lv', 'pout']) { if (fits()) break; cards[k].el.classList.add('hud-cut'); }
   }
   _hudUpdate() {
     const a = this.app, cfg = a.cfg, d = stationData(a, 'local'), pl = a.st.plant, sv = cfg.service, sf = cfg.safety, ql = cfg.quality_limits, lvp = cfg.script.params.level;
@@ -516,7 +577,7 @@ export class Shell {
     };
     qs('cl', 'AIT-201', d.cl, 2, (v) => v < ql.cl_min || v > ql.cl_max, (v) => v < sf.cl_warn_low || v > sf.cl_warn_high);
     qs('ntu', 'AIT-202', d.ntu, 2, (v) => v > ql.ntu_max, (v) => v > sf.ntu_warn);
-    qs('ph', 'AIT-203', d.ph, 1, (v) => v < ql.ph_min || v > ql.ph_max, (v) => v < sf.ph_warn_low || v > sf.ph_warn_high);
+    qs('ph', 'AIT-203', d.ph, 2, (v) => v < ql.ph_min || v > ql.ph_max, (v) => v < sf.ph_warn_low || v > sf.ph_warn_high);
     const g = a.st.gw;
     C(hc.qual.el, 'hud-card' + ['', ' warn', ' crit'][worst] + st);
     T(hc.qual.sub, g.safety.safe_stop ? 'DỪNG AN TOÀN – ' + g.safety.safe_reason : worst === 2 ? 'không đạt QCVN' : worst === 1 ? 'gần ngưỡng – cảnh báo' : 'đạt QCVN 01-1:2018');
@@ -524,8 +585,11 @@ export class Shell {
     const ce = this.ctlEls, man = d.ctl !== 'auto';
     T(ce.name, dead ? 'PID BIẾN TẦN' : CTL_NAME[d.ctl]);
     C(ce.name, 'ctl-name' + (dead ? ' crit' : man ? ' man' : ''));
-    T(ce.mode, MODE_NAME[d.mode]); C(ce.mode, 'chip ' + MODE_CHIP[d.mode]);
-    C(hc.ctl.el, 'hud-card wide' + (dead || d.mode === 'd' ? ' crit' : man ? ' man' : d.mode === 'b' ? ' warn' : ''));
+    // (d): hổ phách khi chỉ có cảnh báo, đỏ khi dừng an toàn / cắt bơm / báo động (app.modeSev)
+    const mm = /^(\([a-z]\))\s?(.*)$/.exec(MODE_NAME[d.mode]), dCrit = d.mode === 'd' && a.modeSev() === 'crit';
+    T(ce.modeL, mm ? mm[1] : ''); T(ce.modeN, mm ? ' ' + mm[2] : MODE_NAME[d.mode]);
+    C(ce.mode, 'chip ' + (d.mode === 'd' ? (dCrit ? 'critical' : 'warning') : MODE_CHIP[d.mode]));
+    C(hc.ctl.el, 'hud-card wide' + (dead || dCrit ? ' crit' : man ? ' man' : d.mode === 'b' || d.mode === 'd' ? ' warn' : ''));
     d.pumps.forEach((p, i) => {
       const e = this.pumpEls[i];
       if (!e) return;
@@ -533,9 +597,9 @@ export class Shell {
       T(e.t, p.fault ? 'LỖI' : p.running ? fmt(p.f, 1, 'Hz') : 'dừng');
     });
     const vf = d.valve, vInst = cfg.hardware['MV-02'] !== false;
-    C(this.valveEl.dot, 'pd ' + (!vInst ? 'off' : vf > 0.99 ? 'run' : vf < 0.01 ? 'warn' : 'mid'));
-    T(this.valveEl.t, !vInst ? 'không lắp' : vf > 0.99 ? 'mở' : vf < 0.01 ? 'ĐÓNG' : fmt(vf * 100, 0, '%'));
-    T(hc.ctl.sub, dead ? 'Mini PC ngừng – biến tần tự giữ áp' : d.lease_s !== null && d.ctl === 'remote' ? `TAY từ xa còn ${fmt(d.lease_s / 60, 0)} phút` : man ? 'liên động an toàn vẫn có hiệu lực' : `kịch bản v${g.script.version} · ${g.comms.state === 'online' ? 'trực tuyến' : g.comms.state === 'offline' ? 'mất kết nối' : 'đồng bộ'}`);
+    C(this.valveEl.dot, 'pd ' + (!vInst ? 'off' : vf > 0.99 ? 'run' : vf < 0.01 ? 'crit' : 'mid')); // đóng = đỏ (như chú giải HMI)
+    T(this.valveEl.t, !vInst ? 'không lắp' : vf > 0.99 ? 'mở' : vf < 0.01 ? 'ĐÓNG' : fmt(vf * 100, 0, '%')); C(this.valveEl.t, vInst && vf < 0.01 ? 'crit' : '');
+    T(hc.ctl.sub, dead ? 'Mini PC ngừng – biến tần tự giữ áp' : d.lease_s !== null && d.ctl === 'remote' ? `TAY từ xa còn ${fmtLease(d.lease_s)}` : man ? 'liên động an toàn vẫn có hiệu lực' : `kịch bản v${g.script.version} · ${g.comms.state === 'online' ? 'trực tuyến' : g.comms.state === 'offline' ? 'mất kết nối' : 'đồng bộ'}`);
     C(this.liveDot, 'live' + (a.running ? ' on' : ''));
     this.liveDot.title = a.running ? 'Mô phỏng đang chạy' : 'Mô phỏng đang tạm dừng';
   }
@@ -597,13 +661,20 @@ export class Shell {
     btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('on');
     if (focusBack) btn.focus({ preventScroll: true });
   }
+  /**
+   * Một ngăn xếp Esc cho cả trang, đóng lớp mở sau cùng trước: cửa sổ bật → thẻ thông tin → bảng điều khiển nổi 3D → bảng
+   * bên phải → bảng biểu đồ. Phím đã được xử lý ở chỗ khác (mặt điều khiển HMI…) thì bỏ qua; màn HMI không có bảng bên/biểu đồ.
+   */
   _onKey(e) {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
     if (!document.getElementById('intro').hidden) return;
-    if (this.pop) { this.closePop(true); e.preventDefault(); return; }
-    if (!this.drawer.hidden) { this.app.closeDrawer(); e.preventDefault(); return; }
-    if (this.sideOpen) { this.closePane(); e.preventDefault(); return; }
-    if (this.sheetOpen) { this.closeSheet(); e.preventDefault(); }
+    const a = this.app, c = a.ctl3d, hmi = a.viewMode === 'hmi', done = () => e.preventDefault();
+    if (this.pop) { this.closePop(true); done(); return; }
+    if (!this.drawer.hidden) { a.closeDrawer(); done(); return; }
+    if (!hmi && c && (c.isOpen ? c.isOpen() : c.cur)) { c.close(); done(); return; }
+    if (hmi) return;
+    if (this.sideOpen) { this.closePane(); done(); return; }
+    if (this.sheetOpen) { this.closeSheet(); done(); }
   }
 
   // ---------------- cập nhật mỗi nhịp ----------------
@@ -616,12 +687,15 @@ export class Shell {
   _syncManual() {
     const a = this.app, b = this.dk.manual, c = a.ctl3d;
     if (!b || !c || !a.st) return;
-    const dead = Boolean(a.st.gw_dead), on = !dead && Boolean(c.manualMode), src = dead ? 'auto' : a.st.gw.controlSrc();
+    const dead = Boolean(a.st.gw_dead), src = dead ? 'auto' : a.st.gw.controlSrc(), on = src === 'local', rem = src === 'remote';
     b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+    b.classList.toggle('rem', rem);
     b.classList.toggle('off', dead); b.setAttribute('aria-disabled', String(dead));
+    const lease = rem ? stationData(a, 'local').lease_s : null;
     const tip = dead ? 'Không dùng được: mini PC đang ngừng, HMI-01 mất kết nối với bộ điều khiển – biến tần tự chạy PID nội.'
-      : on ? (src === 'remote' ? 'Trung tâm đang giữ quyền TAY từ xa. Bấm để trả về TỰ ĐỘNG / giành quyền tại chỗ.' : 'Đang TAY tại chỗ: nhấp vào bơm hoặc van MV-02 trong cảnh 3D để ra lệnh. Bấm để trả về TỰ ĐỘNG.')
-        : 'Chuyển trạm sang điều khiển TAY tại chỗ, rồi nhấp vào bơm / van trong cảnh 3D để ra lệnh. Lớp an toàn vẫn luôn ghi đè.';
+      : on ? 'Đang TAY tại chỗ: nhấp vào bơm hoặc van MV-02 trong cảnh 3D để ra lệnh. Bấm để trả về TỰ ĐỘNG theo kịch bản.'
+        : rem ? `Trung tâm đang giữ quyền TAY từ xa${lease !== null ? ' (còn ' + fmtLease(lease) + ')' : ''}. Bấm để giành quyền TAY TẠI CHỖ – quyền tại trạm ưu tiên, lệnh từ trung tâm sẽ bị từ chối; trạm vẫn ở chế độ TAY.`
+          : 'Bấm để chuyển trạm sang điều khiển TAY tại chỗ, rồi nhấp vào bơm / van trong cảnh 3D để ra lệnh. Lớp an toàn vẫn luôn ghi đè.';
     if (b.dataset.tip !== tip) { b.dataset.tip = tip; if (this._tipFor === b) this._tip(b); }
   }
   /** Gọi từ App._updatePanels (250 ms) – chỉ ghi DOM khi giá trị đổi. */

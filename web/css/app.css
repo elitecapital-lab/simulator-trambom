@@ -239,105 +239,8 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 
-/* ---------- màn hình HMI 2D (ISA-101: xám trung tính, màu chỉ cho bất thường) ---------- */
-:root { --hmi-bg: #d9dedc; --hmi-canvas: #e4e8e6; --hmi-line: #7d8885; --hmi-eq: #39423f; --hmi-run: #4f5955; --hmi-water: #b3c4cf; --hmi-box: #f4f6f5; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --hmi-bg: #1b2120; --hmi-canvas: #222a28; --hmi-line: #6c7774; --hmi-eq: #c2ccc8; --hmi-run: #9aa6a2; --hmi-water: #3c5262; --hmi-box: #161c1b; }
-}
-:root[data-theme="dark"] { --hmi-bg: #1b2120; --hmi-canvas: #222a28; --hmi-line: #6c7774; --hmi-eq: #c2ccc8; --hmi-run: #9aa6a2; --hmi-water: #3c5262; --hmi-box: #161c1b; }
-.hmi { position: relative; z-index: 6; display: flex; flex-direction: column; background: var(--hmi-bg); container-type: inline-size; min-height: 100%; }
 .viewport.hmi-on { height: auto; min-height: 380px; }
 .viewport.hmi-on > canvas, .viewport.hmi-on > div:not(.hmi):not(.drawer), .viewport.hmi-on > .vp-legend, .viewport.hmi-on > .banner { display: none !important; }
-.hmi[hidden] { display: none !important; }
-.hmi.remote { --hmi-canvas: color-mix(in srgb, var(--hmi-bg) 70%, #b7d3f6 30%); }
-.hmi-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
-.hmi-title { font: 700 15px/1.1 var(--f-label); letter-spacing: 0.04em; }
-.hmi-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.hmi-clock { font-size: 12px; color: var(--ink-2); }
-.hmi-alarms { display: grid; gap: 3px; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
-.hmi-al { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12px; }
-.hmi-al.none { display: block; color: var(--muted); }
-.hmi-al .msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hmi-al.acked { opacity: 0.65; }
-.hmi-body { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 8px; padding: 8px; align-items: start; }
-.hmi-pidwrap { position: relative; min-width: 0; }
-.hmi-pid { display: block; width: 100%; height: auto; background: var(--hmi-canvas); border: 1px solid var(--line); border-radius: var(--r); }
-.hmi-stale { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: var(--warning); color: #0b0b0b; font: 700 12px/1.3 var(--f-label); letter-spacing: 0.04em; padding: 5px 10px; border-radius: var(--r); max-width: 90%; text-align: center; }
-.hmi-side { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; min-width: 0; }
-.hmi-side section { display: grid; gap: 6px; }
-.hmi-side .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.hmi-side .btn:disabled, .hmi-side input:disabled { opacity: 0.45; cursor: not-allowed; }
-.hmi-side input[type="range"] { flex: 1; min-width: 120px; }
-.hmi-ctlname { font: 700 20px/1.1 var(--f-label); letter-spacing: 0.04em; }
-.hmi-ctlname.man { color: #8a5a00; }
-:root[data-theme="dark"] .hmi-ctlname.man { color: var(--warning); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hmi-ctlname.man { color: var(--warning); } }
-.hmi-warn { border-left: 3px solid var(--warning); padding-left: 8px; }
-.hmi-ctlbox { display: grid; gap: 6px; }
-.hmi-ctlbox[hidden] { display: none !important; }
-.hmi-perm { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12px; }
-.hmi-perm li.no { color: var(--critical); font-weight: 600; }
-.hmi-perm li.na { color: var(--muted); }
-.hmi-cmdlog { display: grid; gap: 4px; max-height: 210px; overflow: auto; }
-.hmi-cmd { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 6px; align-items: start; font-size: 12px; }
-.hmi-cmd .note { margin: 0; overflow-wrap: anywhere; }
-/* phần tử SVG */
-.hmi-pid text { font-family: var(--f-mono); fill: var(--ink); }
-.hmi-pid .hmi-lbl { font: 600 13px var(--f-label); letter-spacing: 0.06em; fill: var(--ink-2); }
-.hmi-pid .hmi-tag { font: 600 13px var(--f-label); letter-spacing: 0.04em; fill: var(--ink-2); }
-.hmi-pid .hmi-small { font-size: 11px; fill: var(--ink-2); }
-.hmi-pid .hmi-tiny { font: 500 10.5px var(--f-label); letter-spacing: 0.02em; fill: var(--muted); }
-.hmi-pid .hmi-it { font: 600 9.5px var(--f-label); text-anchor: middle; fill: var(--ink); }
-.hmi-pid .hmi-val { font: 600 13px var(--f-mono); fill: var(--ink); }
-.hmi-pid .hmi-val.big { font-size: 15px; }
-.hmi-pid .hmi-val.dim { font-size: 11px; fill: var(--muted); }
-.hmi-pid .hmi-val.alarmtxt { fill: var(--critical); }
-.hmi-pipe { fill: none; stroke: var(--hmi-line); stroke-width: 5; stroke-linejoin: round; }
-.hmi-pipehead { fill: var(--hmi-line); }
-.hmi-lead { stroke: var(--hmi-eq); stroke-width: 1; }
-.hmi-eq { fill: var(--hmi-box); stroke: var(--hmi-eq); stroke-width: 1.5; }
-.hmi-eq.alarmfill { fill: var(--critical); }
-.hmi-inst { cursor: pointer; }
-.hmi-inst circle { fill: var(--hmi-box); stroke: var(--hmi-eq); stroke-width: 1.3; }
-.hmi-bar { stroke: var(--hmi-eq); stroke-width: 1; }
-.hmi-vbox { fill: var(--hmi-box); stroke: var(--line); stroke-width: 1; }
-.hmi-vbox.warn { fill: var(--warning); stroke: var(--warning); }
-.hmi-vbox.alarm { fill: var(--critical); stroke: var(--critical); }
-.hmi-vbox.alarm + text { fill: #fff; }
-.hmi-tank { fill: none; stroke: var(--hmi-eq); stroke-width: 2; cursor: pointer; }
-.hmi-water { fill: var(--hmi-water); }
-.hmi-mark { stroke: var(--hmi-eq); stroke-width: 0.8; stroke-dasharray: 4 3; opacity: 0.6; }
-.hmi-lsll { fill: none; stroke: none; }
-.hmi-lsll.on { fill: var(--critical); fill-opacity: 0.35; stroke: var(--critical); stroke-width: 2; }
-.hmi-click { cursor: pointer; }
-.hmi-sel { fill: none; stroke: none; }
-.hmi-sel.on { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; }
-.hmi-pump { fill: var(--hmi-box); stroke: var(--hmi-eq); stroke-width: 2; }
-.hmi-pump.run { fill: var(--hmi-run); }
-.hmi-pump.fault { stroke: var(--critical); stroke-width: 4; }
-.hmi-pumptri { fill: none; stroke: var(--hmi-eq); stroke-width: 1.5; }
-.hmi-pumptri.run { stroke: var(--hmi-box); }
-.hmi-vfd { fill: var(--hmi-box); stroke: var(--line); stroke-width: 1; }
-.hmi-vfd.fault { stroke: var(--critical); stroke-width: 2.5; }
-.hmi-ftrack { fill: var(--line); }
-.hmi-fbar { fill: var(--hmi-run); }
-.hmi-valve { stroke: var(--hmi-eq); stroke-width: 1.8; fill: var(--hmi-box); }
-.hmi-valve.open { fill: var(--hmi-run); }
-.hmi-valve.closed { fill: var(--hmi-box); stroke: var(--warning); stroke-width: 3; }
-.hmi-valve.moving { fill: var(--hmi-water); }
-.hmi-valve.unk { fill: var(--line); stroke-dasharray: 3 2; }
-.hmi-track { fill: var(--line); }
-.hmi-band { fill: var(--hmi-water); opacity: 0.8; }
-.hmi-sp { fill: var(--ink-2); }
-.hmi-ptr { fill: var(--ink); }
-.hmi-qbox { fill: var(--hmi-box); stroke: var(--line); }
-.hmi-qbox.alarm { fill: color-mix(in srgb, var(--critical) 20%, var(--hmi-box)); stroke: var(--critical); stroke-width: 2.5; }
-.hmi-trendbg { fill: var(--hmi-box); stroke: var(--line); }
-.hmi-tr-p { fill: none; stroke: var(--ink); stroke-width: 1.6; }
-.hmi-tr-s { fill: none; stroke: var(--ink-2); stroke-width: 1.1; stroke-dasharray: 5 3; }
-.hmi-tr-c { fill: none; stroke: var(--muted); stroke-width: 1.2; }
-@container (max-width: 1100px) { .hmi-body { grid-template-columns: minmax(0, 1fr); } .hmi-side { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); align-items: start; } }
-@media (max-width: 720px) { .hmi-al { grid-template-columns: auto minmax(0, 1fr) auto; } .hmi-al .mono, .hmi-al b { display: none; } }
 .drawer { z-index: 7; }
 /* ---------- phân loại phạm vi thiết bị ---------- */
 :root { --sc-hien_trang: #a0703c; --sc-giai_phap: #7a5af5; --sc-khuyen_nghi: #0f9fb0; }
@@ -363,7 +266,3 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
 .hw-details summary { cursor: pointer; padding: 4px 0; }
 .hw-details[open] summary { margin-bottom: 4px; }
 .kv tr.diff td:not(:first-child) { font-weight: 700; }
-.hmi-pid.stale .hmi-val, .hmi-pid.stale .hmi-small { fill: var(--muted); }
-.hmi-pid.stale .hmi-water { opacity: 0.5; }
-@container (max-width: 700px) { .hmi-pidwrap { overflow-x: auto; } .hmi-pid { min-width: 720px; } .hmi-stale { position: sticky; left: 8px; transform: none; display: block; margin: 6px 0; } }
-.hmi-stale[hidden] { display: none !important; }

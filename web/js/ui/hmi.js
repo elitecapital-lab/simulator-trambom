@@ -5,6 +5,7 @@
 //     lệnh đi qua máy chủ, có thời hạn ngắn, có thể bị từ chối (quyền tại chỗ) hoặc hết hạn (mất mạng).
 import { fmtClock } from '../sim/util.js';
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
+import { ackAlarm, commandLog, CTL_NAME, MODE_CHIP, MODE_NAME, permissives, sendCommand, SEV_ORDER, stationData } from './ops.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 function S(tag, attrs = {}, ...kids) {
@@ -18,10 +19,6 @@ function S(tag, attrs = {}, ...kids) {
   for (const c of kids.flat()) if (c !== null && c !== undefined) el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   return el;
 }
-const SEV_ORDER = { critical: 0, alarm: 1, warning: 2, info: 3 };
-const CTL_NAME = { auto: 'TỰ ĐỘNG', remote: 'TAY · TỪ XA', local: 'TAY · TẠI CHỖ' };
-const MODE_NAME = { a: '(a) Bình thường', b: '(b) Tự vận hành', c: '(c) Đồng bộ', d: '(d) Cảnh báo / an toàn', x: 'Mini PC lỗi · PID biến tần' };
-const MODE_CHIP = { a: 'good', b: 'warning', c: 'info', d: 'critical', x: 'critical' };
 const TANK = { x: 100, y0: 130, y1: 470, w: 200, hMax: 4.2 };
 const lvY = (L) => TANK.y1 - (Math.max(0, Math.min(TANK.hMax, L)) / TANK.hMax) * (TANK.y1 - TANK.y0);
 
@@ -218,48 +215,9 @@ export class HmiView {
   }
 
   // ---------------- lệnh ----------------
-  send(type, args) {
-    const a = this.app, t = a.net.t;
-    if (this.where === 'local') {
-      if (a.st.gw_dead) { a.toast('Mini PC đang ngừng – màn HMI-01 mất kết nối với bộ điều khiển'); return; }
-      const [ok, why] = a.st.gw.localCommand(type, args, t);
-      a.toast((ok ? '✓ ' : '✗ TỪ CHỐI: ') + why);
-    } else {
-      const ttl = ['set_mode', 'pump_start', 'pump_stop', 'pump_speed', 'valve'].includes(type) ? a.cfg.gateway.manual_cmd_ttl_s : 900;
-      const id = a.server.sendCommand(a.st.sid, type, args, t, ttl);
-      a.toast(`Đã gửi ${id} ${type} qua MQTT (hạn ${(ttl / 60).toFixed(0)} phút) – chờ trạm xác nhận`);
-    }
-    a._updatePanels(true);
-  }
-  ackAlarm(code) {
-    const a = this.app, t = a.net.t;
-    if (this.where === 'local' && a.st.gw_dead) { a.toast('Mini PC đang ngừng – HMI-01 không xác nhận được báo động'); return; }
-    if (this.where === 'local') a.st.gw.alarms.ack(code, t);
-    else a.server.ackAlarm(a.st.sid, code, t);
-    this.update(true);
-  }
-
-  // ---------------- dữ liệu theo vị trí vận hành ----------------
-  _data() {
-    const a = this.app, st = a.st, g = st.gw, pl = st.plant, t = a.net.t;
-    if (this.where === 'local') {
-      const sig = g.sig || {}, dead = Boolean(st.gw_dead);
-      const alarms = [...g.alarms.active.values()].map((x) => ({ ...x, station: st.sid }));
-      return { t, dead, stale: dead, p1: sig.p1, p2: sig.p2, q: sig.q_f, q_in: sig.q_in_f, level: sig.level, cl: sig.cl, ntu: sig.ntu, ph: sig.ph,
-        kw: pl.kw, p_set: dead ? st.gw_dead.p_set : g.ctrl.p_set, p_crit: pl.p_crit, valve: pl.outlet_frac, psv: pl.q_relief,
-        pumps: pl.pumps.map((pu, i) => ({ tag: pu.tag, running: pu.running, f: pu.f, kw: pu.kw, amps: pu.amps, fault: pu.fault, run_h: pu.run_s / 3600,
-          starts_h: g.pm.startsLastHour(i, t), f_set: g.manual ? g.manual.f[i] : null, want: g.manual ? g.manual.run[i] : null })),
-        mode: dead ? 'x' : g.mode(), ctl: dead ? 'auto' : g.controlSrc(), comms: dead ? 'offline' : g.comms.state, alarms, installed: g.sig_proc.installed };
-    }
-    const S0 = a.server.stations[st.sid], r = S0.last || {};
-    const alarms = [...a.server.alarms.values()].filter((x) => x.station === st.sid);
-    const fault = (tag) => alarms.some((x) => x.code === 'PUMP_FAULT_' + tag);
-    return { t, dead: false, stale: !S0.online, age: r.t1 !== undefined ? t - r.t1 : null, p1: r.p, p2: undefined, q: r.q, q_in: r.q_in, level: r.level,
-      cl: r.cl, ntu: r.ntu, ph: r.ph, kw: r.kw, p_set: r.p_set, p_crit: undefined, valve: undefined, psv: undefined,
-      pumps: [r.f1, r.f2].map((f, i) => ({ tag: i ? 'P-02' : 'P-01', running: (f ?? 0) > 0.5, f, kw: undefined, amps: undefined, fault: fault(i ? 'P-02' : 'P-01'),
-        run_h: undefined, starts_h: undefined, f_set: null, want: null })),
-      mode: S0.online ? (r.mode || 'a') : 'b', ctl: r.ctl || 'auto', comms: S0.online ? 'online' : 'offline', alarms, installed: null };
-  }
+  send(type, args) { sendCommand(this.app, this.where, type, args); }
+  ackAlarm(code) { if (ackAlarm(this.app, this.where, code)) this.update(true); }
+  _data() { return stationData(this.app, this.where); }
 
   // ---------------- cập nhật ----------------
   update(force = false) {
@@ -406,16 +364,7 @@ export class HmiView {
     F.lockNote.textContent = d.dead ? '' : manualHere ? 'Lệnh tay vẫn đi qua lớp an toàn: liên động, giới hạn áp cao, số lần khởi động.' : 'Ở chế độ TỰ ĐỘNG – chuyển sang TAY để chạy/dừng bơm, đặt tần số, đóng/mở van.';
     // điều kiện cho phép
     const perm = [];
-    if (local && !d.dead) {
-      const sf = g.safety, pl = a.st.plant, sel = Math.min(this.sel, 1);
-      perm.push([pl.outlet_frac >= 0.95, 'Van MV-02 mở hết (mở van trước, chạy bơm sau)'],
-        [!sf.level_trip && !a.st.sensors.lsll, `Mức bể an toàn (> ${fmt(a.cfg.safety.level_ll_m, 1)} m, phao LSLL không báo cạn)`],
-        [!sf.safe_stop, 'Không dừng an toàn do chất lượng nước' + (sf.safe_stop ? ` (${sf.safe_reason})` : '')],
-        [!sf.trip_active && !sf.lockout, 'Không cắt/khóa do áp lực rất cao'],
-        [!pl.pumps[sel].fault, `Biến tần ${pl.pumps[sel].tag} không báo lỗi`],
-        [g.pm.startsLastHour(sel, t) < a.cfg.safety.max_starts_per_h, `Số lần khởi động ${pl.pumps[sel].tag} < ${a.cfg.safety.max_starts_per_h}/giờ`],
-        [!sf.limiting, sf.limiting ? `Đang giới hạn tần số ≤ ${fmt(sf.f_cap, 1)} Hz do áp cao` : 'Không bị giới hạn tần số do áp cao']);
-    }
+    if (local && !d.dead) perm.push(...permissives(a, Math.min(this.sel, 1)));
     const pk = perm.map((x) => +x[0]).join('') + this.where + d.dead;
     if (force || pk !== this._permKey) {
       this._permKey = pk;
@@ -424,13 +373,7 @@ export class HmiView {
     }
     F.btnReset.disabled = d.dead; F.btnRotate.disabled = d.dead || d.ctl !== 'auto';
     // nhật ký lệnh
-    let items;
-    if (local) items = g.cmd_results.slice(-6).reverse().map((c) => [c.t, c.id, c.type, c.status, c.reason]);
-    else {
-      const log = a.server.stations[a.st.sid].cmd_log, types = {};
-      for (const c of log) if (c.type) types[c.id] = c.type;
-      items = log.slice(-7).reverse().map((c) => [c.t, c.id, c.type || types[c.id] || '', c.status, c.reason]);
-    }
+    const items = commandLog(a, this.where, local ? 6 : 7).map((c) => [c.t, c.id, c.type, c.status, c.reason]);
     const ck = items.map((x) => x[1] + x[3]).join(',');
     if (force || ck !== this._cmdKey) {
       this._cmdKey = ck;

@@ -2,6 +2,7 @@
 import { NetworkSim } from './sim/network.js';
 import { fmtClock } from './sim/util.js';
 import { TimeChart } from './ui/charts.js';
+import { Control3D } from './ui/control3d.js';
 import { h, fmt } from './ui/dom.js';
 import { HmiView } from './ui/hmi.js';
 import { Intro } from './ui/intro.js';
@@ -40,7 +41,8 @@ class App {
     this.panels = new Panels(this);
     this._initHeader();
     this._initTabs();
-    this.scene3d = new StationScene(document.getElementById('vp'), this.components, (tag) => this.openDrawer(tag));
+    this.scene3d = new StationScene(document.getElementById('vp'), this.components, (tag) => this.onPick(tag));
+    this.ctl3d = new Control3D(this, document.getElementById('vp'));
     this._initViewportTools();
     this.setScope('all');
     this.hmi = new HmiView(document.getElementById('vp'), this);
@@ -109,6 +111,8 @@ class App {
     if (this.viewMode !== 'hmi') requestAnimationFrame(() => this.scene3d.resize());
     this._syncView();
   }
+  /** Nhấp vào thiết bị trong cảnh 3D: thiết bị điều khiển được thì mở bảng điều khiển nổi, còn lại mở thẻ thông tin. */
+  onPick(tag) { if (!this.ctl3d.open(tag)) this.openDrawer(tag); }
   _syncView() { document.querySelectorAll('#view-seg button').forEach((b) => b.classList.toggle('on', b.dataset.view === this.viewMode)); }
   /** Đổi tùy chọn lắp đặt thiết bị (cfg.hardware) rồi chạy lại kịch bản hiện tại. */
   applyHardware(hw) {
@@ -177,6 +181,7 @@ class App {
     this.running = run;
     this._syncHeader();
     this.closeDrawer();
+    this.ctl3d?.close();
     this.updateCharts();
     this._updatePanels(true);
     if (this._applyThemeInit) { this._applyThemeInit(); this._applyThemeInit = null; }
@@ -204,7 +209,7 @@ class App {
       if (this.acc > this.speed * 0.5) this.acc = 0;
       this._stepsRate = (this._stepsRate ?? 0) * 0.9 + 0.1 * (steps / Math.max(realDt, 1e-3));
     }
-    if (this.viewMode !== 'hmi') this.scene3d.update(realDt, this.view());
+    if (this.viewMode !== 'hmi') { this.scene3d.update(realDt, this.view()); this.ctl3d.frame(); }
     if (ts - this._lastUi > 250) { this._lastUi = ts; this._updatePanels(false); this._syncHeader(); }
     if (ts - this._lastChart > 600) { this._lastChart = ts; this.updateCharts(); }
     requestAnimationFrame((t) => this.loop(t));
@@ -237,6 +242,7 @@ class App {
     if (this.curTab === 'log') P.updateLog();
     P.updateKpi();
     if (this.hmi?.visible) this.hmi.update(force);
+    this.ctl3d?.update(force);
     if (this.drawerTag) this.openDrawer(this.drawerTag, true);
     this._labels();
   }

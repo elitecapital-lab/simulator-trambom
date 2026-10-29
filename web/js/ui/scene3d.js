@@ -10,6 +10,15 @@ const PRIMARY = new Set(['T-01', 'P-01', 'P-02', 'FT-101', 'PT-101', 'MV-02', 'A
 const CONTAINERS = new Set(['CP-01', 'CP-02']);
 export const SCOPE_COLOR = { hien_trang: 0xa0703c, giai_phap: 0x7a5af5, khuyen_nghi: 0x0f9fb0 };
 const fmt = (v, nd = 2) => (v === null || v === undefined || Number.isNaN(v) ? '–' : v.toFixed(nd).replace('.', ','));
+// Tô sáng thiết bị: rê chuột (hov) và thiết bị đang mở bảng điều khiển (sel, nhấp nháy nhẹ)
+const HL = { hov: [0x4f9fff, 0.3], sel: [0x2f8fff, 0.4] };
+// Màu vòng trạng thái dưới bơm: chạy / dừng / lỗi / chế độ TAY
+const RING = { run: 0x19b85a, stop: 0x8a948f, fault: 0xe0443c, man: 0xf0a20a };
+// Hướng nhìn ưu tiên khi bay camera tới thiết bị gắn tường (góc phương vị quanh trục y; 0 = nhìn từ phía +z)
+const FACING = {};
+for (const t of ['CP-01', 'VFD-01', 'VFD-02', 'WDR-01', 'EM-101', 'SA-01/02', 'AIT-201', 'AIT-202', 'AIT-203']) FACING[t] = 0;
+for (const t of ['CP-02', 'MPC-01', 'IO-01', 'RT-01', 'UPS-01', 'HMI-01']) FACING[t] = -Math.PI / 2;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
 /** Hạt nước chạy dọc một đường gấp khúc – tốc độ hiển thị tỉ lệ vận tốc nước thật. */
 class FlowPath {
@@ -64,7 +73,8 @@ export class StationScene {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.prepend(this.renderer.domElement);
     this.labelRenderer = new CSS2DRenderer();
-    Object.assign(this.labelRenderer.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+    // isolation: z-index từng nhãn (CSS2DRenderer sắp theo độ sâu) không vượt lên các lớp phủ của khung 3D
+    Object.assign(this.labelRenderer.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none', isolation: 'isolate' });
     container.appendChild(this.labelRenderer.domElement);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
@@ -75,17 +85,31 @@ export class StationScene {
     this.controls.maxPolarAngle = Math.PI * 0.49;
     this.controls.minDistance = 3; this.controls.maxDistance = 70;
     this.pickables = []; this.labels = {}; this.labelMode = 1; this.flows = {}; this.anim = { rot: [0, 0], t: 0 };
-    this.mat = {};
+    this.mat = {}; this.focusBox = {};
+    this.compName = new Map((components || []).map((c) => [c.tag, c.name]));
     this._materials();
     this._lights();
     this._build();
+    // chỉ mục thiết bị -> các mesh; lưu vật liệu gốc một lần (lọc phạm vi và tô sáng đều dựa vào mat0)
+    this.byTag = new Map();
+    for (const o of this.pickables) {
+      if (!o.userData.mat0) o.userData.mat0 = o.material;
+      const t = o.userData.tag;
+      if (!this.byTag.has(t)) this.byTag.set(t, []);
+      this.byTag.get(t).push(o);
+    }
+    this._hlOn = []; this._hlCache = new Map(); this._hover = null; this._sel = null; this._anchor = new Map();
+    this._pv = new THREE.Vector3(); this._pc = new THREE.Vector3(); this._box3 = new THREE.Box3();
+    this._selRing();
     this.applyTheme();
     this.raycaster = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
-    this.renderer.domElement.addEventListener('pointerdown', (e) => { this._down = [e.clientX, e.clientY]; });
-    this.renderer.domElement.addEventListener('pointerup', (e) => {
+    const cv = this.renderer.domElement;
+    cv.addEventListener('pointerdown', (e) => { this._down = [e.clientX, e.clientY]; this._setHover(null); });
+    cv.addEventListener('pointerup', (e) => {
       if (!this._down || Math.hypot(e.clientX - this._down[0], e.clientY - this._down[1]) > 5) return;
       this._pick(e);
     });
+    this._initHover();
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
     this.tween = null;
@@ -164,6 +188,8 @@ export class StationScene {
     div.className = 'tag3d';
     div.innerHTML = `<b>${tag}</b><span></span>`;
     div.addEventListener('click', () => this.onPick && this.onPick(tag));
+    div.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') this._setHover(tag, 'label', div); });
+    div.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && this._hover === tag) this._setHover(null); });
     const obj = new CSS2DObject(div);
     obj.position.copy(pos);
     this.scene.add(obj);
@@ -183,12 +209,15 @@ export class StationScene {
   setLabel(tag, text, alarm = false) {
     const l = this.labels[tag];
     if (!l) return;
-    if (l.last !== text) { l.span.textContent = text; l.last = text; }
+    if (l.last !== text) { l.span.textContent = text; l.last = text; if (tag === this._hover) this._tipText(); }
     l.div.classList.toggle('alarm', alarm);
   }
+  /** Ẩn/hiện nhãn 3D của một thiết bị (khi dấu điều khiển TAY thay chỗ nhãn). */
+  setLabelHidden(tag, on) { const l = this.labels[tag]; if (l) l.div.classList.toggle('ctl-hide', Boolean(on)); }
   /** Tô màu theo phạm vi: 'all' | 'hien_trang' | 'giai_phap' | 'khuyen_nghi'. Thiết bị khác phạm vi được làm mờ. */
   setScopeFilter(scope, scopeOf) {
     this.scope = scope;
+    this._clearHL(); // trả vật liệu tô sáng về trước khi đổi vật liệu theo phạm vi, tô lại sau
     this._tint = this._tint || new Map(); this._ghost = this._ghost || new Map();
     for (const o of this.pickables) {
       if (!o.userData.mat0) o.userData.mat0 = o.material;
@@ -214,6 +243,7 @@ export class StationScene {
       l.div.dataset.scope = sc || '';
       l.div.classList.toggle('scope-off', scope !== 'all' && sc !== scope);
     }
+    this._applyHL();
   }
   /** Bản sao vật liệu khi lọc phạm vi phải theo kịp thay đổi màu của bản gốc (độ đục nước, giao diện sáng/tối). */
   _syncScopeMats() {
@@ -284,6 +314,7 @@ export class StationScene {
     this._pipe([V(-4, 0.55, 0), V(-0.6, 0.55, 0)], 0.11);
     this._pipe([V(-0.6, 0.55, -1.6), V(-0.6, 0.55, 1.6)], 0.11);
     this.pumpObj = [];
+    const padTex = this._padTexture();
     zs.forEach((z, i) => {
       const tag = i === 0 ? 'P-01' : 'P-02';
       this._pipe([V(-0.6, 0.55, z), V(0.75, 0.55, z)], 0.09, this.mat.pipe, tag);
@@ -291,17 +322,22 @@ export class StationScene {
       // van chặn hút (tay quay)
       this._cyl(0.13, 0.03, this.mat.yellow, V(0.1, 0.8, z), 'y');
       this._box(1.9, 0.14, 0.8, this.mat.base, 1.75, 0.07, z, { tag });
+      // vòng trạng thái phát sáng trên sàn quanh bệ bơm
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 1.6), new THREE.MeshBasicMaterial({ map: padTex, color: RING.stop, transparent: true, depthWrite: false, opacity: 0.8 }));
+      pad.rotation.x = -Math.PI / 2; pad.position.set(1.7, 0.012, z); pad.renderOrder = 1; this.scene.add(pad);
+      const motorMat = this.mat.motor.clone(); // riêng từng bơm để phát sáng nhẹ khi chạy
       const vol = this._cyl(0.36, 0.3, this.mat.pump, V(1.0, 0.55, z), 'x', { tag, seg: 32 });
       this._cyl(0.24, 0.22, this.mat.pump, V(1.28, 0.55, z), 'x', { tag });
       this._cyl(0.06, 0.3, this.mat.steel, V(1.52, 0.55, z), 'x');
-      const motor = this._cyl(0.27, 0.8, this.mat.motor, V(2.05, 0.55, z), 'x', { tag, seg: 28 });
-      for (let k = 0; k < 8; k++) this._box(0.75, 0.04, 0.04, this.mat.motor, 2.05, 0.55 + 0.27 * Math.cos(k * Math.PI / 4), z + 0.27 * Math.sin(k * Math.PI / 4));
-      this._box(0.36, 0.26, 0.3, this.mat.motor, 2.05, 0.9, z, { tag });
+      const motor = this._cyl(0.27, 0.8, motorMat, V(2.05, 0.55, z), 'x', { tag, seg: 28 });
+      for (let k = 0; k < 8; k++) this._box(0.75, 0.04, 0.04, motorMat, 2.05, 0.55 + 0.27 * Math.cos(k * Math.PI / 4), z + 0.27 * Math.sin(k * Math.PI / 4), { tag });
+      this._box(0.36, 0.26, 0.3, motorMat, 2.05, 0.9, z, { tag });
+      this.focusBox[tag] = new THREE.Box3(V(0.55, 0, z - 0.5), V(2.7, 1.3, z + 0.5));
       // quạt làm mát (quay theo tần số)
       const fan = new THREE.Group();
       fan.position.set(2.52, 0.55, z);
       const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.27, 0.12, 24, 1, true), this.mat.motor);
-      cover.rotation.z = Math.PI / 2; fan.add(cover);
+      cover.rotation.z = Math.PI / 2; fan.add(cover); this._tag(cover, tag);
       const blades = new THREE.Group();
       for (let k = 0; k < 5; k++) {
         const b = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.38, 0.07), this.mat.black);
@@ -328,7 +364,7 @@ export class StationScene {
       if (i === 1) gauge.rotation.y = Math.PI;
       this._tag(face, 'PI-101/102');
       this.scene.add(gauge);
-      this.pumpObj.push({ blades, coupling, lamp, needle, vol, motor });
+      this.pumpObj.push({ blades, coupling, lamp, needle, vol, motor, pad, motorMat });
       this._label(tag, V(1.8, 1.45, z + (i === 0 ? -0.6 : 0.6)));
     });
     this._label('PI-101/102', V(1.0, 1.95, 0));
@@ -370,6 +406,16 @@ export class StationScene {
     disc.position.set(7.8, 2.2, 0.0); disc.rotation.z = Math.PI / 2; S.add(disc); this.mvDisc = disc;
     this.mvLamp = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshStandardMaterial({ color: 0x0ca30c, emissive: 0x0ca30c, emissiveIntensity: 0.6 }));
     this.mvLamp.position.set(7.8, 2.82, 0.16); S.add(this.mvLamp);
+    // chỉ thị vị trí trên nóc bộ truyền động: mũi tên song song ống = mở, vuông góc = đóng; vành màu theo trạng thái
+    this._cyl(0.12, 0.025, this.mat.black, V(7.8, 2.79, 0), 'y', { tag: 'MV-02' });
+    const arrow = new THREE.Group(); arrow.position.set(7.8, 2.81, 0);
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.018, 0.035), this.mat.yellow);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.07, 12), this.mat.yellow);
+    tip.rotation.z = -Math.PI / 2; tip.position.x = 0.115;
+    arrow.add(shaft, tip); S.add(arrow); this.mvArrow = arrow;
+    this.mvRing = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.012, 8, 40), new THREE.MeshBasicMaterial({ color: 0x0ca30c }));
+    this.mvRing.rotation.x = Math.PI / 2; this.mvRing.position.set(7.8, 2.8, 0); S.add(this.mvRing);
+    this.focusBox['MV-02'] = new THREE.Box3(V(7.45, 1.95, -0.3), V(8.15, 2.95, 0.3));
     this._label('MV-02', V(7.8, 3.15, 0));
     // dòng chảy
     this.flows.suction = [0, 1].map((i) => new FlowPath(S, [V(-4.1, 0.55, 0), V(-0.6, 0.55, 0), V(-0.6, 0.55, zs[i]), V(0.7, 0.55, zs[i])], { radius: 0.05 }));
@@ -487,23 +533,61 @@ export class StationScene {
     return tex;
   }
 
+  /** Vành sáng trên sàn quanh bệ bơm (trắng, tô màu bằng material.color). */
+  _padTexture() {
+    const { c, ctx, tex } = canvasTex(270, 160);
+    const rr = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
+    ctx.strokeStyle = '#fff'; ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 16; ctx.lineWidth = 7; rr(18, 18, c.width - 36, c.height - 36, 26); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.lineWidth = 3; ctx.globalAlpha = 0.9; rr(18, 18, c.width - 36, c.height - 36, 26); ctx.stroke();
+    ctx.globalAlpha = 0.1; ctx.fillStyle = '#fff'; rr(22, 22, c.width - 44, c.height - 44, 22); ctx.fill();
+    tex.needsUpdate = true;
+    return tex;
+  }
+  /** Vòng chọn thiết bị (nét đứt phát sáng, xoay chậm) đặt dưới thiết bị đang mở bảng điều khiển. */
+  _selRing() {
+    const { c, ctx, tex } = canvasTex(256, 256);
+    ctx.strokeStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.lineCap = 'round';
+    ctx.shadowBlur = 10; ctx.lineWidth = 6; ctx.setLineDash([22, 12]);
+    ctx.beginPath(); ctx.arc(128, 128, 112, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]); ctx.shadowBlur = 0; ctx.lineWidth = 2; ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.arc(128, 128, 98, 0, Math.PI * 2); ctx.stroke();
+    tex.needsUpdate = true;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, color: HL.sel[0], transparent: true, depthWrite: false, opacity: 0.95 }));
+    m.rotation.x = -Math.PI / 2; m.renderOrder = 3; m.visible = false;
+    this.scene.add(m);
+    this.selMesh = m;
+  }
+
   applyTheme() {
-    this.scene.background = new THREE.Color(css('--scene-bg', '#dfe5e2'));
     const dark = getComputedStyle(document.documentElement).colorScheme.includes('dark');
+    // nền trời chuyển màu nhẹ + sương mù xa để mặt đất hòa vào chân trời
+    const base = new THREE.Color(css('--scene-bg', '#dfe5e2'));
+    const top = base.clone().lerp(new THREE.Color(dark ? 0x07111c : 0x9dbdd3), dark ? 0.5 : 0.55);
+    const { c, ctx, tex } = canvasTex(4, 256);
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, '#' + top.getHexString()); g.addColorStop(0.62, '#' + base.getHexString()); g.addColorStop(1, '#' + base.getHexString());
+    ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height); tex.needsUpdate = true;
+    if (this.scene.background && this.scene.background.isTexture) this.scene.background.dispose();
+    this.scene.background = tex;
+    this.scene.fog = new THREE.Fog(base, 48, 125);
     this.mat.ground.color.set(dark ? 0x2b3a2e : 0x9fae95);
     this.mat.floor.color.set(dark ? 0x58605c : 0xc9ccc7);
     this.mat.concrete.color.set(dark ? 0x7e847f : 0xb9bdb8);
     this.renderer.toneMappingExposure = dark ? 0.85 : 1.0;
+    this.dark = dark;
   }
   resize() {
     const w = this.el.clientWidth, h = this.el.clientHeight;
     if (!w || !h) return;
+    this._w = w; this._h = h;
     this.renderer.setSize(w, h); this.labelRenderer.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
-  _pick(e) {
-    const r = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  /** Thiết bị dưới điểm (x, y) theo pixel trong khung; null nếu không trúng. */
+  _hitAt(x, y) {
+    const w = this._w || this.el.clientWidth, hh = this._h || this.el.clientHeight;
+    this.mouse.set((x / w) * 2 - 1, -(y / hh) * 2 + 1);
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const hits = this.raycaster.intersectObjects(this.pickables, false);
     let hit = hits[0];
@@ -512,12 +596,193 @@ export class StationScene {
       const inner = hits.find((h) => !CONTAINERS.has(h.object.userData.tag) && h.distance - hit.distance < 0.7);
       if (inner) hit = inner;
     }
-    if (hit && this.onPick) this.onPick(hit.object.userData.tag);
+    return hit ? hit.object.userData.tag : null;
+  }
+  _pick(e) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const tag = this._hitAt(e.clientX - r.left, e.clientY - r.top);
+    if (tag && this.onPick) this.onPick(tag);
   }
   goto(name) {
     const p = this.camPresets[name];
     if (!p) return;
     this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: p[0], t1: p[1] };
+  }
+
+  // ---------- rê chuột: tô sáng + chú thích ----------
+  _initHover() {
+    const cv = this.renderer.domElement;
+    this.tip = document.createElement('div');
+    this.tip.className = 's3d-tip'; this.tip.hidden = true;
+    this.tip.innerHTML = '<b></b><span></span><small></small>';
+    [this.tipName, this.tipVal, this.tipHint] = this.tip.children;
+    this.el.appendChild(this.tip);
+    this._hv = { x: 0, y: 0, dirty: false, last: 0 };
+    this._canHover = matchMedia('(hover: hover)').matches || matchMedia('(any-hover: hover)').matches;
+    cv.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const r = cv.getBoundingClientRect();
+      this._hv.x = e.clientX - r.left; this._hv.y = e.clientY - r.top;
+      if (e.buttons) { this._dragging = true; if (this._hover) this._setHover(null); return; }
+      this._dragging = false; this._hv.dirty = true;
+      if (this._hover && this._hoverSrc === 'mesh') this._placeTip(this._hv.x, this._hv.y);
+    });
+    cv.addEventListener('pointerleave', () => { this._hv.dirty = false; if (this._hoverSrc === 'mesh') this._setHover(null); });
+  }
+  /** Gọi trong update(): tối đa một lần dò tia mỗi ~60 ms và chỉ khi chuột vừa di chuyển. */
+  _hoverTick() {
+    if (!this._hv.dirty || this._dragging || this.tween) return;
+    const now = performance.now();
+    if (now - this._hv.last < 60) return;
+    this._hv.last = now; this._hv.dirty = false;
+    const tag = this._hitAt(this._hv.x, this._hv.y);
+    if (tag !== this._hover || this._hoverSrc !== 'mesh') this._setHover(tag, 'mesh');
+  }
+  _setHover(tag, src = 'mesh', labelDiv = null) {
+    if (tag && !this._canHover && src === 'mesh') return;
+    const prev = this._hover;
+    if (tag === prev && (src === this._hoverSrc || !tag)) return;
+    this._hover = tag; this._hoverSrc = tag ? src : null;
+    this.renderer.domElement.style.cursor = tag ? 'pointer' : '';
+    if (prev && prev !== tag && this.labels[prev]) this.labels[prev].div.classList.toggle('hl', prev === this._sel);
+    if (tag && this.labels[tag]) this.labels[tag].div.classList.add('hl');
+    if (prev !== tag) this._applyHL();
+    if (!tag || tag === this._sel) { this.tip.hidden = true; return; } // thiết bị đang mở bảng nổi: chỉ tô sáng, không che bảng
+    this._tipText();
+    this.tip.hidden = false;
+    if (src === 'label' && labelDiv) {
+      const r = labelDiv.getBoundingClientRect(), r0 = this.el.getBoundingClientRect();
+      this._placeTip(r.left - r0.left, r.bottom - r0.top - 6);
+    } else this._placeTip(this._hv.x, this._hv.y);
+  }
+  _tipText() {
+    const tag = this._hover;
+    if (!tag) return;
+    const l = this.labels[tag];
+    const name = this.compName.get(tag) || '';
+    this.tipName.textContent = tag + (name ? ' · ' + name : '');
+    const val = l && l.last ? l.last : '';
+    this.tipVal.textContent = val; this.tipVal.hidden = !val;
+    const hint = this.hoverHint ? this.hoverHint(tag) : 'Nhấp để xem thông tin';
+    this.tipHint.textContent = hint || ''; this.tipHint.hidden = !hint;
+  }
+  _placeTip(x, y) {
+    const W = this._w || 800, H = this._h || 600, tw = this.tip.offsetWidth || 220, th = this.tip.offsetHeight || 54;
+    const tx = clamp(x + 14, 6, W - tw - 6), ty = y + 18 + th > H - 6 ? y - th - 12 : y + 18;
+    this.tip.style.transform = `translate(${Math.round(tx)}px, ${Math.round(Math.max(6, ty))}px)`;
+  }
+
+  // ---------- tô sáng thiết bị ----------
+  _hlMat(m, kind) {
+    const k = m.uuid + kind;
+    let c = this._hlCache.get(k);
+    if (!c) {
+      c = m.clone();
+      c.emissive = new THREE.Color(HL[kind][0]); c.emissiveIntensity = HL[kind][1];
+      c.userData.src = m; c.userData.kind = kind;
+      this._hlCache.set(k, c);
+    }
+    return c;
+  }
+  _clearHL() {
+    for (const o of this._hlOn) { if (o.userData.matPre) o.material = o.userData.matPre; o.userData.matPre = null; }
+    this._hlOn.length = 0;
+  }
+  _applyHL() {
+    this._clearHL();
+    for (const [tag, kind] of [[this._sel, 'sel'], [this._hover, 'hov']]) {
+      if (!tag) continue;
+      for (const o of this.byTag.get(tag) || []) {
+        const base = o.material;
+        if (o.userData.matPre || !base.emissive || (base.transparent && base.opacity <= 0.15)) continue;
+        o.userData.matPre = base;
+        o.material = this._hlMat(base, kind);
+        this._hlOn.push(o);
+      }
+    }
+  }
+  /** Tô sáng bền vững cho thiết bị đang mở bảng điều khiển (null = bỏ chọn). */
+  highlight(tag) {
+    if (tag === this._sel) return;
+    const prev = this._sel;
+    this._sel = tag || null;
+    if (prev && this.labels[prev]) this.labels[prev].div.classList.toggle('hl', prev === this._hover);
+    if (tag && this.labels[tag]) this.labels[tag].div.classList.add('hl');
+    if (tag && tag === this._hover) this.tip.hidden = true;
+    for (const [t, l] of Object.entries(this.labels)) l.div.classList.toggle('sel', t === this._sel);
+    this._applyHL();
+    const ring = this.selMesh;
+    ring.visible = false;
+    if (!tag) return;
+    const b = this._boxOf(tag);
+    if (b.isEmpty()) return;
+    const c = b.getCenter(this._pc), sx = b.max.x - b.min.x, sz = b.max.z - b.min.z;
+    const r = clamp(Math.hypot(sx, sz) / 2 + 0.22, 0.45, 2.4);
+    ring.scale.set(2 * r, 2 * r, 1);
+    ring.position.set(c.x, b.min.y < 0.6 ? 0.02 : b.min.y - 0.04, c.z);
+    ring.visible = true;
+  }
+  /** Hộp bao thế giới của thiết bị (ưu tiên hộp khai báo riêng cho bơm/van). */
+  _boxOf(tag) {
+    const b = this._box3.makeEmpty();
+    if (this.focusBox[tag]) return b.copy(this.focusBox[tag]);
+    for (const o of this.byTag.get(tag) || []) b.expandByObject(o);
+    return b;
+  }
+  /** Bay camera tới khung nhìn vừa thiết bị (giữ hướng nhìn hiện tại, thiết bị gắn tường thì nhìn từ phía mặt tủ). */
+  focus(tag) {
+    const b = this._boxOf(tag);
+    if (b.isEmpty()) return false;
+    const c = b.getCenter(new THREE.Vector3()), size = b.getSize(this._pv).length();
+    const fov = this.camera.fov * Math.PI / 180;
+    const dist = clamp((size / 2) / Math.tan(fov / 2) * 1.35, 2.4, 16);
+    const dir = this.camera.position.clone().sub(this.controls.target);
+    let az = Math.atan2(dir.x, dir.z);
+    if (tag in FACING) { const f = FACING[tag], dd = Math.atan2(Math.sin(az - f), Math.cos(az - f)); az = f + clamp(dd, -0.9, 0.9); }
+    const el = clamp(Math.asin(clamp(dir.y / Math.max(1e-6, dir.length()), -1, 1)), 0.32, tag in FACING ? 0.5 : 0.85);
+    const p1 = V(c.x + Math.sin(az) * Math.cos(el) * dist, c.y + Math.sin(el) * dist, c.z + Math.cos(az) * Math.cos(el) * dist);
+    p1.y = Math.max(0.6, p1.y);
+    this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1, t1: c };
+    return true;
+  }
+  /** Điểm neo của thiết bị: vị trí nhãn 3D nếu có, nếu không là tâm hộp bao các mesh. */
+  _anchorOf(tag) {
+    let p = this._anchor.get(tag);
+    if (p === undefined) {
+      if (this.labels[tag]) p = this.labels[tag].obj.position;
+      else { const b = this._boxOf(tag); p = b.isEmpty() ? null : b.getCenter(new THREE.Vector3()); }
+      this._anchor.set(tag, p);
+    }
+    return p;
+  }
+  /**
+   * Vị trí trên màn hình (pixel CSS trong khung) của thiết bị: { x, y, visible, behind, dx, dy }.
+   * visible = false khi sau camera hoặc ngoài khung nhìn; (dx, dy) là hướng tới thiết bị (để vẽ gợi ý ngoài khung).
+   * Truyền out để tái sử dụng đối tượng (không cấp phát mỗi khung hình).
+   */
+  screenPos(tag, out = {}) {
+    const p = this._anchorOf(tag);
+    if (!p) { out.x = out.y = out.dx = out.dy = 0; out.visible = false; out.behind = false; return out; }
+    return this.project(p, out);
+  }
+  /** Như screenPos nhưng neo vào tâm thân thiết bị (dùng cho đường dẫn của bảng nổi). */
+  bodyPos(tag, out = {}) {
+    let p = this._anchor.get('body:' + tag);
+    if (p === undefined) { const b = this._boxOf(tag); p = b.isEmpty() ? null : b.getCenter(new THREE.Vector3()); this._anchor.set('body:' + tag, p); }
+    if (!p) return this.screenPos(tag, out);
+    return this.project(p, out);
+  }
+  project(p, out = {}) {
+    const W = this._w || this.el.clientWidth, H = this._h || this.el.clientHeight;
+    const v = this._pv.copy(p).applyMatrix4(this.camera.matrixWorldInverse);
+    const behind = v.z > -this.camera.near;
+    const len = Math.hypot(v.x, v.y) || 1;
+    out.dx = v.x / len; out.dy = -v.y / len;
+    v.copy(p).project(this.camera);
+    out.x = (v.x + 1) / 2 * W; out.y = (1 - v.y) / 2 * H;
+    out.behind = behind;
+    out.visible = !behind && v.x >= -1 && v.x <= 1 && v.y >= -1 && v.y <= 1;
+    return out;
   }
 
   /** Cập nhật cảnh theo trạng thái mô phỏng. view = dữ liệu đã chuẩn bị bởi main.js */
@@ -533,6 +798,20 @@ export class StationScene {
     }
     if (view) this._applyView(dt, view);
     if (this.scope && this.scope !== 'all') this._syncScopeMats();
+    this._hoverTick();
+    if (this._hlOn.length) {
+      // bản sao tô sáng theo kịp màu bản gốc (nước đổi màu theo độ đục, đổi giao diện); thiết bị được chọn nhấp nháy nhẹ
+      const k = 0.5 + 0.5 * Math.sin(this.anim.t * 4);
+      for (const o of this._hlOn) {
+        const m = o.material, src = o.userData.matPre;
+        if (src && m.color && src.color) m.color.copy(src.color);
+        if (m.userData.kind === 'sel') m.emissiveIntensity = 0.22 + 0.3 * k;
+      }
+    }
+    if (this.selMesh.visible) {
+      this.selMesh.rotation.z = this.anim.t * 0.35;
+      this.selMesh.material.opacity = 0.65 + 0.3 * Math.sin(this.anim.t * 4);
+    }
     this._lv = (this._lv || 0) + 1;
     if (this._lv % 10 === 0) this._labelVisibility();
     this.controls.update();
@@ -550,6 +829,7 @@ export class StationScene {
     this.floatBall.position.y = Math.min(3.7, Math.max(lv, 2.4));
     this.floatArm.position.y = (this.floatBall.position.y + 3) / 2;
     // bơm
+    const manual = v.mode !== 'x' && v.ctl && v.ctl !== 'auto';
     pl.pumps.forEach((pu, i) => {
       const o = this.pumpObj[i];
       this.anim.rot[i] += (pu.f / 50) * 14 * dt;
@@ -560,6 +840,14 @@ export class StationScene {
       o.lamp.material.emissiveIntensity = 0.7;
       const ang = (-135 + Math.min(10, Math.max(0, pu.gauge)) * 27) * Math.PI / 180;
       o.needle.rotation.z = -ang;
+      // vòng trạng thái trên sàn: xanh chạy, xám dừng, đỏ nhấp nháy khi lỗi, hổ phách khi ở chế độ TAY
+      const pm = o.pad.material;
+      if (pu.fault) { pm.color.setHex(RING.fault); pm.opacity = Math.sin(this.anim.t * 7) > 0 ? 1 : 0.25; }
+      else if (manual) { pm.color.setHex(RING.man); pm.opacity = pu.running ? 0.95 : 0.55; }
+      else { pm.color.setHex(pu.running ? RING.run : RING.stop); pm.opacity = pu.running ? 0.9 : (this.dark ? 0.45 : 0.6); }
+      // động cơ phát sáng nhẹ theo tần số khi chạy
+      o.motorMat.emissive.setHex(pu.running ? 0x0ca30c : 0x000000);
+      o.motorMat.emissiveIntensity = pu.running ? 0.05 + 0.13 * Math.min(1, pu.f / 50) * (0.85 + 0.15 * Math.sin(this.anim.t * 3 + i)) : 0;
     });
     // dòng chảy (vận tốc thật ×1,5 cho dễ nhìn)
     const vel = (q, d) => (q / 3600) / (Math.PI * d * d / 4) * 1.5;
@@ -576,6 +864,8 @@ export class StationScene {
     this.mvDisc.rotation.y = (1 - pl.outlet_frac) * Math.PI / 2;
     const mvc = pl.outlet_frac > 0.99 ? 0x0ca30c : pl.outlet_frac < 0.01 ? 0xd03b3b : 0xfab219;
     this.mvLamp.material.color.set(mvc); this.mvLamp.material.emissive.set(mvc);
+    this.mvArrow.rotation.y = (1 - pl.outlet_frac) * Math.PI / 2;
+    this.mvRing.material.color.setHex(mvc);
     if (pl.drain_open) this.drainWheel.rotation.y += dt * 2;
     // tủ điều khiển: LED gateway theo trạng thái kết nối
     const cs = v.comms, dead = v.mode === 'x';

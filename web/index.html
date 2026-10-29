@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Trạm bơm tăng áp ST-01</title>
+<meta name="description" content="Mô phỏng 3D tương tác hệ thống điều khiển tự động thông minh cho trạm bơm tăng áp không người trực: edge gateway, mất kết nối, đồng bộ, dừng an toàn, so sánh với lịch cố định.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Be+Vietnam+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap&subset=vietnamese">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><h1>Trạm bơm tăng áp ST-01</h1><span>Điều khiển tự động thông minh · edge gateway · tích hợp mạng lưới</span></div>
+  <div class="ctl"><label class="lbl" for="sc-select">Kịch bản</label><select id="sc-select"></select></div>
+  <div class="ctl"><span class="lbl">Mức</span><div class="seg" id="lvl-seg"><button data-lvl="basic">Cơ bản</button><button data-lvl="advanced">Nâng cao</button></div></div>
+  <div class="ctl"><button class="btn primary" id="btn-play">Chạy</button><button class="btn" id="btn-skip" title="Chạy nhanh thêm 1 giờ mô phỏng">+1 giờ</button><button class="btn" id="btn-reset">Chạy lại</button></div>
+  <div class="ctl"><span class="lbl">Tốc độ</span><div class="seg" id="speed-seg"></div><span class="note" id="speed-real"></span></div>
+  <div class="ctl clock" id="clock" aria-live="off">–</div>
+  <div class="modes" id="modes" aria-label="Chế độ vận hành của gateway">
+    <span class="mode m-a" data-m="a">(a) Bình thường</span><span class="mode m-b" data-m="b">(b) Tự vận hành</span><span class="mode m-c" data-m="c">(c) Đồng bộ</span><span class="mode m-d" data-m="d">(d) Cảnh báo / an toàn</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="ctl"><button class="btn" id="btn-guide">Hướng dẫn</button><button class="btn" id="btn-theme">Giao diện: tự động</button></div>
+</header>
+
+<div class="main">
+  <section class="viewport" id="vp" aria-label="Mô hình 3D trạm bơm">
+    <div class="vp-tools" id="vp-tools"></div>
+    <div class="banner" id="banner" hidden></div>
+    <div class="vp-legend"><span><i class="dot" style="background:#0ca30c"></i>bơm chạy / kết nối</span><span><i class="dot" style="background:#6d7570"></i>bơm dừng</span><span><i class="dot" style="background:#d03b3b"></i>lỗi / báo động</span><span><i class="dot" style="background:#4aa3ff"></i>dòng nước</span><span>Nhấp vào thiết bị để xem tham số</span></div>
+    <aside class="drawer" id="drawer" hidden aria-live="polite"></aside>
+    <p id="boot" class="note" style="position:absolute;left:12px;top:56px">Đang tải mô hình…</p>
+  </section>
+  <aside class="side"><nav class="tabs" id="tabs" role="tablist"></nav><div id="panes" style="display:contents"></div></aside>
+</div>
+
+<div class="lower">
+  <section>
+    <div class="chart-head" style="margin-bottom:8px"><span class="lbl">Biểu đồ theo thời gian – trạm thông minh và lịch cố định chạy song song</span><div class="seg" id="win-seg"></div></div>
+    <div class="charts" id="charts"></div>
+  </section>
+  <section class="card kpi" id="kpi"></section>
+</div>
+
+<div class="modal" id="intro" hidden></div>
+<div id="toast" class="banner c" hidden style="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom, 0px));top:auto;right:auto;z-index:60;max-width:90vw"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

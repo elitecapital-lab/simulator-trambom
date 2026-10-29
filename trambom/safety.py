@@ -186,6 +186,8 @@ class SafetyLayer:
             block = "dừng an toàn do %s" % self.safe_reason
         elif self.level_trip or meas["LSLL-101"]:
             block = "mức bể rất thấp"
+        elif meas["outlet_frac"] < 0.95:
+            block = "chờ van MV-02 mở hết (trình tự: mở van trước, chạy bơm sau)"
         n = co["n"] if not block else 0
         if block and co["n"] > 0 and block != self.last_block:
             gw.log_event(t, "safety", "Ưu tiên an toàn: chặn lệnh chạy %d bơm của kịch bản (%s)" % (co["n"], block))

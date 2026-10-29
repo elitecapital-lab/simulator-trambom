@@ -253,19 +253,26 @@ class Controller:
             usable = max(0.0, (level - lv["stop_m"]) * self.area)
             net_draw = fc.avg_over(t, t + 3 * 3600.0) - q_in
             self.tte_h = usable / net_draw if net_draw > 0.5 else None
+        cons_tte = 0.0
         if feat["tte_conservation"] and self.tte_h is not None:
             if self.tte_h < pd["tte_crit_h"]:
-                cons = min(cons, pd["tte_delta2_bar"])
+                cons_tte = pd["tte_delta2_bar"]
                 self.conserve = max(self.conserve, 2)
             elif self.tte_h < pd["tte_warn_h"]:
-                cons = min(cons, pd["tte_delta1_bar"])
+                cons_tte = pd["tte_delta1_bar"]
                 self.conserve = max(self.conserve, 1)
             gw.alarms.set_hyst(t, dt, "TTE_LOW", self.tte_h < pd["tte_warn_h"], self.tte_h > pd["tte_warn_h"] + 0.5, "warning",
                                "Dự báo bể cạn sau %.1f h – chủ động giảm áp" % self.tte_h, 0.0, 300.0)
         elif self.tte_h is None:
             gw.alarms.clear(t, "TTE_LOW")
+        p_base = p_set
         if cons < 0.0:
-            p_set = max(p_set + cons, min(p_set, lv["p_set_conserve_min_bar"]))
+            # mức bể thấp: giảm áp "cấp hạn chế" (chấp nhận áp dưới chuẩn để kéo dài thời gian cấp)
+            p_set = max(p_base + cons, min(p_base, lv["p_set_conserve_min_bar"]))
+        if cons_tte < 0.0:
+            # giảm áp chủ động theo dự báo: chỉ bỏ phần biên an toàn, KHÔNG xuống dưới áp tối thiểu tại điểm bất lợi
+            floor = pd["p_crit_req_bar"] + pd["margin_min_bar"] + pr["dz_bar"] + pr["r_est"] * q_ff * q_ff
+            p_set = min(p_set, max(p_base + cons_tte, min(p_base, floor)))
         # mất nước nguồn: FT-100 ~ 0 trong khi van phao đang mở (mức < 3,4 m)
         q_in_now = sig["q_in_f"] if sig["q_in_f"] is not None else 0.0
         if q_in_now < 0.5 and level < 3.4:

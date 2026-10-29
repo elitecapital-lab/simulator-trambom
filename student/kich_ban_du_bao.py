@@ -45,7 +45,8 @@ def dieu_khien(inp, mem, params):
         p_set += params["offline"]["margin_bar"]
 
     # --- D. giảm áp sớm theo dự báo cạn bể ---
-    # TODO D: nếu tte_h < tte_crit_h giảm tte_delta2_bar; nếu < tte_warn_h giảm tte_delta1_bar
+    # TODO D: nếu tte_h < tte_crit_h giảm tte_delta2_bar; nếu < tte_warn_h giảm tte_delta1_bar – nhưng KHÔNG thấp hơn
+    #         p_crit_req_bar + margin_min_bar + dz + r·Q² (chỉ bỏ phần biên an toàn, giữ chuẩn dịch vụ ở điểm bất lợi)
     delta = lv["conserve_delta_bar"] if level < lv["conserve_m"] else 0.0
     if delta < 0:
         p_set = max(p_set + delta, min(p_set, lv["p_set_conserve_min_bar"]))

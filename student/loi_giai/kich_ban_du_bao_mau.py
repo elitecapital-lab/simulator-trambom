@@ -19,15 +19,14 @@ def dieu_khien(inp, mem, params):
     p_set = _clamp(pd["p_crit_req_bar"] + margin + pr["dz_bar"] + pr["r_est"] * q_ff * q_ff, pr["p_set_min_bar"], pr["p_set_max_bar"])
     if not inp["online"]:
         p_set += params["offline"]["margin_bar"]
-    delta = lv["conserve_delta_bar"] if level < lv["conserve_m"] else 0.0
+    p_base = p_set
+    if level < lv["conserve_m"]:
+        p_set = max(p_base + lv["conserve_delta_bar"], min(p_base, lv["p_set_conserve_min_bar"]))
     tte = inp["tte_h"]
-    if tte is not None:
-        if tte < pd["tte_crit_h"]:
-            delta = min(delta, pd["tte_delta2_bar"])
-        elif tte < pd["tte_warn_h"]:
-            delta = min(delta, pd["tte_delta1_bar"])
-    if delta < 0:
-        p_set = max(p_set + delta, min(p_set, lv["p_set_conserve_min_bar"]))
+    if tte is not None and tte < pd["tte_warn_h"]:
+        d = pd["tte_delta2_bar"] if tte < pd["tte_crit_h"] else pd["tte_delta1_bar"]
+        floor = pd["p_crit_req_bar"] + pd["margin_min_bar"] + pr["dz_bar"] + pr["r_est"] * q_ff * q_ff
+        p_set = min(p_set, max(p_base + d, min(p_base, floor)))  # chỉ bỏ biên, không xuống dưới chuẩn dịch vụ
     order = [inp["duty"], 1 - inp["duty"]]
     if mem.get("dung_muc"):
         if level > lv["restart_m"]:

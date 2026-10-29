@@ -498,22 +498,26 @@ export class Control3D {
   _placeCard() {
     const C = this.cur, sc = this.app.scene3d;
     const p = sc.bodyPos(C.tag, this._p), W = this.W, H = this.H, m = 10, gap = 48;
+    // vùng trống giữa thanh trên, HUD, dock và tấm biểu đồ (main.js cập nhật app.insets mỗi 250 ms)
+    const I = this.app.insets || { l: 0, r: 0, t: 0, b: 0, sb: 0 }, L = m + I.l, T = m + I.t, R = W - m - I.r, B = H - m - Math.max(I.b, I.sb);
     if (this.sheet) {
       // tấm trượt đáy: không neo; thiết bị ngoài khung thì gợi ý ở giữa mép trên
       this._leadOn(false); show(this.offHint, !p.visible);
       if (!p.visible) { this.offHint.style.transform = `translate(${Math.round(W / 2)}px, 30px) translate(-50%, -50%)`; this.offArrow.style.transform = `rotate(${Math.atan2(p.dy, p.dx).toFixed(3)}rad)`; }
       return;
     }
-    const cw = Math.min(this.cw, W - 2 * m), ch = Math.min(this.ch, H - 2 * m);
+    const avail = Math.max(160, Math.round(B - T));
+    if (C.availH !== avail) { C.availH = avail; C.el.style.maxHeight = avail + 'px'; }
+    const cw = Math.min(this.cw, R - L), ch = Math.min(this.ch, avail);
     if (p.visible) {
-      const fitR = p.x + gap + cw <= W - m, fitL = p.x - gap - cw >= m;
+      const fitR = p.x + gap + cw <= R, fitL = p.x - gap - cw >= L;
       let side = this.side;
       if (side > 0 && !fitR && fitL) side = -1;
       else if (side < 0 && !fitL && fitR) side = 1;
       else if (!fitR && !fitL) side = p.x < W / 2 ? 1 : -1;
       this.side = side;
-      const x = clamp(side > 0 ? p.x + gap : p.x - gap - cw, m, W - cw - m);
-      const y = clamp(p.y - ch * 0.3, m, Math.max(m, H - ch - m));
+      const x = clamp(side > 0 ? p.x + gap : p.x - gap - cw, L, Math.max(L, R - cw));
+      const y = clamp(p.y - ch * 0.3, T, Math.max(T, B - ch));
       this._moveCard(x, y);
       const inside = p.x > x - 6 && p.x < x + cw + 6 && p.y > y - 6 && p.y < y + ch + 6;
       this._leadOn(!inside);
@@ -521,7 +525,7 @@ export class Control3D {
       show(this.offHint, false);
     } else {
       this._leadOn(false);
-      if (C.tx === null) this._moveCard(W - cw - m, clamp(H * 0.12, m, Math.max(m, H - ch - m)));
+      if (C.tx === null) this._moveCard(Math.max(L, R - cw), clamp(H * 0.12, T, Math.max(T, B - ch)));
       // gợi ý ở mép khung theo hướng tới thiết bị (kể cả khi thiết bị ở sau camera)
       const dx = p.dx, dy = p.dy, kx = (W / 2 - 110) / Math.max(1e-3, Math.abs(dx)), ky = (H / 2 - 48) / Math.max(1e-3, Math.abs(dy));
       const k = Math.max(0, Math.min(kx, ky));

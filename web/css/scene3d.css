@@ -149,7 +149,7 @@
 
 /* bảng nổi thành tấm trượt từ đáy khi khung hẹp */
 .c3d-card.sheet {
-  left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-width: none; max-height: min(74%, 520px); transform: none !important;
+  left: 8px; right: 8px; top: auto; bottom: calc(var(--dock-h, 0px) + 8px); width: auto; max-width: none; max-height: min(calc(100% - var(--topbar-h, 0px) - var(--dock-h, 0px) - 24px), 520px) !important; transform: none !important;
   border-radius: 12px; animation: c3d-sheet 0.22s ease-out;
 }
 .c3d-card.sheet .c3d-head { border-radius: 12px 12px 0 0; }
@@ -193,7 +193,7 @@
 }
 .c3d-vig[hidden] { display: none; }
 .c3d-vg-tab {
-  position: absolute; top: var(--c3d-tab-top, 0px); left: 0; right: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+  position: absolute; top: calc(var(--topbar-h, 0px) + var(--banner-h, 0px) + 8px + var(--c3d-tab-top, 0px)); left: 0; right: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
   padding: 5px 6px 6px 12px; pointer-events: auto; border-radius: 0 0 10px 10px; background: var(--c3d-amber); color: var(--c3d-amber-ink);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
@@ -206,8 +206,9 @@
   border: 1px solid color-mix(in srgb, var(--c3d-amber-ink) 40%, transparent); background: rgba(255, 255, 255, 0.6); color: var(--c3d-amber-ink);
 }
 .c3d-vg-btn:hover { background: #fff; }
+.c3d-vg-tab { border-radius: 10px; }
 .c3d-vig.float .c3d-vg-tab { border-radius: 10px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c3d-amber) 30%, transparent), 0 6px 18px rgba(0, 0, 0, 0.2); }
-.c3d-vig.narrow .c3d-vg-tab { top: auto; bottom: 0; border-radius: 10px 10px 0 0; padding: 4px 5px 4px 10px; gap: 8px; }
+.c3d-vig.narrow .c3d-vg-tab { top: auto; bottom: calc(var(--dock-h, 0px) + 8px); border-radius: 10px; padding: 4px 5px 4px 10px; gap: 8px; }
 .c3d-vig.narrow .c3d-vg-txt small { display: none; }
 .c3d-vig.narrow.sheet-open .c3d-vg-tab { display: none; }
 .c3d-vig.narrow .c3d-vg-txt b { font-size: 12px; }

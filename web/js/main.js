@@ -22,7 +22,7 @@ const SPEEDS = [1, 10, 60, 300, 1200, 3600];
 const setText = (el, s) => { if (el.textContent !== s) el.textContent = s; };
 const WINDOWS = [['6 h', 6 * 3600], ['24 h', 86400], ['Tất cả', Infinity]];
 const MODE_BANNER = {
-  x: (a) => `MINI PC NGỪNG – ${a.st.gw_dead.note()} · mất dừng an toàn theo chất lượng, ghép bơm, đo xa`,
+  x: (a) => `MINI PC NGỪNG – ${a.st.gw_dead.note().replace(/(\d)\.(\d)/g, '$1,$2')} · mất dừng an toàn theo chất lượng, ghép bơm, đo xa`,
   b: (a) => `(b) MẤT KẾT NỐI – gateway tự vận hành bằng kịch bản v${a.st.gw.script.version} đã lưu · đệm ${a.st.gw.comms.buf.length} bản ghi · cộng biên áp +${fmt(a.st.gw.script.params.offline.margin_bar, 1)} bar`,
   c: (a) => `(c) ĐANG ĐỒNG BỘ – phát lại ${a.st.gw.comms.buf.length} bản ghi đệm, hợp nhất kịch bản, nhận lệnh còn hạn`,
   d: (a) => {
@@ -232,13 +232,23 @@ class App {
     // dải thông báo chế độ (b/c/d/x) – chỉ dựng lại khi nội dung đổi
     const bn = this.banner;
     this._bnMode = mode;
-    if (mode === 'a') bn.hidden = true;
+    if (mode === 'a') { bn.hidden = true; document.documentElement.style.setProperty('--banner-h', '0px'); }
     else {
       const cls = 'banner ' + (mode === 'x' ? 'd' : mode), txt = MODE_BANNER[mode](this);
       if (bn.className !== cls) bn.className = cls;
       if (bn._t !== txt) { bn._t = txt; bn.replaceChildren(ico('alert'), h('span', { class: 'bn-t' }, txt), h('span', { class: 'bn-more' }, 'Chi tiết')); bn.title = txt + ' – nhấp để xem chi tiết'; }
       bn.hidden = false;
+      document.documentElement.style.setProperty('--banner-h', bn.offsetHeight + 6 + 'px');
     }
+    this.insets = this._viewInsets();
+    this.scene3d.setInsets(this.insets);
+  }
+  /** Phần khung 3D bị thanh trên, HUD, dock che – để camera căn giữa vùng còn trống. */
+  _viewInsets() {
+    const cs = getComputedStyle(document.documentElement), px = (n) => parseFloat(cs.getPropertyValue(n)) || 0, e = px('--edge');
+    const sb = document.body.classList.contains('sheet-open') ? px('--sheet-h') + e : 0; // tấm biểu đồ: chỉ để bảng nổi tránh, camera giữ nguyên
+    if (this.shell.mqMobile.matches) return { l: 0, r: 0, t: px('--topbar-h') + px('--hud-h'), b: px('--dock-h'), sb };
+    return { l: document.body.classList.contains('hud-min') ? 0 : px('--hud-w') + 2 * e, r: px('--dock-w') + 2 * e, t: px('--topbar-h'), b: 0, sb };
   }
   _updatePanels(force) {
     if (!this.st) return;

@@ -11,7 +11,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = process.argv[2] || join(root, 'dist', 'tram-bom-st01.html');
 const local = process.argv.includes('--local');
 const res = await build({ entryPoints: [join(root, 'web/js/main.js')], bundle: true, format: 'esm', minify: true, target: 'es2021', write: false, external: ['three', 'three/addons/*'] });
-const css = readFileSync(join(root, 'web/css/app.css'), 'utf8');
+const css = ['app.css', 'hmi.css', 'scene3d.css'].map((f) => readFileSync(join(root, 'web/css', f), 'utf8')).join('\n');
 const html = readFileSync(join(root, 'web/index.html'), 'utf8');
 const head = html.slice(0, html.indexOf('<link rel="stylesheet" href="css/app.css">'));
 const body = html.slice(html.indexOf('<body>'), html.indexOf('<script type="module"'));

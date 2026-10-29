@@ -582,7 +582,38 @@ export class StationScene {
     if (!w || !h) return;
     this._w = w; this._h = h;
     this.renderer.setSize(w, h); this.labelRenderer.setSize(w, h);
-    this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    this._applyProj();
+  }
+  /**
+   * Phần khung bị lớp giao diện che (pixel): { l, r, t, b }. Tâm chiếu của camera dời vào giữa vùng còn trống
+   * (setViewOffset) để trạm không nằm dưới HUD/dock; lần đầu nhận thì đặt camera tổng quan vừa khung.
+   */
+  setInsets(ins) {
+    const k = [ins.l, ins.r, ins.t, ins.b].map((v) => Math.round(v)).join(',');
+    if (k === this._insKey) return;
+    const first = this._insKey === undefined;
+    this._insKey = k; this.ins = { l: ins.l, r: ins.r, t: ins.t, b: ins.b };
+    this._applyProj();
+    if (first) { const [p, t] = this._fit(this.camPresets.overview); this.camera.position.copy(p); this.controls.target.copy(t); this.controls.update(); }
+  }
+  _applyProj() {
+    const w = this._w, h = this._h, I = this.ins, cam = this.camera;
+    if (!w || !h) return;
+    const sx = I ? (I.l - I.r) / 2 : 0, sy = I ? (I.t - I.b) / 2 : 0;
+    if (Math.abs(sx) < 1 && Math.abs(sy) < 1) { cam.clearViewOffset(); cam.aspect = w / h; }
+    else {
+      const fw = w + 2 * Math.abs(sx), fh = h + 2 * Math.abs(sy);
+      cam.aspect = fw / fh;
+      cam.setViewOffset(fw, fh, sx > 0 ? 0 : 2 * Math.abs(sx), sy > 0 ? 0 : 2 * Math.abs(sy), w, h);
+    }
+    cam.updateProjectionMatrix();
+  }
+  /** Điểm đặt camera của một góc nhìn, lùi xa hơn khi vùng trống hẹp/dọc (điện thoại) để vẫn thấy đủ cảnh. */
+  _fit(p) {
+    const I = this.ins || { l: 0, r: 0, t: 0, b: 0 };
+    const w = Math.max(1, (this._w || 1) - I.l - I.r), hh = Math.max(1, (this._h || 1) - I.t - I.b);
+    const f = clamp(Math.pow(1.6 / (w / hh), 0.9), 1, 2.6);
+    return [p[1].clone().add(p[0].clone().sub(p[1]).multiplyScalar(f)), p[1].clone()];
   }
   /** Thiết bị dưới điểm (x, y) theo pixel trong khung; null nếu không trúng. */
   _hitAt(x, y) {
@@ -606,7 +637,8 @@ export class StationScene {
   goto(name) {
     const p = this.camPresets[name];
     if (!p) return;
-    this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: p[0], t1: p[1] };
+    const [p1, t1] = this._fit(p);
+    this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1, t1 };
   }
 
   // ---------- rê chuột: tô sáng + chú thích ----------

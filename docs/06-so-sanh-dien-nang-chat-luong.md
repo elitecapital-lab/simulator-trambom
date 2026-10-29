@@ -40,6 +40,8 @@ Ba phương án chạy song song trong cùng một mô phỏng, với **cùng ch
 | S8 · Vỡ ống ban đêm – phát hiện bất thường lưu lượng | 78 / 58 / 57 | 25 %, 26 % | 910 / 34 / 34 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 3 / 2 / 3 | không phát hiện / không phát hiện / 15 phút |
 | S9 · Tổng hợp DOK3: mất mạng dài + clo giảm + mất nguồn | 148 / 97 / 95 | 35 %, 36 % | 1429 / 496 / 482 | 1; 29,0 / 1; 1,4 / 1; 2,5 | 6 / 4 / 5 | không phát hiện; không phát hiện / 416 phút; 33 phút / 421 phút; 11 phút |
 | S10 · Một tuần vận hành – so sánh điện năng | 527 / 317 / 308 | 40 %, 42 % | 5292 / 1 / 0 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 21 / 15 / 18 | – / – / – |
+| S11 · Mini PC treo 6 giờ – dự phòng bằng PID nội biến tần | 79 / 52 / 51 | 33 %, 35 % | 1121 / 1 / 1 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 4 / 2 / 2 | – / 1 phút / 1 phút |
+| S12 · Điều khiển bơm từ xa và tại chỗ (HMI) – quyền điều khiển, liên động | 53 / 32 / 31 | 40 %, 42 % | 507 / 13 / 24 | 0; 0,0 / 0; 0,0 / 0; 0,0 | 3 / 3 / 3 | – / – / – |
 
 Đọc cột tiết kiệm cùng với lượng nước cấp được: ở S7, lịch cố định tốn ít điện hơn (42 kWh so với 45 kWh) chỉ vì không bơm được nước từ 08:00 đến 16:30 (cấp 271 m³ so với 430 m³). Suất điện năng mới là thước đo công bằng: 0,156 so với 0,104 kWh/m³.
 

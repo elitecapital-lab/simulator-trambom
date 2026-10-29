@@ -5,6 +5,7 @@ import math
 from .comms import CommsClient
 from .control import Controller, Forecaster
 from .safety import PumpManager, SafetyLayer
+from .sensors import installed_tags
 from .util import clamp, deep_copy, fnv1a, canonical, flatten, get_path, set_path
 
 SEV_RANK = {"info": 0, "warning": 1, "alarm": 2, "critical": 3}
@@ -13,7 +14,10 @@ D_PREFIXES = ("P_HIGH", "P_HH_TRIP", "LOCKOUT", "P_LOW", "BURST_SUSPECT", "LEVEL
               "CL_", "NTU_", "PH_", "SAFE_STOP", "PT_DEVIATION", "PT_STUCK", "NO_PRESSURE", "SENSOR_FAULT",
               "PUMP_FAULT", "FLOW_ANOMALY")
 # Báo động dạng sự kiện (không có điều kiện tự xóa): xóa khi được xác nhận hoặc sau 30 phút
-EVENT_ALARMS = ("SCRIPT_ROLLBACK", "SCRIPT_REJECTED", "SCRIPT_ERROR")
+EVENT_ALARMS = ("SCRIPT_ROLLBACK", "SCRIPT_REJECTED", "SCRIPT_ERROR", "GW_WATCHDOG")
+# Lệnh vận hành bằng tay (từ xa qua MQTT hoặc tại chỗ qua HMI)
+MANUAL_CMDS = ("set_mode", "pump_start", "pump_stop", "pump_speed", "valve")
+SRC_NAME = {"local": "tại chỗ (HMI)", "remote": "từ xa (trung tâm)"}
 
 
 def validate_params(params, schema):
@@ -142,6 +146,42 @@ class SignalProcessor:
         self.pt_used = "PT-101"
         self.p_model = None
         self.qf = {"cl": None, "ntu": None, "ph": None}
+        self.installed = installed_tags(cfg)
+        self.area = cfg["tank"]["area_m2"]
+        self.drain_q = cfg["tank"]["drain_q_m3h"]
+        self.mb_lv = None
+        self.mb_vout = 0.0
+        self.mb_hist = []
+
+    def restart(self):
+        """Mini PC khởi động lại: bộ lọc và cửa sổ cân bằng khối lượng bắt đầu lại từ đầu."""
+        self.p_f = None
+        self.q_f = None
+        self.qin_f = None
+        self.mb_lv = None
+        self.mb_vout = 0.0
+        self.mb_hist = []
+        self.qf = {"cl": None, "ntu": None, "ph": None}
+        self.dev_timer = 0.0
+        self.agree_timer = 0.0
+        for st in self.stuck.values():
+            st[0] = None
+            st[1] = 0.0
+
+    def _inflow_mass_balance(self, t, dt, lv, q_out, drain):
+        """Không có FT-100: lưu lượng vào ≈ lưu lượng ra (FT-101 + xả đáy) + A·dH/dt, cửa sổ trượt 15 phút."""
+        a = 1.0 - math.exp(-dt / 30.0)
+        self.mb_lv = lv if self.mb_lv is None else self.mb_lv + (lv - self.mb_lv) * a
+        self.mb_vout += ((q_out or 0.0) + (self.drain_q if drain else 0.0)) * dt / 3600.0
+        if not self.mb_hist or t - self.mb_hist[-1][0] >= 60.0 - 1e-9:
+            self.mb_hist.append((t, self.mb_lv, self.mb_vout))
+            if len(self.mb_hist) > 16:
+                self.mb_hist.pop(0)
+        if len(self.mb_hist) < 16:
+            return None
+        t0, l0, v0 = self.mb_hist[0]
+        t1, l1, v1 = self.mb_hist[-1]
+        return max(0.0, (self.area * (l1 - l0) + (v1 - v0)) * 3600.0 / (t1 - t0))
 
     def _valid(self, tag, v):
         if v is None:
@@ -160,6 +200,8 @@ class SignalProcessor:
         for tag in ("PT-101", "PT-102", "FT-101", "FT-100", "LT-101", "AIT-201", "AIT-202", "AIT-203"):
             ok = self._valid(tag, meas[tag])
             valid[tag] = ok
+            if tag not in self.installed:
+                continue  # không lắp: không phải lỗi tín hiệu
             A.set(t, "SENSOR_FAULT_" + tag, not ok, "alarm", "Lỗi tín hiệu %s (ngoài 4–20 mA / mất tín hiệu)" % tag)
         # phát hiện kẹt (chỉ ở mức nâng cao: tính năng pressure_voting)
         running = any(p["running"] for p in meas["pumps"])
@@ -239,9 +281,12 @@ class SignalProcessor:
         p_prot = max(prot) if prot else None
         if q_raw is not None:
             self.q_f = q_raw if self.q_f is None else self.q_f + (q_raw - self.q_f) * (1.0 - math.exp(-dt / 10.0))
-        qin = meas["FT-100"] if valid["FT-100"] else None
-        if qin is not None:
-            self.qin_f = qin if self.qin_f is None else self.qin_f + (qin - self.qin_f) * (1.0 - math.exp(-dt / 300.0))
+        if "FT-100" in self.installed:
+            qin = meas["FT-100"] if valid["FT-100"] else None
+            if qin is not None:
+                self.qin_f = qin if self.qin_f is None else self.qin_f + (qin - self.qin_f) * (1.0 - math.exp(-dt / 300.0))
+        else:
+            self.qin_f = self._inflow_mass_balance(t, dt, lv, q_raw, meas["drain_open"])
         # lọc trung bình trượt mũ (tau 20 s) cho tín hiệu chất lượng nước dùng ra quyết định an toàn
         aq = 1.0 - math.exp(-dt / 20.0)
         for key, tag in (("cl", "AIT-201"), ("ntu", "AIT-202"), ("ph", "AIT-203")):
@@ -294,11 +339,15 @@ class Gateway:
         self.out = None
         self.level_name = level_name
         self.sms_log = []
+        self.notify = []
         self.last = {}
         self.cmd_results = []
         self.conflicts = []
         self.stopped_s = 0.0
         self.recover_until = 0.0
+        self.manual = None
+        self.manual_s = 0.0
+        self.local_seq = 0
 
     # ---------- nhật ký & cảnh báo ----------
     def log_event(self, t, level, text):
@@ -315,10 +364,18 @@ class Gateway:
                           else "%s [%s]" % (verb, a["code"])})
         self.comms.push_event({"kind": "alarm", "action": action, "code": a["code"], "sev": a["sev"],
                                "msg": a["msg"], "t": t})
-        if action == "raise" and a["sev"] == "critical" and self.offline_since is not None and self.cfg["gateway"]["sms_fallback"]:
-            self.sms_log.append({"t": t, "text": "[%s] %s" % (self.id, a["msg"])})
-            self.comms.stats["sms"] += 1
-            self.logs.append({"t": t, "level": "info", "text": "Mất mạng IP – gửi SMS dự phòng tới tổ trực: %s" % a["msg"]})
+        if action == "raise" and a["sev"] == "critical":
+            sms = self.cfg["gateway"]["sms_fallback"] and self.cfg.get("hardware", {}).get("SMS", True)
+            if self.offline_since is None:
+                self.notify.append({"t": t, "code": a["code"], "via": "IP", "t_notified": t})
+            elif sms:
+                self.sms_log.append({"t": t, "text": "[%s] %s" % (self.id, a["msg"])})
+                self.comms.stats["sms"] += 1
+                self.logs.append({"t": t, "level": "info", "text": "Mất mạng IP – gửi SMS dự phòng tới tổ trực: %s" % a["msg"]})
+                self.notify.append({"t": t, "code": a["code"], "via": "SMS", "t_notified": t})
+            else:
+                self.logs.append({"t": t, "level": "info", "text": "Mất mạng IP, trạm không có modem SMS – báo động chờ gửi khi có mạng: %s" % a["msg"]})
+                self.notify.append({"t": t, "code": a["code"], "via": "chờ mạng", "t_notified": None})
 
     # ---------- kết nối ----------
     def on_offline(self, t, last_ack):
@@ -331,9 +388,37 @@ class Gateway:
     def on_online(self, t):
         dur = (t - self.offline_since) if self.offline_since is not None else 0.0
         self.offline_since = None
+        for n in self.notify:
+            if n["t_notified"] is None:
+                n["t_notified"] = t
         self.alarms.clear(t, "COMMS_OFFLINE")
         self.log_event(t, "info", "Khôi phục kết nối sau %.1f phút – chế độ (c) đồng bộ: gửi bản tin chào, %d bản ghi đệm"
                        % (dur / 60.0, len(self.comms.buf)))
+
+    def restart(self, t, t_fail, pumps, note):
+        """Mini PC khởi động lại sau khi treo: nạp kịch bản, mô hình dự báo và bộ đệm từ ổ SSD,
+        tiếp quản điều khiển từ mạch dự phòng theo kiểu không xung (khởi tạo lại bộ PI từ tần số đang chạy)."""
+        down = t - t_fail
+        self.sig_proc.restart()
+        c = self.ctrl
+        c.n = 0
+        c.sleep_state = "awake"
+        c.stage_timer = 0.0
+        c.destage_timer = 0.0
+        c.swap_until = None
+        c.next_tte = t
+        running = [i for i, p in enumerate(pumps) if p["running"]]
+        if len(running) == 1:
+            c.duty = running[0]
+        for i, p in enumerate(pumps):
+            self.pm.cmd[i] = p["running"]
+        self.comms.restart(t)
+        self.offline_since = t
+        self.last_offline_since = t_fail
+        self.alarms.raise_(t, "GW_WATCHDOG", "alarm", "Mini PC ngừng %.0f phút (watchdog phát hiện) – %s; đã khởi động lại và tiếp quản"
+                           % (down / 60.0, note))
+        self.log_event(t, "info", "Mini PC khởi động lại: nạp kịch bản v%s, mô hình dự báo và %d bản ghi đệm từ ổ SSD – tiếp quản không xung, chờ đồng bộ"
+                       % (self.script["version"], len(self.comms.buf)))
 
     # ---------- kịch bản ----------
     def apply_script(self, doc, t, source):
@@ -439,7 +524,7 @@ class Gateway:
             self.handle_command(cmd, t, "đồng bộ")
 
     # ---------- lệnh từ xa ----------
-    def handle_command(self, cmd, t, via):
+    def handle_command(self, cmd, t, via, src="remote"):
         cid = cmd["id"]
         if cid in self.applied_cmds:
             self._ack_cmd(t, cmd, "duplicate", "đã thực thi trước đó")
@@ -473,14 +558,116 @@ class Gateway:
                 why = "mở van xả VX-01 tới mức %.1f m" % self.flush["target"]
             else:
                 ok, why = False, "chỉ xả bể khi trạm đang dừng an toàn"
+        elif typ in MANUAL_CMDS:
+            ok, why = self._manual_cmd(typ, a, t, src)
         elif typ == "select_pt":
-            self.sig_proc.forced_pt = a.get("tag")
-            why = "dùng %s cho điều khiển" % a.get("tag")
+            if a.get("tag") in self.sig_proc.installed:
+                self.sig_proc.forced_pt = a.get("tag")
+                why = "dùng %s cho điều khiển" % a.get("tag")
+            else:
+                ok, why = False, "%s không được lắp đặt tại trạm" % a.get("tag")
         else:
             ok, why = False, "lệnh không hỗ trợ"
         self.applied_cmds.append(cid)
+        if src == "local":
+            text = "HMI tại trạm – %s: %s" % (typ, why if ok else "TỪ CHỐI – " + why)
+            self.cmd_results.append({"t": t, "id": cid, "type": typ, "status": "ok" if ok else "rejected", "reason": why})
+            self.logs.append({"t": t, "level": "info" if ok else "alarm", "text": text})
+            self.comms.push_event({"kind": "log", "t": t, "sev": "info", "text": text})
+            return ok
         self._ack_cmd(t, cmd, "ok" if ok else "rejected", why)
         self.log_event(t, "info" if ok else "alarm", "Lệnh từ xa %s (%s): %s" % (typ, via, why if ok else "TỪ CHỐI – " + why))
+        return ok
+
+    def local_command(self, typ, args, t):
+        """Lệnh của kỹ thuật viên trên màn hình HMI tại tủ điều khiển (không qua mạng, không hết hạn)."""
+        self.local_seq += 1
+        cmd = {"id": "L%04d" % self.local_seq, "type": typ, "args": dict(args or {}), "expires_at": t + 1e9}
+        return self.handle_command(cmd, t, "HMI tại trạm", "local")
+
+    def control_src(self):
+        return "auto" if self.manual is None else self.manual["src"]
+
+    def _manual_cmd(self, typ, a, t, src):
+        """Vận hành bằng tay: quyền tại chỗ ưu tiên hơn từ xa; lệnh từ xa có thời hạn (lease);
+        mọi lệnh tay vẫn đi qua lớp an toàn và bộ quản lý bơm (liên động, số lần khởi động)."""
+        m = self.manual
+        n = len(self.pump_tags)
+        pm = self.cfg["pump_model"]
+        lease = self.cfg["gateway"]["manual_lease_s"]
+        if src == "remote" and m is not None and m["src"] == "local":
+            return False, "trạm đang điều khiển TẠI CHỖ – quyền HMI tại trạm ưu tiên, từ chối lệnh từ xa"
+        if typ == "set_mode":
+            if a.get("mode", "manual") == "auto":
+                if m is None:
+                    return True, "trạm đã ở chế độ tự động"
+                self._end_manual(t, "lệnh " + SRC_NAME[src])
+                return True, "trở về TỰ ĐỘNG theo kịch bản v%s" % self.script["version"]
+            pumps = self.sig["pumps"] if self.sig else [{"running": False, "f": 0.0}] * n
+            if m is None:
+                self.manual = {"src": src, "t0": t, "until": t + lease if src == "remote" else None,
+                               "run": [bool(self.pm.cmd[i]) for i in range(n)],
+                               "f": [round(pumps[i]["f"], 1) if pumps[i]["running"] else 40.0 for i in range(n)],
+                               "valve": True}
+                self.alarms.raise_(t, "MANUAL_MODE", "warning", "Trạm ở chế độ TAY – điều khiển %s; kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động" % SRC_NAME[src])
+            else:
+                self._take_over(t, src, lease)
+            return True, "chuyển sang chế độ TAY %s%s" % (SRC_NAME[src], (", quyền có hạn %.0f phút, tự trở về tự động khi mất kết nối" % (lease / 60)) if src == "remote" else "")
+        if m is None:
+            return False, "trạm đang ở chế độ TỰ ĐỘNG – cần chuyển sang TAY trước"
+        self._take_over(t, src, lease)
+        if typ == "valve":
+            m["valve"] = bool(a.get("open", True))
+            return True, "%s van MV-02" % ("mở" if m["valve"] else "đóng")
+        i = int(a.get("pump", 0))
+        if i < 0 or i >= n:
+            return False, "không có bơm %s" % i
+        tag = self.pump_tags[i]
+        if "f_hz" in a:
+            m["f"][i] = clamp(float(a["f_hz"]), pm["f_min_hz"], pm["f_max_hz"])
+        if typ == "pump_start":
+            if self.sig and self.sig["pumps"][i]["fault"]:
+                return False, "%s đang báo lỗi biến tần/bơm" % tag
+            m["run"][i] = True
+            return True, "chạy %s ở %.1f Hz" % (tag, m["f"][i])
+        if typ == "pump_stop":
+            m["run"][i] = False
+            return True, "dừng %s" % tag
+        return True, "đặt tần số %s = %.1f Hz" % (tag, m["f"][i])
+
+    def _take_over(self, t, src, lease):
+        m = self.manual
+        if m["src"] != src:
+            self.log_event(t, "info", "Quyền điều khiển TAY chuyển sang %s" % SRC_NAME[src])
+            m["src"] = src
+            self.alarms.active.get("MANUAL_MODE", {})["msg"] = "Trạm ở chế độ TAY – điều khiển %s; kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động" % SRC_NAME[src]
+        m["until"] = t + lease if src == "remote" else None
+
+    def _end_manual(self, t, why):
+        m = self.manual
+        self.manual = None
+        running = [i for i, c in enumerate(self.pm.cmd) if c]
+        if running:
+            self.ctrl.duty = running[0]  # bơm đang chạy tay trở thành bơm chính – tránh đảo bơm khi tiếp quản
+        self.alarms.clear(t, "MANUAL_MODE")
+        self.log_event(t, "info", "Kết thúc chế độ TAY %s sau %.0f phút (%s) – kịch bản v%s tiếp quản"
+                       % (SRC_NAME[m["src"]], (t - m["t0"]) / 60.0, why, self.script["version"]))
+
+    def _manual_output(self, t, dt):
+        m = self.manual
+        if m["src"] == "remote":
+            if self.offline_since is not None:
+                self.log_event(t, "safety", "Mất kết nối khi đang điều khiển TAY từ xa – tự trở về TỰ ĐỘNG (không để trạm chạy theo lệnh cũ)")
+                self._end_manual(t, "mất kết nối")
+                return None
+            if t >= m["until"]:
+                self._end_manual(t, "hết thời hạn quyền điều khiển từ xa")
+                return None
+        self.manual_s += dt
+        n = len(m["run"])
+        order = [i for i in range(n) if m["run"][i]] + [i for i in range(n) if not m["run"][i]]
+        return {"n": sum(1 for r in m["run"] if r), "f_ref": max([m["f"][i] for i in range(n) if m["run"][i]] or [0.0]),
+                "order": order, "p_set": self.ctrl.p_set}
 
     def _ack_cmd(self, t, cmd, status, reason):
         self.cmd_results.append({"t": t, "id": cmd["id"], "type": cmd["type"], "status": status, "reason": reason})
@@ -495,7 +682,8 @@ class Gateway:
                 "p": p, "p_min": p if p is not None else 0.0, "p_max": p if p is not None else 0.0,
                 "p_set": L.get("p_set"), "q": q, "q_min": q if q is not None else 0.0, "q_max": q if q is not None else 0.0,
                 "q_in": L.get("q_in"), "level": L.get("level"), "cl": L.get("cl"), "ntu": L.get("ntu"), "ph": L.get("ph"),
-                "kw": L.get("kw"), "kwh": L.get("kwh"), "f1": L.get("f1"), "f2": L.get("f2"), "mode": self.mode()}
+                "kw": L.get("kw"), "kwh": L.get("kwh"), "f1": L.get("f1"), "f2": L.get("f2"), "mode": self.mode(),
+                "ctl": self.control_src()}
 
     def mode(self):
         st = self.safety.state
@@ -537,9 +725,19 @@ class Gateway:
                             "Lưu lượng cao hơn dự báo %.1f m³/h kéo dài – nghi rò rỉ/vỡ ống" % self.forecaster.resid)
         else:
             self.alarms.clear(t, "FLOW_ANOMALY")
+        mo = self._manual_output(t, dt) if self.manual is not None else None
         co = self.ctrl.step(t, dt, sig, self)
+        if mo is not None:
+            co = mo
         fo = self.safety.evaluate(t, dt, sig, co, self, meas)
         run = self.pm.apply(t, fo["n"], fo["order"], meas["pumps"], self)
+        m = self.manual
+        if mo is not None and fo["block"] and not fo["block"].startswith("chờ van"):
+            # liên động/cắt an toàn ở chế độ tay: bơm không tự chạy lại, người vận hành phải ra lệnh mới
+            for i, r in enumerate(m["run"]):
+                if r:
+                    m["run"][i] = False
+                    self.log_event(t, "safety", "Liên động an toàn dừng %s khi đang chạy TAY (%s) – cần lệnh chạy lại" % (self.pump_tags[i], fo["block"]))
         drain = False
         if self.flush is not None:
             if not self.safety.safe_stop or sig["level"] <= self.flush["target"]:
@@ -551,10 +749,14 @@ class Gateway:
         if int(t) % 60 == 0:
             self.alarms.expire_events(t)
         f_ref = fo["f_ref"]
+        if mo is not None:
+            f_each = [min(m["f"][i], self.safety.f_cap) if run[i] else 0.0 for i in range(len(run))]
+        else:
+            f_each = [f_ref if r else 0.0 for r in run]
         self.last = {"p": sig["p_ctrl"], "p_set": self.ctrl.p_set, "q": sig["q_f"], "q_in": sig["q_in_f"], "level": sig["level"],
                      "cl": sig["cl"], "ntu": sig["ntu"], "ph": sig["ph"], "kw": meas["kw"], "kwh": meas["kwh"],
                      "f1": meas["pumps"][0]["f"], "f2": meas["pumps"][1]["f"]}
         self.comms.tick(t, dt)
-        self.out = {"run": run, "f_ref": [f_ref if r else 0.0 for r in run], "outlet_open": fo["outlet_open"],
+        self.out = {"run": run, "f_ref": f_each, "outlet_open": fo["outlet_open"] and (mo is None or m["valve"]),
                     "drain_open": drain}
         return self.out

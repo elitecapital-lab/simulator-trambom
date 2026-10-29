@@ -33,7 +33,7 @@ trước khi áp dụng.
   "p": 2.43, "p_min": 2.43, "p_max": 2.43, "p_set": 2.45,
   "q": 19.8, "q_min": 19.8, "q_max": 19.8, "q_in": 21.6, "level": 3.41,
   "cl": 0.55, "ntu": 0.17, "ph": 7.2, "kw": 1.96, "kwh": 22.7,
-  "f1": 41.8, "f2": 0.0, "mode": "a"
+  "f1": 41.8, "f2": 0.0, "mode": "a", "ctl": "auto"
 }
 ```
 
@@ -47,7 +47,29 @@ trọng số, kèm `p_min/p_max`, `q_min/q_max`.
   "issued_at": 23400, "expires_at": 25200, "by": "Điều độ viên" }
 ```
 
-Các lệnh hỗ trợ: `set_override`, `clear_override`, `rotate_pumps`, `reset_safe_stop`, `ack_alarm`, `flush_tank`, `select_pt`.
+Các lệnh hỗ trợ: `set_override`, `clear_override`, `rotate_pumps`, `reset_safe_stop`, `ack_alarm`, `flush_tank`, `select_pt`,
+và nhóm lệnh **điều khiển tay** ở mục 1.1.
+
+### 1.1. Điều khiển bơm từ xa và tại chỗ (chế độ TAY bằng phần mềm)
+
+| Lệnh | Tham số | Tác dụng |
+|---|---|---|
+| `set_mode` | `{"mode": "manual" \| "auto"}` | Lấy quyền TAY (kịch bản tạm ngưng, lớp an toàn vẫn chạy) hoặc trả về TỰ ĐỘNG |
+| `pump_start` | `{"pump": 0, "f_hz": 40}` | Chạy bơm (0 = P-01, 1 = P-02) ở tần số đặt |
+| `pump_stop` | `{"pump": 1}` | Dừng bơm |
+| `pump_speed` | `{"pump": 0, "f_hz": 45}` | Đặt tần số 25–50 Hz |
+| `valve` | `{"open": false}` | Đóng/mở van MV-02 |
+
+Quy tắc:
+
+- **Quyền tại chỗ ưu tiên.** Lệnh từ HMI tại trạm (`local_command`, không qua mạng, không hết hạn) giành quyền ngay. Khi tại chỗ đang giữ quyền, mọi lệnh tay từ trung tâm bị từ chối kèm lý do.
+- **Lệnh từ xa ngắn hạn.** Lệnh tay từ trung tâm có thời hạn `gateway.manual_cmd_ttl_s` = 60 s; lệnh tới trễ hơn sẽ bị hủy.
+- **Quyền từ xa có lease.** Quyền TAY từ xa có thời hạn `gateway.manual_lease_s` = 30 phút, mỗi lệnh gia hạn.
+- **Tự trở về TỰ ĐỘNG** khi gateway phát hiện mất kết nối (chế độ b) hoặc khi hết lease. Trạm không bao giờ chạy theo lệnh tay của một người không còn nhìn thấy trạm.
+- **An toàn vẫn đứng trên lệnh tay.** Liên động (van MV-02 phải mở hết), giới hạn tần số khi áp > 4,0 bar, cắt áp rất cao, chống chạy khô, dừng an toàn chất lượng, giới hạn 6 lần khởi động/giờ vẫn áp dụng. Bị cắt an toàn khi đang chạy tay thì bơm không tự chạy lại.
+- **Báo trạng thái quyền.** Bản ghi đo xa mang trường `ctl` = `auto` / `remote` / `local`; báo động `MANUAL_MODE` (cảnh báo) bật suốt thời gian chạy tay. Lệnh tại chỗ được gửi lên dạng sự kiện nhật ký để trung tâm biết ai đã thao tác.
+
+Xem kịch bản S12 và chế độ **Màn hình HMI** của bản web. Màn hình này có hai vị trí: *Tại trạm · HMI-01* đọc trực tiếp gateway; *Trung tâm · SCADA* chỉ thấy dữ liệu máy chủ đã nhận.
 
 ## 2. Phát hiện mất mạng
 

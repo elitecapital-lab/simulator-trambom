@@ -73,7 +73,7 @@ export function blockDiagramSVG() {
   s.push(box(150, 268, 300, 50, '4G/LTE · MQTT trên TLS 1.2', []));
   s.push(box(470, 268, 260, 50, 'Nhịp tim 10 s · mất mạng sau 60 s', []));
   s.push(box(750, 268, 330, 50, 'SMS dự phòng cho báo động nghiêm trọng', []));
-  s.push(layer(334, 140, '2 · Edge gateway GW-01 (tủ CP-01, có UPS)'));
+  s.push(layer(334, 140, '2 · Edge gateway GW-01 · mini PC MPC-01 (tủ mới CP-02, có UPS)'));
   s.push(box(150, 358, 175, 104, 'Thu thập & kiểm tra', ['chu kỳ 1 s, lọc nhiễu', 'phạm vi 4–20 mA (NE43)', 'kẹt, lệch PT-101/PT-102', 'biểu quyết với mô hình bơm']));
   s.push(box(340, 358, 185, 104, 'LỚP AN TOÀN', ['ưu tiên cao nhất', 'cắt áp cao, chống chạy khô', 'dừng an toàn chất lượng', 'giới hạn số lần khởi động'], 'safe'));
   s.push(box(540, 358, 185, 104, 'Kịch bản điều khiển', ['áp đặt theo lưu lượng + PI', 'ghép/tách & luân phiên bơm', 'cơ bản: ngưỡng', 'nâng cao: dự báo 168 h'], 'key'));
@@ -81,7 +81,7 @@ export function blockDiagramSVG() {
   s.push(box(915, 358, 165, 104, 'Khi mất kết nối', ['tự vận hành bằng kịch bản', 'đã lưu, biên áp +0,1 bar', 'lệnh ghi đè có thời hạn', 'giám sát & quay lui']));
   s.push(layer(482, 150, '1 · Cảm biến, chấp hành & quá trình'));
   s.push(box(150, 506, 250, 112, 'Cảm biến', ['PT-101 / PT-102 áp lực đầu ra', 'FT-101 lưu lượng ra · FT-100 vào', 'LT-101 mức siêu âm · LSLL-101 phao', 'AIT-201 clo · AIT-202 đục · AIT-203 pH', 'PI-101/102 đồng hồ kim tại chỗ']));
-  s.push(box(415, 506, 200, 112, 'Chấp hành', ['VFD-01/02 → bơm P-01/P-02', 'MV-02 van điện đầu ra', 'VX-01 van xả đáy', 'công tơ EM-101']));
+  s.push(box(415, 506, 200, 112, 'Chấp hành (tủ CP-01)', ['VFD-01/02 hiện có → P-01/P-02', 'PID nội dự phòng (watchdog)', 'MV-02 van điện đầu ra', 'VX-01 xả đáy · EM-101']));
   s.push(box(630, 506, 450, 112, 'Quá trình thủy lực', ['Ống cấp thành phố → van phao FV-01 → bể T-01 (192 m³)', '→ P-01/P-02 (biến tần, song song) → bình tích áp HT-01', '→ FT-101 → MV-02 → mạng lưới DMA-A (≈2.400 người)', '→ bồn mái hộ dân; rò rỉ Q = C·P^1,18']));
   s.push(arrow(275, 506, 237, 462, 'số đo'));
   s.push(arrow(632, 462, 515, 506, 'lệnh'));

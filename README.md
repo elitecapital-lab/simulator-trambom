@@ -3,10 +3,22 @@
 Mô phỏng tương tác hệ thống điều khiển tự động cho một trạm bơm tăng áp nhỏ **không người trực** phục vụ khu dân cư,
 dành cho sinh viên các học phần Tự động hóa, Hệ thống nhúng/IoT và Kỹ thuật cấp thoát nước.
 
-- **Bản web 3D** (Three.js, chạy trong trình duyệt): mô hình trạm bơm với bể chứa, 2 bơm biến tần, đường ống, van, đồng hồ
-  áp lực, cảm biến lưu lượng, mức nước, chất lượng nước (clo dư, độ đục, pH), bình tích áp, tủ điều khiển với edge gateway;
-  biểu đồ theo thời gian; bảng so sánh trực tiếp với phương án lịch cố định; tiêm sự cố; trình soạn kịch bản cho học viên;
-  bảng điều khiển trung tâm cho 4 trạm.
+- **Bản web 3D** (Three.js, chạy trong trình duyệt) gồm:
+  - mô hình trạm bơm: bể chứa, 2 bơm biến tần, đường ống, van, đồng hồ áp lực, cảm biến lưu lượng, mức nước, chất lượng nước (clo dư, độ đục, pH), bình tích áp;
+  - **tủ động lực hiện trạng CP-01** và **tủ mới CP-02** (mini PC chạy edge gateway, I/O từ xa, router 4G, UPS, màn HMI);
+  - biểu đồ theo thời gian và bảng so sánh trực tiếp với phương án lịch cố định;
+  - tiêm sự cố, trình soạn kịch bản cho học viên, bảng điều khiển trung tâm cho 4 trạm.
+- **Phân biệt rõ ba nhóm thiết bị:**
+  - *hiện trạng nhà máy*: bơm, biến tần, bể, van, phao, tủ động lực;
+  - *giải pháp đưa vào*: mini PC tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ, I/O, cảm biến, 4G, UPS, rơ-le watchdog;
+  - *khuyến nghị*: nên có để vận hành trơn tru.
+
+  Bộ lọc màu trên khung 3D, tab **Thiết bị** và tùy chọn "không lắp" cho thấy bằng số liệu mỗi thiết bị đáng giá bao nhiêu. Xem [07](docs/07-hien-trang-va-giai-phap.md).
+- **Chế độ Màn hình HMI** (2D, phong cách ISA-101) có hai vị trí vận hành:
+  - *Tại trạm · HMI-01*: dữ liệu trực tiếp từ gateway, lệnh đi thẳng;
+  - *Trung tâm · SCADA*: chỉ thấy dữ liệu máy chủ nhận qua MQTT, lệnh có thời hạn.
+
+  Cả hai đều có điều khiển bơm TAY (chạy/dừng, đặt tần số, đóng/mở van), quyền tại chỗ ưu tiên và tự trở về tự động khi mất mạng.
 - **Lõi mô phỏng Python** (chỉ thư viện chuẩn): chạy kịch bản không giao diện, xuất bảng KPI và biểu đồ, kiểm thử tự động,
   chấm bài học viên. Lõi JavaScript của bản web là bản chuyển đổi một-một, được kiểm thử đối chiếu cho cùng kết quả.
 
@@ -34,7 +46,8 @@ Lệnh này chạy máy chủ web tĩnh tại `http://127.0.0.1:8000/web/` và m
 `/web/`. Không mở trực tiếp `index.html` bằng `file://` vì trình duyệt chặn ES module. Three.js được đóng gói sẵn trong
 `web/vendor/` nên chạy được khi không có Internet (phông chữ sẽ dùng phông hệ thống).
 
-Mở thẳng một kịch bản: `http://127.0.0.1:8000/web/#S4-advanced`.
+Mở thẳng một kịch bản: `http://127.0.0.1:8000/web/#S4-advanced`. Mở thẳng màn hình HMI: `#S12-basic-hmi`. Nút
+**Mô phỏng 3D / Màn hình HMI** trên thanh trên cùng chuyển qua lại hai giao diện.
 
 Triển khai cho cả lớp: bật GitHub Pages (hoặc chép cả kho lên một máy chủ web tĩnh bất kỳ) rồi mở đường dẫn `…/web/`.
 Không cần máy chủ ứng dụng: toàn bộ mô phỏng chạy trong trình duyệt của học viên.
@@ -52,6 +65,8 @@ python -m trambom run S3 --level advanced    # chạy một kịch bản, in b�
 python -m trambom compare                    # chạy mọi kịch bản ở cả hai mức → docs/ket-qua/README.md + hình
 python -m trambom network --hours 24         # 4 trạm trong mạng lưới, bảng điều hành tổng quát
 python -m trambom check-student student/kich_ban_nguong.py   # chấm kịch bản theo ngưỡng của học viên
+python -m trambom options                    # so sánh "có lắp / không lắp" từng thiết bị → docs/ket-qua/whatif.md
+python -m trambom run S5 --off PT-102        # chạy kịch bản khi bỏ bớt thiết bị (PT-102, FT-100_pulse, AIT-201/202/203, SMS, VFD_PID_fallback)
 ```
 
 ### Kiểm thử
@@ -72,6 +87,8 @@ mọi kịch bản, mẫu bài học viên, và đối chiếu Python–JavaScri
 | (b) Mất mạng – tự vận hành | Phát hiện sau 60 s không có ACK nhịp tim; chạy kịch bản đã lưu, cộng biên áp an toàn, lưu đệm và nén dữ liệu, SMS dự phòng | S2, S9 |
 | (c) Đồng bộ khi có mạng lại | Bắt tay đồng bộ, hợp nhất 3 chiều tham số (bảo thủ cho tham số an toàn), lệnh hết hạn bị hủy, phát lại bộ đệm, quay lui kịch bản lỗi | S3, S3b, S9 |
 | (d) Cảnh báo và dừng an toàn | Độ đục/clo/pH vượt QCVN → dừng bơm, đóng van đầu ra, chờ đặt lại; áp cao → giới hạn tần số, áp rất cao → cắt bơm; chống chạy khô | S4, S5, S6, S7, S8, S9 |
+| Mini PC ngừng (watchdog) | Rơ-le watchdog nhả sau 5 s → biến tần chạy PID nội 3,0 bar; mất dừng an toàn chất lượng, ghép bơm, đo xa; khởi động lại → đồng bộ (c) | S11 |
+| Điều khiển TAY từ xa / tại chỗ | Chạy/dừng bơm, đặt tần số, đóng/mở van; quyền tại chỗ ưu tiên; quyền từ xa có hạn và tự hủy khi mất mạng; lớp an toàn vẫn ưu tiên | S12 |
 
 ## Kết quả chính (từ `python -m trambom compare`)
 
@@ -106,11 +123,13 @@ Bảng đầy đủ cho từng kịch bản: [docs/ket-qua/README.md](docs/ket-q
 | [04 – Độ tin cậy khi mất kết nối](docs/04-do-tin-cay-mat-ket-noi.md) | Rủi ro, giới hạn của kịch bản đã lưu, chiến lược dự phòng, kế hoạch kiểm thử |
 | [05 – Hướng dẫn học tập](docs/05-huong-dan-hoc-tap.md) | Mục tiêu Bloom/DOK, trình tự bài thực hành, phân hóa cơ bản/nâng cao, thang đánh giá |
 | [06 – So sánh điện năng và chất lượng dịch vụ](docs/06-so-sanh-dien-nang-chat-luong.md) | Bảng tổng hợp lịch cố định so với điều khiển thông minh và phân tích |
+| [07 – Hiện trạng và giải pháp](docs/07-hien-trang-va-giai-phap.md) | Phân biệt thiết bị hiện trạng / giải pháp / khuyến nghị; hai tủ CP-01 và CP-02; cấu hình mini PC; danh sách I/O; phân cấp dự phòng khi mini PC hỏng; điều khiển tay từ xa và tại chỗ; giá trị từng thiết bị theo mô phỏng "có lắp / không lắp"; lộ trình triển khai |
 
 ## Cấu trúc thư mục
 
 ```
-config/      station.json (tham số, ngưỡng, kịch bản điều khiển), scenarios.json, components.json – dùng chung Python & web
+config/      station.json (tham số, ngưỡng, kịch bản điều khiển, tùy chọn lắp đặt `hardware`), scenarios.json,
+             components.json (danh mục 56 thiết bị có phân loại hiện trạng / giải pháp / khuyến nghị) – dùng chung Python & web
 trambom/     lõi mô phỏng Python: physics, sensors, gateway, control, safety, comms, server, baseline, kpi, engine, network
 web/         bản 3D: index.html, css/, js/sim (lõi JS), js/ui (cảnh 3D, biểu đồ, bảng), vendor/three (Three.js r160, MIT)
 student/     mẫu bài tập (theo ngưỡng, dự báo, điều phối mạng lưới) và loi_giai/ (lời giải tham khảo cho giảng viên)

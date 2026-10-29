@@ -146,10 +146,15 @@ class SafetyLayer:
                 A.clear(t, "LEVEL_LL")
         A.set(t, "DRY_RUN_FLOAT", meas["LSLL-101"], "critical", "Phao LSLL-101 báo cạn – mạch cứng cắt bơm")
         # 5) chất lượng nước
+        installed = gw.sig_proc.installed
         for key in ("cl", "ntu", "ph"):
             v = sig[key]
             tag = QUALITY_TAGS[key]
             wl, wh, tl, th, delay = self._quality_bands(key)
+            if tag not in installed:
+                # không có máy phân tích online: lớp an toàn không thể bảo vệ chất lượng nước
+                self.q_timer[key] = 0.0
+                continue
             if v is None:
                 self.q_timer[key] = (self.q_timer[key] + dt) if s["quality_sensor_fault_action"] == "safe_stop" else 0.0
                 A.clear(t, key.upper() + "_WARN")
@@ -190,7 +195,8 @@ class SafetyLayer:
             block = "chờ van MV-02 mở hết (trình tự: mở van trước, chạy bơm sau)"
         n = co["n"] if not block else 0
         if block and co["n"] > 0 and block != self.last_block:
-            gw.log_event(t, "safety", "Ưu tiên an toàn: chặn lệnh chạy %d bơm của kịch bản (%s)" % (co["n"], block))
+            who = "của người vận hành" if gw.manual is not None else "của kịch bản"
+            gw.log_event(t, "safety", "Ưu tiên an toàn: chặn lệnh chạy %d bơm %s (%s)" % (co["n"], who, block))
         self.last_block = block
         f_ref = co["f_ref"]
         if f_ref > self.f_cap:

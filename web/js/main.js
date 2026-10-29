@@ -3,6 +3,7 @@ import { NetworkSim } from './sim/network.js';
 import { fmtClock } from './sim/util.js';
 import { TimeChart } from './ui/charts.js';
 import { h, fmt } from './ui/dom.js';
+import { HmiView } from './ui/hmi.js';
 import { Intro } from './ui/intro.js';
 import { Panels } from './ui/panels.js';
 import { StationScene } from './ui/scene3d.js';
@@ -18,6 +19,7 @@ async function loadData() {
 const SPEEDS = [1, 10, 60, 300, 1200, 3600];
 const WINDOWS = [['6 h', 6 * 3600], ['24 h', 86400], ['Tất cả', Infinity]];
 const MODE_BANNER = {
+  x: (a) => `MINI PC NGỪNG – ${a.st.gw_dead.note()} · mất dừng an toàn theo chất lượng, ghép bơm, đo xa`,
   b: (a) => `(b) MẤT KẾT NỐI – gateway tự vận hành bằng kịch bản v${a.st.gw.script.version} đã lưu · đệm ${a.st.gw.comms.buf.length} bản ghi · cộng biên áp +${fmt(a.st.gw.script.params.offline.margin_bar, 1)} bar`,
   c: (a) => `(c) ĐANG ĐỒNG BỘ – phát lại ${a.st.gw.comms.buf.length} bản ghi đệm, hợp nhất kịch bản, nhận lệnh còn hạn`,
   d: (a) => {
@@ -32,7 +34,7 @@ const MODE_BANNER = {
 
 class App {
   constructor(data) {
-    this.cfg = data.station; this.scenarios = data.scenarios; this.components = data.components;
+    this.baseCfg = data.station; this.cfg = structuredClone(data.station); this.scenarios = data.scenarios; this.components = data.components;
     document.getElementById('boot')?.remove();
     this.speed = 60; this.running = false; this.acc = 0; this.win = 86400; this.studentLoaded = false;
     this.panels = new Panels(this);
@@ -40,11 +42,16 @@ class App {
     this._initTabs();
     this.scene3d = new StationScene(document.getElementById('vp'), this.components, (tag) => this.openDrawer(tag));
     this._initViewportTools();
+    this.setScope('all');
+    this.hmi = new HmiView(document.getElementById('vp'), this);
+    this.viewMode = '3d';
+    document.querySelectorAll('#view-seg button').forEach((b) => b.addEventListener('click', () => this.setView(b.dataset.view)));
     this._initCharts();
     this.panels.buildKpi(document.getElementById('kpi'));
     this.intro = new Intro(document.getElementById('intro'), this.cfg, this.scenarios, (sc, lvl) => this.start(sc, lvl));
-    const m = location.hash.match(/^#(S\d+B?|S0)(?:-(basic|advanced))?$/i);
-    if (m) { this.intro.hide(); this.start(m[1].toUpperCase(), m[2] || 'basic'); } else { this.start('S1', 'basic', false); this.intro.show(0); }
+    const m = location.hash.match(/^#(S\d+B?|S0)(?:-(basic|advanced))?(?:-(hmi|3d))?$/i);
+    if (m) { this.intro.hide(); this.start(m[1].toUpperCase(), m[2] || 'basic'); if (m[3]) this.setView(m[3].toLowerCase()); } else { this.start('S1', 'basic', false); this.intro.show(0); }
+    this._syncView();
     this._last = performance.now(); this._lastUi = 0; this._lastChart = 0;
     requestAnimationFrame((t) => this.loop(t));
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.onTheme());
@@ -75,7 +82,7 @@ class App {
     this._applyThemeInit = applyTheme;
   }
   _initTabs() {
-    const tabs = [['mon', 'Giám sát'], ['fault', 'Sự cố'], ['script', 'Kịch bản'], ['center', 'Trung tâm'], ['log', 'Nhật ký'], ['lesson', 'Bài học']];
+    const tabs = [['mon', 'Giám sát'], ['equip', 'Thiết bị'], ['fault', 'Sự cố'], ['script', 'Kịch bản'], ['center', 'Trung tâm'], ['log', 'Nhật ký'], ['lesson', 'Bài học']];
     const bar = document.getElementById('tabs'), panes = document.getElementById('panes');
     this.tabBtns = {}; this.panes = {};
     for (const [k, label] of tabs) {
@@ -85,6 +92,7 @@ class App {
       panes.append(p); this.panes[k] = p;
     }
     this.panels.buildMonitor(this.panes.mon);
+    this.panels.buildEquipment(this.panes.equip);
     this.panels.buildLog(this.panes.log);
     this.panels.buildLesson(this.panes.lesson);
     this.tab('mon');
@@ -94,12 +102,39 @@ class App {
     for (const [n, b] of Object.entries(this.tabBtns)) { b.classList.toggle('on', n === k); b.setAttribute('aria-selected', n === k); this.panes[n].hidden = n !== k; }
     this._updatePanels(true);
   }
+  setView(v) {
+    this.viewMode = v === 'hmi' ? 'hmi' : '3d';
+    document.getElementById('vp').classList.toggle('hmi-on', this.viewMode === 'hmi');
+    this.hmi.show(this.viewMode === 'hmi');
+    if (this.viewMode !== 'hmi') requestAnimationFrame(() => this.scene3d.resize());
+    this._syncView();
+  }
+  _syncView() { document.querySelectorAll('#view-seg button').forEach((b) => b.classList.toggle('on', b.dataset.view === this.viewMode)); }
+  /** Đổi tùy chọn lắp đặt thiết bị (cfg.hardware) rồi chạy lại kịch bản hiện tại. */
+  applyHardware(hw) {
+    this.cfg = structuredClone(this.baseCfg);
+    Object.assign(this.cfg.hardware, hw);
+    const off = Object.entries(hw).filter(([, v]) => !v).map(([k]) => k);
+    this.start(this.scenario.id, this.level, this.running);
+    this.toast(off.length ? 'Chạy lại KHÔNG lắp: ' + off.join(', ') : 'Chạy lại với đủ thiết bị');
+  }
+  scopeOf(tag) { return this.components.find((c) => c.tag === tag)?.scope ?? null; }
+  setScope(k) {
+    this.scope = k;
+    this.scene3d.setScopeFilter(k, (tag) => this.scopeOf(tag));
+    this.scopeSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.scope === k));
+    if (this.panels.updateEquipment) this.panels.updateEquipment(true);
+  }
   setBadge(k, n) { const b = this.tabBtns[k]?.querySelector('.badge'); if (!b) return; b.hidden = !n; b.textContent = n; }
   _initViewportTools() {
     const tools = document.getElementById('vp-tools');
     for (const [k, label] of [['overview', 'Tổng quan'], ['tank', 'Bể chứa'], ['pumps', 'Cụm bơm'], ['quality', 'Chất lượng nước'], ['cabinet', 'Tủ điều khiển'], ['network', 'Khu dân cư']]) {
       tools.append(h('button', { class: 'btn small', onclick: () => this.scene3d.goto(k) }, label));
     }
+    this.scopeSeg = h('div', { class: 'seg scope-seg', role: 'group', 'aria-label': 'Lọc theo phạm vi thiết bị' },
+      ...[['all', 'Tất cả'], ['hien_trang', 'Hiện trạng'], ['giai_phap', 'Giải pháp'], ['khuyen_nghi', 'Khuyến nghị']].map(([k, label]) =>
+        h('button', { 'data-scope': k, onclick: () => this.setScope(k) }, k === 'all' ? label : h('span', {}, h('i', { class: 'sdot s-' + k }), label))));
+    tools.append(this.scopeSeg);
     const modes = ['Nhãn: ẩn', 'Nhãn: chính', 'Nhãn: tất cả'];
     let lm = 1;
     tools.append(h('button', { class: 'btn small', onclick: (e) => { lm = (lm + 1) % 3; this.scene3d.setLabelMode(lm); e.target.textContent = modes[lm]; } }, modes[1]));
@@ -148,7 +183,7 @@ class App {
   }
   event(ev) {
     this.net.applyEvent(ev, this.net.t);
-    const names = { link_down: 'Ngắt kết nối 4G', link_up: 'Khôi phục kết nối 4G', inflow_quality: 'Thay đổi chất lượng nước nguồn', supply: 'Mất nước nguồn', burst: 'Vỡ ống', demand_scale: 'Nhu cầu tăng', pump_fault: 'Lỗi bơm', pump_repair: 'Sửa bơm', sensor_fault: 'Lỗi cảm biến ' + (ev.tag ?? ''), sensor_repair: 'Sửa cảm biến ' + (ev.tag ?? '') };
+    const names = { link_down: 'Ngắt kết nối 4G', link_up: 'Khôi phục kết nối 4G', inflow_quality: 'Thay đổi chất lượng nước nguồn', supply: 'Mất nước nguồn', burst: 'Vỡ ống', demand_scale: 'Nhu cầu tăng', pump_fault: 'Lỗi bơm', pump_repair: 'Sửa bơm', sensor_fault: 'Lỗi cảm biến ' + (ev.tag ?? ''), sensor_repair: 'Sửa cảm biến ' + (ev.tag ?? ''), gateway_fail: 'Mini PC (edge gateway) ngừng hoạt động', gateway_restore: 'Khởi động lại mini PC' };
     this.toast((names[ev.type] || ev.type) + ' · ' + (ev.station ?? 'ST-01'));
     this._updatePanels(true);
   }
@@ -169,14 +204,14 @@ class App {
       if (this.acc > this.speed * 0.5) this.acc = 0;
       this._stepsRate = (this._stepsRate ?? 0) * 0.9 + 0.1 * (steps / Math.max(realDt, 1e-3));
     }
-    this.scene3d.update(realDt, this.view());
+    if (this.viewMode !== 'hmi') this.scene3d.update(realDt, this.view());
     if (ts - this._lastUi > 250) { this._lastUi = ts; this._updatePanels(false); this._syncHeader(); }
     if (ts - this._lastChart > 600) { this._lastChart = ts; this.updateCharts(); }
     requestAnimationFrame((t) => this.loop(t));
   }
   view() {
     const g = this.st.gw;
-    return { plant: this.st.plant, sig: g.sig, mode: g.mode(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
+    return { plant: this.st.plant, sig: g.sig, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
   }
   _syncHeader() {
     document.getElementById('btn-play').textContent = this.running ? 'Tạm dừng' : 'Chạy';
@@ -186,11 +221,11 @@ class App {
     document.getElementById('clock').textContent = fmtClock(this.st.t, this.cfg.sim.start_dow);
     const real = this.running ? Math.round(this._stepsRate ?? 0) : 0;
     document.getElementById('speed-real').textContent = this.running && real < this.speed * 0.8 ? `thực ×${real}` : '';
-    const mode = this.st.gw.mode();
+    const mode = this.st.gw_dead ? 'x' : this.st.gw.mode();
     document.querySelectorAll('#modes .mode').forEach((m) => m.classList.toggle('on', m.dataset.m === mode));
     const bn = document.getElementById('banner');
     if (mode === 'a') bn.hidden = true;
-    else { bn.hidden = false; bn.className = 'banner ' + mode; bn.textContent = MODE_BANNER[mode](this); }
+    else { bn.hidden = false; bn.className = 'banner ' + (mode === 'x' ? 'd' : mode); bn.textContent = MODE_BANNER[mode](this); }
   }
   _updatePanels(force) {
     if (!this.st) return;
@@ -201,6 +236,7 @@ class App {
     if (this.curTab === 'center' || force) P.updateCenter();
     if (this.curTab === 'log') P.updateLog();
     P.updateKpi();
+    if (this.hmi?.visible) this.hmi.update(force);
     if (this.drawerTag) this.openDrawer(this.drawerTag, true);
     this._labels();
   }
@@ -223,9 +259,19 @@ class App {
     sc.setLabel('VX-01', pl.drain_open ? 'ĐANG XẢ' : 'đóng', pl.drain_open);
     sc.setLabel('PSV-01', pl.q_relief > 0 ? `xả ${fmt(pl.q_relief, 1)} m³/h` : 'đóng', pl.q_relief > 0);
     sc.setLabel('FV-01', pl.q_in > 0.1 ? 'mở' : 'đóng');
+    const dead = Boolean(this.st.gw_dead), fb = this.st.gw_dead;
+    const ctlName = { auto: 'tự động', remote: 'TAY từ xa', local: 'TAY tại chỗ' }[g.controlSrc()];
     sc.setLabel('CP-01', `${fmt(pl.kw, 2)} kW`);
-    sc.setLabel('GW-01', { a: '(a)', b: '(b) tự vận hành', c: '(c) đồng bộ', d: '(d) cảnh báo' }[g.mode()], g.mode() === 'd');
-    sc.setLabel('RT-01', { online: '4G trực tuyến', offline: 'MẤT KẾT NỐI', resync: 'đồng bộ…' }[g.comms.state], g.comms.state === 'offline');
+    pl.pumps.forEach((pu, i) => sc.setLabel('VFD-0' + (i + 1), pu.fault ? 'LỖI' : pu.running ? `${fmt(pu.f, 1)} Hz · ${fmt(pu.amps, 1)} A` : 'dừng', pu.fault));
+    sc.setLabel('WDR-01', dead ? (fb.enabled && fb.active ? 'NHẢ → PID biến tần' : 'NHẢ') : 'giữ (có xung sống)', dead);
+    sc.setLabel('EM-101', `${fmt(pl.kw, 2)} kW · ${fmt(this.st.kpi.energy_kwh, 0)} kWh`);
+    sc.setLabel('SA-01/02', 'TỰ ĐỘNG');
+    sc.setLabel('CP-02', dead ? 'BỘ ĐIỀU KHIỂN LỖI' : ctlName, dead || g.controlSrc() !== 'auto');
+    sc.setLabel('MPC-01', dead ? 'TREO – watchdog' : { a: '(a) bình thường', b: '(b) tự vận hành', c: '(c) đồng bộ', d: '(d) cảnh báo' }[g.mode()], dead || g.mode() === 'd');
+    sc.setLabel('IO-01', dead ? 'mất xung sống' : 'Modbus TCP');
+    sc.setLabel('UPS-01', 'nguồn lưới · 100 %');
+    sc.setLabel('HMI-01', dead ? 'mất kết nối' : ctlName, dead);
+    sc.setLabel('RT-01', dead ? 'mini PC im lặng' : { online: '4G trực tuyến', offline: 'MẤT KẾT NỐI', resync: 'đồng bộ…' }[g.comms.state], dead || g.comms.state === 'offline');
     sc.setLabel('MANG-LUOI', `điểm bất lợi ${fmt(pl.p_crit, 2)} bar`, pl.p_crit < 1.4);
   }
   liveValues(tag) {
@@ -240,8 +286,14 @@ class App {
       'AIT-201': [['Clo dư', fmt(sig.cl, 3, 'mg/L')]], 'AIT-202': [['Độ đục', fmt(sig.ntu, 3, 'NTU')]], 'AIT-203': [['pH', fmt(sig.ph, 3)]],
       'MANG-LUOI': [['Nhu cầu tiêu thụ', fmt(pl.q_cons, 1, 'm³/h')], ['Cấp được', fmt(pl.q_served, 1, 'm³/h')], ['Rò rỉ', fmt(pl.q_leak, 2, 'm³/h')], ['Áp điểm bất lợi', fmt(pl.p_crit, 2, 'bar')], ['Thiếu hụt bồn mái', fmt(pl.backlog, 1, 'm³')]],
       'CP-01': [['Công suất', fmt(pl.kw, 2, 'kW')], ['Điện năng', fmt(this.st.kpi.energy_kwh, 1, 'kWh')]],
-      'GW-01': [['Chế độ', g.mode()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm', g.comms.buf.length + ' bản ghi']], 'RT-01': [['Kết nối', g.comms.state], ['Dữ liệu lên', fmt(this.st.link.bytes_up / 1e6, 2, 'MB')]],
+      'GW-01': [['Chế độ', this.st.gw_dead ? 'mini PC ngừng' : g.mode()], ['Quyền điều khiển', g.controlSrc()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm', g.comms.buf.length + ' bản ghi']],
+      'MPC-01': [['Trạng thái', this.st.gw_dead ? 'treo (watchdog đã nhả)' : 'đang chạy GW-01'], ['Chế độ gateway', g.mode()], ['Quyền điều khiển', g.controlSrc()], ['Kịch bản', 'v' + g.script.version + ' ' + g.script.strategy], ['Bộ đệm lưu-và-chuyển', g.comms.buf.length + ' bản ghi'], ['Thời gian ngừng lũy kế', fmt((this.st.gw_down_s + (this.st.gw_dead ? this.st.t - this.st.gw_dead.t0 : 0)) / 60, 0, 'phút')]],
+      'RT-01': [['Kết nối', g.comms.state], ['Dữ liệu lên', fmt(this.st.link.bytes_up / 1e6, 2, 'MB')], ['SMS đã gửi', String(g.comms.stats.sms)]],
+      'WDR-01': [['Rơ-le', this.st.gw_dead ? 'nhả' : 'giữ'], ['Dự phòng', this.st.gw_dead ? this.st.gw_dead.note() : (this.cfg.hardware.VFD_PID_fallback ? 'sẵn sàng: PID nội ' + fmt(this.cfg.fallback.p_set_bar, 1, 'bar') : 'không lắp – I/O giữ lệnh cuối')]],
+      'EM-101': [['Công suất', fmt(pl.kw, 2, 'kW')], ['Điện năng', fmt(this.st.kpi.energy_kwh, 1, 'kWh')]],
+      'HMI-01': [['Quyền điều khiển', g.controlSrc()], ['Mở màn HMI', 'nút "Màn hình HMI" trên thanh trên cùng']],
     };
+    pl.pumps.forEach((pu, i) => { L['VFD-0' + (i + 1)] = [['Trạng thái', pu.fault ? 'lỗi' : pu.running ? 'chạy' : 'dừng'], ['Tần số', fmt(pu.f, 1, 'Hz')], ['Dòng điện', fmt(pu.amps, 1, 'A')], ['Công suất', fmt(pu.kw, 2, 'kW')], ['Nguồn lệnh', this.st.gw_dead ? (this.st.gw_dead.enabled ? 'PID nội (watchdog)' : 'giữ lệnh cuối của I/O') : 'mini PC qua Modbus RTU']]; });
     pl.pumps.forEach((pu, i) => { L[pu.tag] = [['Trạng thái', pu.fault ? 'lỗi' : pu.running ? 'chạy' : 'dừng'], ['Tần số', fmt(pu.f, 1, 'Hz')], ['Lưu lượng', fmt(pu.q, 1, 'm³/h')], ['Cột áp', fmt(pu.h, 1, 'm')], ['Công suất', fmt(pu.kw, 2, 'kW')], ['Dòng điện', fmt(pu.amps, 1, 'A')], ['Số lần khởi động', String(pu.starts)], ['Giờ chạy', fmt(pu.run_s / 3600, 1, 'h')]]; });
     return L[tag] || [];
   }
@@ -295,5 +347,7 @@ class App {
 }
 
 loadData().then((d) => { window.app = new App(d); }).catch((e) => {
-  document.getElementById('boot').textContent = 'Không tải được cấu hình (' + e.message + '). Hãy chạy máy chủ web tĩnh từ thư mục gốc: python -m trambom web';
+  console.error(e);
+  const boot = document.getElementById('boot') ?? document.getElementById('vp').appendChild(h('p', { id: 'boot', class: 'note', style: 'position:absolute;left:12px;top:56px' }));
+  boot.textContent = 'Không tải được cấu hình (' + e.message + '). Hãy chạy máy chủ web tĩnh từ thư mục gốc: python -m trambom web';
 });

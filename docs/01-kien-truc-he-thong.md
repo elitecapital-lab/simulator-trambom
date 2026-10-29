@@ -66,6 +66,10 @@ flowchart TB
 Bản web 3D (`web/js/sim/*.js`) là bản chuyển đổi một-một của lõi Python, dùng cùng `config/*.json` và cùng bộ sinh số
 ngẫu nhiên; kiểm thử `tests/test_parity_js.py` bảo đảm hai bản cho cùng KPI.
 
+### Thiết bị vật lý tương ứng
+
+Edge gateway của mô phỏng chạy trên **mini PC công nghiệp MPC-01** đặt trong **tủ mới CP-02**. Tủ CP-02 cũng chứa I/O từ xa IO-01, router 4G RT-01, UPS-01 và màn HMI-01 trên cửa. Bơm và biến tần là **thiết bị hiện trạng** trong tủ động lực **CP-01**; biến tần chỉ được cấu hình lại (Modbus RTU, PID nội dự phòng). Bảng phân loại đầy đủ (hiện trạng / giải pháp / khuyến nghị), sơ đồ đấu nối, danh sách I/O và phân cấp dự phòng khi mini PC hỏng có ở [07 – Hiện trạng và giải pháp](07-hien-trang-va-giai-phap.md).
+
 ## 3. Bên trong edge gateway: một chu kỳ quét
 
 ```mermaid
@@ -124,6 +128,11 @@ stateDiagram-v2
 ```
 
 Chế độ (d) có ưu tiên hiển thị cao nhất: trạm có thể đồng thời mất mạng và đang dừng an toàn (kịch bản S9).
+
+Hai trạng thái nằm ngoài bốn chế độ trên:
+
+- **Quyền điều khiển TAY.** Từ xa hoặc tại chỗ, kịch bản tạm ngưng nhưng lớp an toàn vẫn chạy (S12, mục 7 của tài liệu 07). Trạng thái này độc lập với (a)–(d).
+- **Mini PC ngừng.** Không còn gateway để có chế độ nào. Biến tần tự giữ áp bằng PID nội, máy chủ chỉ thấy trạm mất nhịp tim (S11).
 
 | Chế độ | Gateway làm gì | Máy chủ thấy gì |
 |---|---|---|

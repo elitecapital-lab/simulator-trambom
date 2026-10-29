@@ -2,12 +2,16 @@
 import { CommsClient } from './comms.js';
 import { Controller, Forecaster } from './control.js';
 import { PumpManager, SafetyLayer } from './safety.js';
-import { canonical, deepCopy, flatten, fnv1a, getPath, setPath } from './util.js';
+import { installedTags } from './sensors.js';
+import { canonical, clamp, deepCopy, flatten, fnv1a, getPath, setPath } from './util.js';
 
 export const SEV_RANK = { info: 0, warning: 1, alarm: 2, critical: 3 };
 export const D_PREFIXES = ['P_HIGH', 'P_HH_TRIP', 'LOCKOUT', 'P_LOW', 'BURST_SUSPECT', 'LEVEL_LL', 'LEVEL_STOP', 'DRY_RUN_FLOAT',
   'CL_', 'NTU_', 'PH_', 'SAFE_STOP', 'PT_DEVIATION', 'PT_STUCK', 'NO_PRESSURE', 'SENSOR_FAULT', 'PUMP_FAULT', 'FLOW_ANOMALY'];
-export const EVENT_ALARMS = ['SCRIPT_ROLLBACK', 'SCRIPT_REJECTED', 'SCRIPT_ERROR'];
+export const EVENT_ALARMS = ['SCRIPT_ROLLBACK', 'SCRIPT_REJECTED', 'SCRIPT_ERROR', 'GW_WATCHDOG'];
+// Lệnh vận hành bằng tay (từ xa qua MQTT hoặc tại chỗ qua HMI)
+export const MANUAL_CMDS = ['set_mode', 'pump_start', 'pump_stop', 'pump_speed', 'valve'];
+export const SRC_NAME = { local: 'tại chỗ (HMI)', remote: 'từ xa (trung tâm)' };
 
 export function validateParams(params, schema) {
   const errs = [];
@@ -78,6 +82,25 @@ export class SignalProcessor {
     this.faulty = { 'PT-101': false, 'PT-102': false }; this.dev_timer = 0; this.agree_timer = 0;
     this.stuck = { 'PT-101': [null, 0], 'PT-102': [null, 0] }; this.pt_used = 'PT-101'; this.p_model = null;
     this.qf = { cl: null, ntu: null, ph: null };
+    this.installed = installedTags(cfg); this.area = cfg.tank.area_m2; this.drain_q = cfg.tank.drain_q_m3h;
+    this.mb_lv = null; this.mb_vout = 0; this.mb_hist = [];
+  }
+  // Mini PC khởi động lại: bộ lọc và cửa sổ cân bằng khối lượng bắt đầu lại từ đầu
+  restart() {
+    this.p_f = null; this.q_f = null; this.qin_f = null; this.mb_lv = null; this.mb_vout = 0; this.mb_hist = [];
+    this.qf = { cl: null, ntu: null, ph: null }; this.dev_timer = 0; this.agree_timer = 0;
+    for (const st of Object.values(this.stuck)) { st[0] = null; st[1] = 0; }
+  }
+  // Không có FT-100: lưu lượng vào ≈ lưu lượng ra (FT-101 + xả đáy) + A·dH/dt, cửa sổ trượt 15 phút
+  _inflowMassBalance(t, dt, lv, qOut, drain) {
+    const a = 1.0 - Math.exp(-dt / 30.0);
+    this.mb_lv = this.mb_lv === null ? lv : this.mb_lv + (lv - this.mb_lv) * a;
+    this.mb_vout += ((qOut ?? 0) + (drain ? this.drain_q : 0)) * dt / 3600.0;
+    const H = this.mb_hist;
+    if (!H.length || t - H[H.length - 1][0] >= 60.0 - 1e-9) { H.push([t, this.mb_lv, this.mb_vout]); if (H.length > 16) H.shift(); }
+    if (H.length < 16) return null;
+    const [t0, l0, v0] = H[0], [t1, l1, v1] = H[H.length - 1];
+    return Math.max(0, (this.area * (l1 - l0) + (v1 - v0)) * 3600.0 / (t1 - t0));
   }
   _valid(tag, v) {
     if (v === null || v === undefined) return false;
@@ -90,6 +113,7 @@ export class SignalProcessor {
     for (const tag of TAGS) {
       const ok = this._valid(tag, meas[tag]);
       valid[tag] = ok;
+      if (!this.installed.has(tag)) continue; // không lắp: không phải lỗi tín hiệu
       A.set(t, 'SENSOR_FAULT_' + tag, !ok, 'alarm', `Lỗi tín hiệu ${tag} (ngoài 4–20 mA / mất tín hiệu)`);
     }
     const running = meas.pumps.some((p) => p.running);
@@ -155,8 +179,10 @@ export class SignalProcessor {
     if (!prot.length) prot = [p1, p2].filter((v) => v !== null);
     const pProt = prot.length ? Math.max(...prot) : null;
     if (qRaw !== null) this.q_f = this.q_f === null ? qRaw : this.q_f + (qRaw - this.q_f) * (1.0 - Math.exp(-dt / 10.0));
-    const qin = valid['FT-100'] ? meas['FT-100'] : null;
-    if (qin !== null) this.qin_f = this.qin_f === null ? qin : this.qin_f + (qin - this.qin_f) * (1.0 - Math.exp(-dt / 300.0));
+    if (this.installed.has('FT-100')) {
+      const qin = valid['FT-100'] ? meas['FT-100'] : null;
+      if (qin !== null) this.qin_f = this.qin_f === null ? qin : this.qin_f + (qin - this.qin_f) * (1.0 - Math.exp(-dt / 300.0));
+    } else this.qin_f = this._inflowMassBalance(t, dt, lv, qRaw, meas.drain_open);
     const aq = 1.0 - Math.exp(-dt / 20.0);
     for (const [key, tag] of [['cl', 'AIT-201'], ['ntu', 'AIT-202'], ['ph', 'AIT-203']]) {
       const v = valid[tag] ? meas[tag] : null;
@@ -185,6 +211,7 @@ export class Gateway {
     this.override = null; this.offline_since = null; this.last_offline_since = null; this.flush = null; this.applied_cmds = [];
     this.custom_fn = null; this.clock_offset = 0; this.sig = null; this.out = null; this.level_name = levelName; this.sms_log = [];
     this.last = {}; this.cmd_results = []; this.conflicts = []; this.stopped_s = 0; this.recover_until = 0;
+    this.notify = []; this.manual = null; this.manual_s = 0; this.local_seq = 0;
     this.onLog = null;
   }
   logEvent(t, level, text) {
@@ -199,12 +226,20 @@ export class Gateway {
     this.logs.push(e);
     if (this.onLog) this.onLog(e);
     this.comms.pushEvent({ kind: 'alarm', action, code: a.code, sev: a.sev, msg: a.msg, t });
-    if (action === 'raise' && a.sev === 'critical' && this.offline_since !== null && this.cfg.gateway.sms_fallback) {
-      this.sms_log.push({ t, text: `[${this.id}] ${a.msg}` });
-      this.comms.stats.sms += 1;
-      const s = { t, level: 'info', text: 'Mất mạng IP – gửi SMS dự phòng tới tổ trực: ' + a.msg };
-      this.logs.push(s);
-      if (this.onLog) this.onLog(s);
+    if (action === 'raise' && a.sev === 'critical') {
+      const sms = this.cfg.gateway.sms_fallback && (this.cfg.hardware?.SMS ?? true);
+      let s = null;
+      if (this.offline_since === null) this.notify.push({ t, code: a.code, via: 'IP', t_notified: t });
+      else if (sms) {
+        this.sms_log.push({ t, text: `[${this.id}] ${a.msg}` });
+        this.comms.stats.sms += 1;
+        s = { t, level: 'info', text: 'Mất mạng IP – gửi SMS dự phòng tới tổ trực: ' + a.msg };
+        this.notify.push({ t, code: a.code, via: 'SMS', t_notified: t });
+      } else {
+        s = { t, level: 'info', text: 'Mất mạng IP, trạm không có modem SMS – báo động chờ gửi khi có mạng: ' + a.msg };
+        this.notify.push({ t, code: a.code, via: 'chờ mạng', t_notified: null });
+      }
+      if (s) { this.logs.push(s); if (this.onLog) this.onLog(s); }
     }
   }
   onOffline(t, lastAck) {
@@ -215,8 +250,23 @@ export class Gateway {
   onOnline(t) {
     const dur = this.offline_since !== null ? t - this.offline_since : 0;
     this.offline_since = null;
+    for (const n of this.notify) if (n.t_notified === null) n.t_notified = t;
     this.alarms.clear(t, 'COMMS_OFFLINE');
     this.logEvent(t, 'info', `Khôi phục kết nối sau ${(dur / 60).toFixed(1)} phút – chế độ (c) đồng bộ: gửi bản tin chào, ${this.comms.buf.length} bản ghi đệm`);
+  }
+  // Mini PC khởi động lại sau khi treo: nạp kịch bản, dự báo, bộ đệm từ ổ SSD; tiếp quản không xung
+  restart(t, tFail, pumps, note) {
+    const down = t - tFail;
+    this.sig_proc.restart();
+    const c = this.ctrl;
+    c.n = 0; c.sleep_state = 'awake'; c.stage_timer = 0; c.destage_timer = 0; c.swap_until = null; c.next_tte = t;
+    const running = pumps.map((p, i) => (p.running ? i : -1)).filter((i) => i >= 0);
+    if (running.length === 1) c.duty = running[0];
+    pumps.forEach((p, i) => { this.pm.cmd[i] = p.running; });
+    this.comms.restart(t);
+    this.offline_since = t; this.last_offline_since = tFail;
+    this.alarms.raise_(t, 'GW_WATCHDOG', 'alarm', `Mini PC ngừng ${(down / 60).toFixed(0)} phút (watchdog phát hiện) – ${note}; đã khởi động lại và tiếp quản`);
+    this.logEvent(t, 'info', `Mini PC khởi động lại: nạp kịch bản v${this.script.version}, mô hình dự báo và ${this.comms.buf.length} bản ghi đệm từ ổ SSD – tiếp quản không xung, chờ đồng bộ`);
   }
   applyScript(doc, t, source) {
     const errs = validateParams(doc.params, this.cfg.script_schema);
@@ -291,7 +341,7 @@ export class Gateway {
     }
     for (const cmd of msg.commands ?? []) this.handleCommand(cmd, t, 'đồng bộ');
   }
-  handleCommand(cmd, t, via) {
+  handleCommand(cmd, t, via, src = 'remote') {
     const cid = cmd.id;
     if (this.applied_cmds.includes(cid)) { this._ackCmd(t, cmd, 'duplicate', 'đã thực thi trước đó'); return; }
     const now = t + this.clock_offset;
@@ -318,12 +368,101 @@ export class Gateway {
         if (this.safety.safe_stop) { this.flush = { target: a.target_m ?? 1.4 }; why = `mở van xả VX-01 tới mức ${this.flush.target.toFixed(1)} m`; }
         else { ok = false; why = 'chỉ xả bể khi trạm đang dừng an toàn'; }
         break;
-      case 'select_pt': this.sig_proc.forced_pt = a.tag ?? null; why = `dùng ${a.tag} cho điều khiển`; break;
-      default: ok = false; why = 'lệnh không hỗ trợ';
+      case 'select_pt':
+        if (this.sig_proc.installed.has(a.tag)) { this.sig_proc.forced_pt = a.tag ?? null; why = `dùng ${a.tag} cho điều khiển`; }
+        else { ok = false; why = `${a.tag} không được lắp đặt tại trạm`; }
+        break;
+      default:
+        if (MANUAL_CMDS.includes(cmd.type)) [ok, why] = this._manualCmd(cmd.type, a, t, src);
+        else { ok = false; why = 'lệnh không hỗ trợ'; }
     }
     this.applied_cmds.push(cid);
+    if (src === 'local') {
+      const text = `HMI tại trạm – ${cmd.type}: ` + (ok ? why : 'TỪ CHỐI – ' + why);
+      this.cmd_results.push({ t, id: cid, type: cmd.type, status: ok ? 'ok' : 'rejected', reason: why });
+      const e = { t, level: ok ? 'info' : 'alarm', text };
+      this.logs.push(e); if (this.onLog) this.onLog(e);
+      this.comms.pushEvent({ kind: 'log', t, sev: 'info', text });
+      return [ok, why];
+    }
     this._ackCmd(t, cmd, ok ? 'ok' : 'rejected', why);
     this.logEvent(t, ok ? 'info' : 'alarm', `Lệnh từ xa ${cmd.type} (${via}): ` + (ok ? why : 'TỪ CHỐI – ' + why));
+    return [ok, why];
+  }
+  // Lệnh của kỹ thuật viên trên màn hình HMI tại tủ điều khiển (không qua mạng, không hết hạn)
+  localCommand(type, args, t) {
+    this.local_seq += 1;
+    const cmd = { id: 'L' + String(this.local_seq).padStart(4, '0'), type, args: { ...(args ?? {}) }, expires_at: t + 1e9 };
+    return this.handleCommand(cmd, t, 'HMI tại trạm', 'local');
+  }
+  controlSrc() { return this.manual === null ? 'auto' : this.manual.src; }
+  // Vận hành bằng tay: quyền tại chỗ ưu tiên hơn từ xa; lệnh từ xa có thời hạn; mọi lệnh tay vẫn qua lớp an toàn
+  _manualCmd(typ, a, t, src) {
+    const m = this.manual, n = this.pump_tags.length, pm = this.cfg.pump_model, lease = this.cfg.gateway.manual_lease_s;
+    if (src === 'remote' && m !== null && m.src === 'local') return [false, 'trạm đang điều khiển TẠI CHỖ – quyền HMI tại trạm ưu tiên, từ chối lệnh từ xa'];
+    if (typ === 'set_mode') {
+      if ((a.mode ?? 'manual') === 'auto') {
+        if (m === null) return [true, 'trạm đã ở chế độ tự động'];
+        this._endManual(t, 'lệnh ' + SRC_NAME[src]);
+        return [true, `trở về TỰ ĐỘNG theo kịch bản v${this.script.version}`];
+      }
+      const pumps = this.sig ? this.sig.pumps : Array.from({ length: n }, () => ({ running: false, f: 0 }));
+      if (m === null) {
+        this.manual = { src, t0: t, until: src === 'remote' ? t + lease : null, run: this.pm.cmd.map(Boolean),
+          f: pumps.map((p) => (p.running ? Math.round(p.f * 10) / 10 : 40.0)), valve: true };
+        this.alarms.raise_(t, 'MANUAL_MODE', 'warning', `Trạm ở chế độ TAY – điều khiển ${SRC_NAME[src]}; kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động`);
+      } else this._takeOver(t, src, lease);
+      return [true, `chuyển sang chế độ TAY ${SRC_NAME[src]}` + (src === 'remote' ? `, quyền có hạn ${(lease / 60).toFixed(0)} phút, tự trở về tự động khi mất kết nối` : '')];
+    }
+    if (m === null) return [false, 'trạm đang ở chế độ TỰ ĐỘNG – cần chuyển sang TAY trước'];
+    this._takeOver(t, src, lease);
+    if (typ === 'valve') { m.valve = a.open ?? true; m.valve = Boolean(m.valve); return [true, (m.valve ? 'mở' : 'đóng') + ' van MV-02']; }
+    const i = Math.trunc(a.pump ?? 0);
+    if (i < 0 || i >= n) return [false, 'không có bơm ' + i];
+    const tag = this.pump_tags[i];
+    if (a.f_hz !== undefined) m.f[i] = clamp(+a.f_hz, pm.f_min_hz, pm.f_max_hz);
+    if (typ === 'pump_start') {
+      if (this.sig && this.sig.pumps[i].fault) return [false, `${tag} đang báo lỗi biến tần/bơm`];
+      m.run[i] = true;
+      return [true, `chạy ${tag} ở ${m.f[i].toFixed(1)} Hz`];
+    }
+    if (typ === 'pump_stop') { m.run[i] = false; return [true, 'dừng ' + tag]; }
+    return [true, `đặt tần số ${tag} = ${m.f[i].toFixed(1)} Hz`];
+  }
+  _takeOver(t, src, lease) {
+    const m = this.manual;
+    if (m.src !== src) {
+      this.logEvent(t, 'info', 'Quyền điều khiển TAY chuyển sang ' + SRC_NAME[src]);
+      m.src = src;
+      const al = this.alarms.active.get('MANUAL_MODE');
+      if (al) al.msg = `Trạm ở chế độ TAY – điều khiển ${SRC_NAME[src]}; kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động`;
+    }
+    m.until = src === 'remote' ? t + lease : null;
+  }
+  _endManual(t, why) {
+    const m = this.manual;
+    this.manual = null;
+    const running = this.pm.cmd.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+    if (running.length) this.ctrl.duty = running[0];
+    this.alarms.clear(t, 'MANUAL_MODE');
+    this.logEvent(t, 'info', `Kết thúc chế độ TAY ${SRC_NAME[m.src]} sau ${((t - m.t0) / 60).toFixed(0)} phút (${why}) – kịch bản v${this.script.version} tiếp quản`);
+  }
+  _manualOutput(t, dt) {
+    const m = this.manual;
+    if (m.src === 'remote') {
+      if (this.offline_since !== null) {
+        this.logEvent(t, 'safety', 'Mất kết nối khi đang điều khiển TAY từ xa – tự trở về TỰ ĐỘNG (không để trạm chạy theo lệnh cũ)');
+        this._endManual(t, 'mất kết nối');
+        return null;
+      }
+      if (t >= m.until) { this._endManual(t, 'hết thời hạn quyền điều khiển từ xa'); return null; }
+    }
+    this.manual_s += dt;
+    const n = m.run.length;
+    const idx = [...Array(n).keys()];
+    const order = idx.filter((i) => m.run[i]).concat(idx.filter((i) => !m.run[i]));
+    const fs = idx.filter((i) => m.run[i]).map((i) => m.f[i]);
+    return { n: fs.length, f_ref: fs.length ? Math.max(...fs) : 0.0, order, p_set: this.ctrl.p_set };
   }
   _ackCmd(t, cmd, status, reason) {
     this.cmd_results.push({ t, id: cmd.id, type: cmd.type, status, reason });
@@ -334,7 +473,7 @@ export class Gateway {
     return {
       t0: t, t1: t, ts0: t + this.clock_offset, ts1: t + this.clock_offset, p, p_min: p ?? 0, p_max: p ?? 0, p_set: L.p_set ?? null,
       q, q_min: q ?? 0, q_max: q ?? 0, q_in: L.q_in ?? null, level: L.level ?? null, cl: L.cl ?? null, ntu: L.ntu ?? null, ph: L.ph ?? null,
-      kw: L.kw ?? null, kwh: L.kwh ?? null, f1: L.f1 ?? null, f2: L.f2 ?? null, mode: this.mode(),
+      kw: L.kw ?? null, kwh: L.kwh ?? null, f1: L.f1 ?? null, f2: L.f2 ?? null, mode: this.mode(), ctl: this.controlSrc(),
     };
   }
   mode() {
@@ -366,9 +505,16 @@ export class Gateway {
     if (this.script.params.features.anomaly_detection && t >= this.recover_until) {
       this.alarms.set(t, 'FLOW_ANOMALY', this.forecaster.anomaly, 'alarm', `Lưu lượng cao hơn dự báo ${this.forecaster.resid.toFixed(1)} m³/h kéo dài – nghi rò rỉ/vỡ ống`);
     } else this.alarms.clear(t, 'FLOW_ANOMALY');
-    const co = this.ctrl.step(t, dt, sig, this);
+    const mo = this.manual !== null ? this._manualOutput(t, dt) : null;
+    let co = this.ctrl.step(t, dt, sig, this);
+    if (mo !== null) co = mo;
     const fo = this.safety.evaluate(t, dt, sig, co, this, meas);
     const run = this.pm.apply(t, fo.n, fo.order, meas.pumps, this);
+    const m = this.manual;
+    if (mo !== null && fo.block && !fo.block.startsWith('chờ van')) {
+      // liên động/cắt an toàn ở chế độ tay: bơm không tự chạy lại, người vận hành phải ra lệnh mới
+      m.run.forEach((r, i) => { if (r) { m.run[i] = false; this.logEvent(t, 'safety', `Liên động an toàn dừng ${this.pump_tags[i]} khi đang chạy TAY (${fo.block}) – cần lệnh chạy lại`); } });
+    }
     let drain = false;
     if (this.flush !== null) {
       if (!this.safety.safe_stop || sig.level <= this.flush.target) { this.logEvent(t, 'info', `Xả bể kết thúc ở mức ${sig.level.toFixed(2)} m`); this.flush = null; }
@@ -377,9 +523,10 @@ export class Gateway {
     this._watchStep(t, dt);
     if (Math.trunc(t) % 60 === 0) this.alarms.expireEvents(t);
     const fRef = fo.f_ref;
+    const fEach = mo !== null ? run.map((r, i) => (r ? Math.min(m.f[i], this.safety.f_cap) : 0.0)) : run.map((r) => (r ? fRef : 0.0));
     this.last = { p: sig.p_ctrl, p_set: this.ctrl.p_set, q: sig.q_f, q_in: sig.q_in_f, level: sig.level, cl: sig.cl, ntu: sig.ntu, ph: sig.ph, kw: meas.kw, kwh: meas.kwh, f1: meas.pumps[0].f, f2: meas.pumps[1].f };
     this.comms.tick(t, dt);
-    this.out = { run, f_ref: run.map((r) => (r ? fRef : 0.0)), outlet_open: fo.outlet_open, drain_open: drain };
+    this.out = { run, f_ref: fEach, outlet_open: fo.outlet_open && (mo === null || m.valve), drain_open: drain };
     return this.out;
   }
 }

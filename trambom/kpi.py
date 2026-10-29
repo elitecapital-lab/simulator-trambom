@@ -88,6 +88,12 @@ class KpiTracker:
                         inc["how"] = code
                         break
 
+    def detect_kind(self, t, kind, how):
+        for inc in self.incidents:
+            if inc["detected"] is None and t >= inc["t"] and inc["kind"] == kind:
+                inc["detected"] = t
+                inc["how"] = how
+
     def detect_manual(self, t, found):
         for inc in self.incidents:
             if inc["detected"] is None and t >= inc["t"] and inc["kind"] in found:

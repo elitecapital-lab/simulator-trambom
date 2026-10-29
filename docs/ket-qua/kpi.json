@@ -93,6 +93,13 @@
    "forecast_mape": 0.05123,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -157,6 +164,13 @@
    "forecast_mape": 0.05321,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -260,6 +274,13 @@
    "forecast_mape": 0.05133,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -324,6 +345,13 @@
    "forecast_mape": 0.0532,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -427,6 +455,13 @@
    "forecast_mape": 0.05161,
    "sms": 0,
    "script_version": 5,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -491,6 +526,13 @@
    "forecast_mape": 0.05323,
    "sms": 0,
    "script_version": 5,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -594,6 +636,13 @@
    "forecast_mape": 0.05678,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 4319,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -658,6 +707,13 @@
    "forecast_mape": 0.06194,
    "sms": 0,
    "script_version": 4,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 4319,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -777,6 +833,15 @@
    "forecast_mape": 0.05411,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 2,
+    "max_delay_min": 0.0,
+    "via": [
+     "IP"
+    ]
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -849,6 +914,15 @@
    "forecast_mape": 0.05726,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 2,
+    "max_delay_min": 0.0,
+    "via": [
+     "IP"
+    ]
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -960,6 +1034,13 @@
    "forecast_mape": 0.05738,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 4319,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1032,6 +1113,13 @@
    "forecast_mape": 0.06078,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 4319,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1151,6 +1239,13 @@
    "forecast_mape": 0.05513,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1223,6 +1318,13 @@
    "forecast_mape": 0.06226,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1342,6 +1444,13 @@
    "forecast_mape": 0.05123,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1414,6 +1523,13 @@
    "forecast_mape": 0.0532,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1533,6 +1649,13 @@
    "forecast_mape": 0.28147,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1605,6 +1728,13 @@
    "forecast_mape": 0.28184,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 8639,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1738,6 +1868,15 @@
    "forecast_mape": 0.0528,
    "sms": 2,
    "script_version": 5,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 2,
+    "max_delay_min": 0.0,
+    "via": [
+     "SMS"
+    ]
+   },
    "server_records": 17279,
    "completeness": 1.0,
    "server_records_agg": 5166,
@@ -1817,6 +1956,15 @@
    "forecast_mape": 0.05614,
    "sms": 2,
    "script_version": 5,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 2,
+    "max_delay_min": 0.0,
+    "via": [
+     "SMS"
+    ]
+   },
    "server_records": 17279,
    "completeness": 1.0,
    "server_records_agg": 5166,
@@ -1920,6 +2068,13 @@
    "forecast_mape": 0.05793,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 60479,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1984,6 +2139,13 @@
    "forecast_mape": 0.06031,
    "sms": 0,
    "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
    "server_records": 60479,
    "completeness": 1.0,
    "server_records_agg": 0,
@@ -1991,6 +2153,384 @@
    "conflicts": 0,
    "bytes_up": 18385680,
    "bytes_down": 5806032
+  }
+ },
+ "S11": {
+  "fixed": {
+   "hours": 30.0,
+   "energy_kwh": 78.52554,
+   "kwh_per_day": 62.82043,
+   "specific_kwh_m3": 0.17637,
+   "pumped_m3": 445.25005,
+   "delivered_m3": 445.23012,
+   "served_m3": 396.99228,
+   "consumption_m3": 435.2669,
+   "leak_m3": 48.23783,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 38.27462,
+   "t_low_min": 818.6,
+   "t_high_min": 302.23333,
+   "t_out_min": 1120.83333,
+   "pct_in_band": 37.73148,
+   "p_out_max": 4.28806,
+   "p_out_min": 0.0,
+   "p_out_avg": 2.19956,
+   "p_crit_min": -0.3924,
+   "quality_episodes": 0,
+   "quality_viol_min": 0.0,
+   "quality_viol_m3": 0.0,
+   "starts": [
+    1,
+    3
+   ],
+   "starts_total": 4,
+   "run_h": [
+    17.00528,
+    6.01056
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 2.76954,
+   "incidents": []
+  },
+  "basic": {
+   "hours": 30.0,
+   "energy_kwh": 52.35763,
+   "kwh_per_day": 41.88611,
+   "specific_kwh_m3": 0.10816,
+   "pumped_m3": 484.10606,
+   "delivered_m3": 484.08521,
+   "served_m3": 435.2669,
+   "consumption_m3": 435.2669,
+   "leak_m3": 48.81831,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 0.0,
+   "t_low_min": 0.58333,
+   "t_high_min": 0.0,
+   "t_out_min": 0.58333,
+   "pct_in_band": 99.96759,
+   "p_out_max": 3.65939,
+   "p_out_min": 1.9684,
+   "p_out_avg": 2.41473,
+   "p_crit_min": 1.33171,
+   "quality_episodes": 0,
+   "quality_viol_min": 0.0,
+   "quality_viol_m3": 0.0,
+   "starts": [
+    0,
+    2
+   ],
+   "starts_total": 2,
+   "run_h": [
+    30.0,
+    2.17194
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 2.85868,
+   "incidents": [
+    {
+     "kind": "gateway_fail",
+     "t": 61200.0,
+     "label": "gateway_fail",
+     "detected": 61252.0,
+     "how": "máy chủ mất nhịp tim (LWT)"
+    }
+   ],
+   "alarms_raised": {
+    "info": 0,
+    "warning": 0,
+    "alarm": 1,
+    "critical": 0
+   },
+   "comms": {
+    "generated": 8638,
+    "dropped": 0,
+    "compactions": 0,
+    "max_fill": 0.00023,
+    "events_dropped": 0,
+    "syncs": 1,
+    "offline_s": 2.0,
+    "outages": 1,
+    "sms": 0
+   },
+   "forecast_mape": 0.05553,
+   "sms": 0,
+   "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 360.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
+   "server_records": 8638,
+   "completeness": 1.0,
+   "server_records_agg": 0,
+   "server_late": 0,
+   "conflicts": 0,
+   "bytes_up": 2627640,
+   "bytes_down": 830640
+  },
+  "advanced": {
+   "hours": 30.0,
+   "energy_kwh": 50.77559,
+   "kwh_per_day": 40.62047,
+   "specific_kwh_m3": 0.10529,
+   "pumped_m3": 482.27799,
+   "delivered_m3": 482.26016,
+   "served_m3": 435.2669,
+   "consumption_m3": 435.2669,
+   "leak_m3": 46.99326,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 0.0,
+   "t_low_min": 0.78333,
+   "t_high_min": 0.0,
+   "t_out_min": 0.78333,
+   "pct_in_band": 99.95648,
+   "p_out_max": 3.61374,
+   "p_out_min": 1.88291,
+   "p_out_avg": 2.34793,
+   "p_crit_min": 1.32761,
+   "quality_episodes": 0,
+   "quality_viol_min": 0.0,
+   "quality_viol_m3": 0.0,
+   "starts": [
+    0,
+    2
+   ],
+   "starts_total": 2,
+   "run_h": [
+    30.0,
+    2.235
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 2.85912,
+   "incidents": [
+    {
+     "kind": "gateway_fail",
+     "t": 61200.0,
+     "label": "gateway_fail",
+     "detected": 61252.0,
+     "how": "máy chủ mất nhịp tim (LWT)"
+    }
+   ],
+   "alarms_raised": {
+    "info": 0,
+    "warning": 0,
+    "alarm": 1,
+    "critical": 0
+   },
+   "comms": {
+    "generated": 8638,
+    "dropped": 0,
+    "compactions": 0,
+    "max_fill": 0.00023,
+    "events_dropped": 0,
+    "syncs": 1,
+    "offline_s": 2.0,
+    "outages": 1,
+    "sms": 0
+   },
+   "forecast_mape": 0.05995,
+   "sms": 0,
+   "script_version": 3,
+   "manual_min": 0.0,
+   "gw_down_min": 360.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
+   "server_records": 8638,
+   "completeness": 1.0,
+   "server_records_agg": 0,
+   "server_late": 0,
+   "conflicts": 0,
+   "bytes_up": 2627640,
+   "bytes_down": 830640
+  }
+ },
+ "S12": {
+  "fixed": {
+   "hours": 18.0,
+   "energy_kwh": 53.38611,
+   "kwh_per_day": 71.18148,
+   "specific_kwh_m3": 0.17215,
+   "pumped_m3": 310.22508,
+   "delivered_m3": 310.11603,
+   "served_m3": 275.09636,
+   "consumption_m3": 275.10197,
+   "leak_m3": 35.01967,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 0.0056,
+   "t_low_min": 355.0,
+   "t_high_min": 152.2,
+   "t_out_min": 507.2,
+   "pct_in_band": 53.03704,
+   "p_out_max": 4.26931,
+   "p_out_min": 0.0,
+   "p_out_avg": 2.64261,
+   "p_crit_min": -0.3924,
+   "quality_episodes": 0,
+   "quality_viol_min": 0.0,
+   "quality_viol_m3": 0.0,
+   "starts": [
+    1,
+    2
+   ],
+   "starts_total": 3,
+   "run_h": [
+    13.0,
+    2.50528
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 2.79658,
+   "incidents": []
+  },
+  "basic": {
+   "hours": 18.0,
+   "energy_kwh": 32.06736,
+   "kwh_per_day": 42.75649,
+   "specific_kwh_m3": 0.10548,
+   "pumped_m3": 304.05599,
+   "delivered_m3": 304.01274,
+   "served_m3": 275.09609,
+   "consumption_m3": 275.10197,
+   "leak_m3": 28.91665,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 0.00587,
+   "t_low_min": 12.93333,
+   "t_high_min": 0.0,
+   "t_out_min": 12.93333,
+   "pct_in_band": 98.80247,
+   "p_out_max": 3.99673,
+   "p_out_min": 0.01841,
+   "p_out_avg": 2.40175,
+   "p_crit_min": -0.42153,
+   "quality_episodes": 0,
+   "quality_viol_min": 0.0,
+   "quality_viol_m3": 0.0,
+   "starts": [
+    1,
+    2
+   ],
+   "starts_total": 3,
+   "run_h": [
+    17.91583,
+    2.39139
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 3.17843,
+   "incidents": [],
+   "alarms_raised": {
+    "info": 0,
+    "warning": 4,
+    "alarm": 0,
+    "critical": 0
+   },
+   "comms": {
+    "generated": 6479,
+    "dropped": 0,
+    "compactions": 0,
+    "max_fill": 0.0419,
+    "events_dropped": 0,
+    "syncs": 1,
+    "offline_s": 1749.0,
+    "outages": 1,
+    "sms": 0
+   },
+   "forecast_mape": 0.05278,
+   "sms": 0,
+   "script_version": 3,
+   "manual_min": 120.88333,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
+   "server_records": 6479,
+   "completeness": 1.0,
+   "server_records_agg": 0,
+   "server_late": 176,
+   "conflicts": 0,
+   "bytes_up": 1963500,
+   "bytes_down": 616656
+  },
+  "advanced": {
+   "hours": 18.0,
+   "energy_kwh": 30.98087,
+   "kwh_per_day": 41.30782,
+   "specific_kwh_m3": 0.10228,
+   "pumped_m3": 302.92993,
+   "delivered_m3": 302.89003,
+   "served_m3": 275.09607,
+   "consumption_m3": 275.10197,
+   "leak_m3": 27.79396,
+   "burst_m3": 0.0,
+   "unserved_m3": 0.0,
+   "backlog_end_m3": 0.00589,
+   "t_low_min": 24.46667,
+   "t_high_min": 0.0,
+   "t_out_min": 24.46667,
+   "pct_in_band": 97.73457,
+   "p_out_max": 3.99684,
+   "p_out_min": 0.01793,
+   "p_out_avg": 2.33333,
+   "p_crit_min": -0.41525,
+   "quality_episodes": 0,
+   "quality_viol_min": 0.0,
+   "quality_viol_m3": 0.0,
+   "starts": [
+    1,
+    2
+   ],
+   "starts_total": 3,
+   "run_h": [
+    17.91583,
+    2.45444
+   ],
+   "dry_run_min": 0.0,
+   "level_min": 3.17962,
+   "incidents": [],
+   "alarms_raised": {
+    "info": 0,
+    "warning": 4,
+    "alarm": 0,
+    "critical": 0
+   },
+   "comms": {
+    "generated": 6479,
+    "dropped": 0,
+    "compactions": 0,
+    "max_fill": 0.0419,
+    "events_dropped": 0,
+    "syncs": 1,
+    "offline_s": 1749.0,
+    "outages": 1,
+    "sms": 0
+   },
+   "forecast_mape": 0.0552,
+   "sms": 0,
+   "script_version": 3,
+   "manual_min": 120.88333,
+   "gw_down_min": 0.0,
+   "notify": {
+    "critical": 0,
+    "max_delay_min": 0.0,
+    "via": []
+   },
+   "server_records": 6479,
+   "completeness": 1.0,
+   "server_records_agg": 0,
+   "server_late": 176,
+   "conflicts": 0,
+   "bytes_up": 1963500,
+   "bytes_down": 616656
   }
  }
 }

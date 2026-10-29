@@ -133,7 +133,7 @@ def plot_result(res_basic, res_adv, path, title=""):
                          "axes.titlelocation": "left"})
     fig, axes = plt.subplots(6, 1, figsize=(11, 15), sharex=True)
     offline = _spans(th, [o < 0.5 for o in hb["online"]])
-    dstop = _spans(th, [m == 3 for m in hb["mode"]])
+    dstop = _spans(th, [m in (3, 4) for m in hb["mode"]])  # (d) hoặc mini PC ngừng
 
     def shade(ax):
         for a, b in offline:

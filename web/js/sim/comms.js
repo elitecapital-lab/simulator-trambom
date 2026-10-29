@@ -4,7 +4,7 @@ const NUM_FIELDS = ['p', 'p_set', 'q', 'q_in', 'level', 'cl', 'ntu', 'ph', 'kw',
 
 export function mergeRecords(a, b) {
   const na = a.n, nb = b.n;
-  const out = { seq_lo: a.seq_lo, seq_hi: b.seq_hi, t0: a.t0, t1: b.t1, ts0: a.ts0, ts1: b.ts1, n: na + nb, sent: null, acked: false, mode: b.mode, kwh: b.kwh };
+  const out = { seq_lo: a.seq_lo, seq_hi: b.seq_hi, t0: a.t0, t1: b.t1, ts0: a.ts0, ts1: b.ts1, n: na + nb, sent: null, acked: false, mode: b.mode, kwh: b.kwh, ctl: b.ctl ?? 'auto' };
   for (const k of NUM_FIELDS) {
     const va = a[k], vb = b[k];
     out[k] = va === null || vb === null ? (vb === null ? va : vb) : (va * na + vb * nb) / (na + nb);
@@ -22,6 +22,11 @@ export class CommsClient {
     this.buf = []; this.events = []; this.seq = 0; this.eseq = 0; this.budget = 0;
     this.sync_phase = null; this.hello_t = null; this.sync_started = null; this.any_acked = false;
     this.stats = { generated: 0, dropped: 0, compactions: 0, max_fill: 0, events_dropped: 0, syncs: 0, offline_s: 0, outages: 0, sms: 0 };
+  }
+  // Mini PC khởi động lại: bộ đệm trên ổ SSD còn nguyên, phiên MQTT phải thiết lập lại (đi qua chế độ c)
+  restart(t) {
+    this.state = 'offline'; this.sync_phase = null; this.last_ack = t; this.next_hb = t; this.next_tel = t + this.g.telemetry_s;
+    this.budget = 0; this.stats.outages += 1;
   }
   receive(t) {
     for (const msg of this.link.recvGateway(t)) {

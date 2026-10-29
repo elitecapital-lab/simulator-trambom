@@ -1,0 +1,256 @@
+[
+ {
+  "option": "VFD_PID_fallback",
+  "label": "Rơ-le watchdog + PID nội biến tần",
+  "scenario": "S11",
+  "level": "basic",
+  "metrics": [
+   "t_out_min",
+   "p_crit_min",
+   "energy_kwh"
+  ],
+  "with": {
+   "t_out_min": 0.58333,
+   "t_high_min": 0.0,
+   "t_low_min": 0.58333,
+   "p_out_max": 3.65939,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 52.35763,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.86667,
+   "detect_how": "máy chủ mất nhịp tim (LWT)",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 213.33333,
+   "t_high_min": 0.0,
+   "t_low_min": 213.33333,
+   "p_out_max": 3.65939,
+   "p_crit_min": 0.53101,
+   "energy_kwh": 48.52189,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.86667,
+   "detect_how": "máy chủ mất nhịp tim (LWT)",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  }
+ },
+ {
+  "option": "PT-102",
+  "label": "Cảm biến áp lực thứ hai PT-102",
+  "scenario": "S5",
+  "level": "basic",
+  "metrics": [
+   "t_high_min",
+   "p_out_max",
+   "detect_min"
+  ],
+  "with": {
+   "t_out_min": 0.41667,
+   "t_high_min": 0.13333,
+   "t_low_min": 0.28333,
+   "p_out_max": 4.15937,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 22.37945,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.15,
+   "detect_how": "PT_DEVIATION",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 119.68333,
+   "t_high_min": 119.4,
+   "t_low_min": 0.28333,
+   "p_out_max": 4.55983,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 28.14054,
+   "quality_viol_m3": 0.0,
+   "detect_min": null,
+   "detect_how": null,
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  }
+ },
+ {
+  "option": "PT-102",
+  "label": "Cảm biến áp lực thứ hai PT-102",
+  "scenario": "S5",
+  "level": "advanced",
+  "metrics": [
+   "t_high_min",
+   "t_out_min",
+   "detect_min"
+  ],
+  "with": {
+   "t_out_min": 0.0,
+   "t_high_min": 0.0,
+   "t_low_min": 0.0,
+   "p_out_max": 3.61374,
+   "p_crit_min": 1.43229,
+   "energy_kwh": 19.51872,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.21667,
+   "detect_how": "PT_DEVIATION",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 1.36667,
+   "t_high_min": 0.0,
+   "t_low_min": 1.36667,
+   "p_out_max": 3.61374,
+   "p_crit_min": 1.35626,
+   "energy_kwh": 20.23115,
+   "quality_viol_m3": 0.0,
+   "detect_min": 0.5,
+   "detect_how": "PT_STUCK_PT-101",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  }
+ },
+ {
+  "option": "AIT-202",
+  "label": "Máy đo độ đục online AIT-202",
+  "scenario": "S4",
+  "level": "basic",
+  "metrics": [
+   "quality_viol_m3",
+   "detect_min"
+  ],
+  "with": {
+   "t_out_min": 319.5,
+   "t_high_min": 0.0,
+   "t_low_min": 319.5,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.57496,
+   "energy_kwh": 44.0198,
+   "quality_viol_m3": 0.37885,
+   "detect_min": 42.31667,
+   "detect_how": "NTU_WARN",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 0.28333,
+   "t_high_min": 0.0,
+   "t_low_min": 0.28333,
+   "p_out_max": 3.65939,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 44.893,
+   "quality_viol_m3": 28.27391,
+   "detect_min": null,
+   "detect_how": null,
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  }
+ },
+ {
+  "option": "AIT-201",
+  "label": "Máy đo clo dư online AIT-201",
+  "scenario": "S9",
+  "level": "basic",
+  "metrics": [
+   "quality_viol_m3",
+   "detect_min"
+  ],
+  "with": {
+   "t_out_min": 495.93333,
+   "t_high_min": 0.0,
+   "t_low_min": 495.93333,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.62193,
+   "energy_kwh": 97.09149,
+   "quality_viol_m3": 1.41675,
+   "detect_min": 415.83333,
+   "detect_how": "CL_WARN",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 0.48333,
+   "t_high_min": 0.0,
+   "t_low_min": 0.48333,
+   "p_out_max": 3.65939,
+   "p_crit_min": 1.33171,
+   "energy_kwh": 89.8114,
+   "quality_viol_m3": 26.42463,
+   "detect_min": null,
+   "detect_how": null,
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  }
+ },
+ {
+  "option": "SMS",
+  "label": "Modem 4G có SMS dự phòng",
+  "scenario": "S9",
+  "level": "basic",
+  "metrics": [
+   "notify_max_min"
+  ],
+  "with": {
+   "t_out_min": 495.93333,
+   "t_high_min": 0.0,
+   "t_low_min": 495.93333,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.62193,
+   "energy_kwh": 97.09149,
+   "quality_viol_m3": 1.41675,
+   "detect_min": 415.83333,
+   "detect_how": "CL_WARN",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 495.93333,
+   "t_high_min": 0.0,
+   "t_low_min": 495.93333,
+   "p_out_max": 3.65939,
+   "p_crit_min": -0.62193,
+   "energy_kwh": 97.09149,
+   "quality_viol_m3": 1.41675,
+   "detect_min": 415.83333,
+   "detect_how": "CL_WARN",
+   "notify_max_min": 294.76667,
+   "dry_run_min": 0.0
+  }
+ },
+ {
+  "option": "FT-100_pulse",
+  "label": "Đầu ra xung của đồng hồ nước vào FT-100",
+  "scenario": "S6",
+  "level": "advanced",
+  "metrics": [
+   "detect_min",
+   "t_out_min"
+  ],
+  "with": {
+   "t_out_min": 487.13333,
+   "t_high_min": 0.0,
+   "t_low_min": 487.13333,
+   "p_out_max": 3.98023,
+   "p_crit_min": -0.3924,
+   "energy_kwh": 37.13212,
+   "quality_viol_m3": 0.0,
+   "detect_min": 27.0,
+   "detect_how": "TTE_LOW",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  },
+  "without": {
+   "t_out_min": 487.13333,
+   "t_high_min": 0.0,
+   "t_low_min": 487.13333,
+   "p_out_max": 3.98023,
+   "p_crit_min": -0.3924,
+   "energy_kwh": 37.13212,
+   "quality_viol_m3": 0.0,
+   "detect_min": 25.98333,
+   "detect_how": "SUPPLY_LOST",
+   "notify_max_min": 0.0,
+   "dry_run_min": 0.0
+  }
+ }
+]

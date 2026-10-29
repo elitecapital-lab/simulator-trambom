@@ -26,7 +26,8 @@ def test_smart_beats_fixed_on_energy_and_pressure_band():
 
 def test_scenario_events_reference_known_types():
     known = {"link_down", "link_up", "server_command", "server_publish", "local_edit", "inflow_quality", "supply",
-             "burst", "demand_scale", "pump_fault", "pump_repair", "sensor_fault", "sensor_repair"}
+             "burst", "demand_scale", "pump_fault", "pump_repair", "sensor_fault", "sensor_repair",
+             "local_command", "gateway_fail", "gateway_restore"}
     for sc in SCEN.values():
         for ev in sc["events"]:
             assert ev["type"] in known, (sc["id"], ev)

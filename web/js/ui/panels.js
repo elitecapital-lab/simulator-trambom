@@ -1,9 +1,28 @@
 // Các bảng bên phải + bảng so sánh KPI. Cập nhật ~4 lần/giây từ main.js.
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
 import { TEMPLATE_SOLUTION, TEMPLATE_TODO } from './student-template.js';
+import { TwinSim } from '../sim/engine.js';
 
 const MODE_TXT = { a: '(a) Bình thường – có kết nối', b: '(b) Mất mạng – gateway tự vận hành', c: '(c) Đồng bộ sau khôi phục kết nối', d: '(d) Cảnh báo / dừng an toàn' };
 const COMMS_TXT = { online: 'Trực tuyến', offline: 'Mất kết nối', resync: 'Đang đồng bộ' };
+export const SCOPE_TXT = { hien_trang: 'Hiện trạng', giai_phap: 'Giải pháp', khuyen_nghi: 'Khuyến nghị' };
+export const SCOPE_DESC = {
+  hien_trang: 'Thiết bị nhà máy ĐÃ CÓ trước khi cải tạo (bơm, biến tần, bể, van, phao, tủ động lực). Giữ nguyên hoặc chỉ cấu hình lại/nâng cấp nhỏ.',
+  giai_phap: 'Thiết bị giải pháp ĐƯA VÀO để tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ: mini PC chạy edge gateway, I/O từ xa, cảm biến, router 4G, nguồn lưu điện, watchdog.',
+  khuyen_nghi: 'Nên có để hệ thống vận hành trơn tru nhất: tăng dự phòng, an toàn, chẩn đoán và khả năng vận hành tại chỗ. Thiếu vẫn chạy được nhưng rủi ro/thiệt hại lớn hơn.',
+};
+const CHANGE_TXT = { giu_nguyen: 'giữ nguyên', cau_hinh_lai: 'cấu hình lại', nang_cap: 'nâng cấp', bo_sung: 'bổ sung mới', thay_the: 'thay thế' };
+const PRIO_TXT = { bat_buoc: 'bắt buộc', nen_co: 'nên có', tuy_chon: 'tùy chọn' };
+// Tùy chọn phần cứng mô phỏng được (cfg.hardware) và kịch bản thử tương ứng
+export const HW_OPTS = [
+  ['VFD_PID_fallback', 'Rơ-le watchdog WDR-01 + PID nội biến tần', 'Mini PC treo → biến tần tự giữ áp 3,0 bar. Không có: mô-đun I/O giữ nguyên lệnh cuối.', 'S11', 'basic'],
+  ['PT-102', 'Cảm biến áp lực thứ hai PT-102', 'Đối chiếu chéo, biểu quyết 2/3 khi PT-101 kẹt/trôi.', 'S5', 'basic'],
+  ['AIT-201', 'Máy đo clo dư online AIT-201', 'Dừng an toàn khi clo < 0,2 mg/L.', 'S9', 'basic'],
+  ['AIT-202', 'Máy đo độ đục online AIT-202', 'Dừng an toàn khi độ đục > 2 NTU.', 'S4', 'basic'],
+  ['AIT-203', 'Máy đo pH online AIT-203', 'Dừng an toàn khi pH ngoài 6,0–8,5.', 'S0', 'basic'],
+  ['SMS', 'SMS dự phòng qua modem 4G', 'Báo động nghiêm trọng tới tổ trực khi mất mạng IP.', 'S9', 'basic'],
+  ['FT-100_pulse', 'Đầu phát xung cho đồng hồ nước vào FT-100', 'Không có: ước lượng lưu lượng vào bằng cân bằng khối lượng (LT-101 + FT-101).', 'S6', 'advanced'],
+];
 const STRAT_TXT = { threshold: 'theo ngưỡng', predictive: 'dự báo', fallback: 'dự phòng (dự báo kém → ngưỡng)', custom: 'kịch bản học viên' };
 
 export class Panels {
@@ -30,7 +49,7 @@ export class Panels {
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Số đo & điều khiển (đã kiểm tra hợp lệ)'),
         h('table', { class: 'kv fixed' }, h('tbody', {},
           row('p1', 'PT-101 áp đầu ra', 'bar'), row('p2', 'PT-102 áp bảo vệ', 'bar'), row('pset', 'Áp đặt P_set(Q)', 'bar'), row('pmodel', 'Áp theo mô hình bơm', 'bar'),
-          row('pcrit', 'Áp điểm bất lợi (logger)', 'bar'), row('q', 'FT-101 lưu lượng ra', 'm³/h'), row('qfc', 'Dự báo lưu lượng', 'm³/h'), row('qin', 'FT-100 lưu lượng vào', 'm³/h'),
+          row('pcrit', 'Áp điểm bất lợi (logger PL-301)', 'bar'), row('q', 'FT-101 lưu lượng ra', 'm³/h'), row('qfc', 'Dự báo lưu lượng', 'm³/h'), row('qin', 'FT-100 lưu lượng vào', 'm³/h'),
           row('lv', 'LT-101 mức bể', 'm'), row('tte', 'Dự báo cạn bể', 'h'), row('cl', 'AIT-201 clo dư', 'mg/L'), row('ntu', 'AIT-202 độ đục', 'NTU'), row('ph', 'AIT-203 pH', ''),
           row('kw', 'Công suất tổng', 'kW'), row('kwh', 'Điện năng lũy kế', 'kWh'), row('pu0', 'P-01', '', true), row('pu1', 'P-02', '', true),
           row('mv', 'MV-02 độ mở', '%'), row('ht', 'HT-01 nước trong bình', 'L'), row('back', 'Thiếu hụt bồn mái hộ dân', 'm³')))),
@@ -38,8 +57,10 @@ export class Panels {
   }
   updateMonitor() {
     const a = this.app, gw = a.st.gw, pl = a.st.plant, sig = gw.sig || {}, c = this.cells;
-    const mode = gw.mode();
-    c.gwmode.replaceChildren(h('span', { class: 'chip ' + { a: 'good', b: 'warning', c: 'info', d: 'critical' }[mode] }, MODE_TXT[mode]));
+    const mode = gw.mode(), dead = a.st.gw_dead, ctl = gw.controlSrc();
+    c.gwmode.replaceChildren(dead ? h('span', { class: 'chip critical' }, 'Mini PC ngừng – ' + dead.note())
+      : h('span', { class: 'chip ' + { a: 'good', b: 'warning', c: 'info', d: 'critical' }[mode] }, MODE_TXT[mode]),
+      !dead && ctl !== 'auto' ? h('span', { class: 'chip warning', style: 'margin-left:4px' }, ctl === 'remote' ? 'TAY từ xa' : 'TAY tại chỗ') : '');
     const cs = gw.comms.state;
     c.comms.textContent = COMMS_TXT[cs] + (gw.offline_since !== null ? ` · ${fmt((a.st.t - gw.offline_since) / 60, 0)} phút` : '');
     c.script.textContent = `v${gw.script.version}${gw.script.local_modified ? ' + sửa tại chỗ' : ''} · ${gw.script.hash}${gw.watch ? ' · đang giám sát' : ''}`;
@@ -54,9 +75,12 @@ export class Panels {
     c.p1.textContent = fmt(sig.p1, 2) + ' bar' + (gw.sig_proc.pt_used === 'PT-101' ? ' ◆' : '');
     c.p2.textContent = fmt(sig.p2, 2) + ' bar' + (gw.sig_proc.pt_used === 'PT-102' ? ' ◆' : '');
     set('pset', fmt(gw.ctrl.p_set, 2)); set('pmodel', fmt(sig.p_model, 2)); set('pcrit', fmt(pl.p_crit, 2));
-    set('q', fmt(sig.q_f, 1)); set('qfc', fmt(gw.forecaster.meanAt(a.st.t), 1)); set('qin', fmt(sig.q_in_f, 1));
+    set('q', fmt(sig.q_f, 1)); set('qfc', fmt(gw.forecaster.meanAt(a.st.t), 1));
+    c.qin.textContent = gw.sig_proc.installed.has('FT-100') ? fmt(sig.q_in_f, 1) + (sig.q_in_f !== null && sig.q_in_f !== undefined ? ' m³/h' : '') : `≈${fmt(sig.q_in_f, 1)} m³/h (cân bằng khối lượng)`;
     set('lv', fmt(sig.level, 2)); set('tte', gw.ctrl.tte_h === null ? '∞' : fmt(gw.ctrl.tte_h, 1));
-    set('cl', fmt(sig.cl, 2)); set('ntu', fmt(sig.ntu, 2)); set('ph', fmt(sig.ph, 2));
+    const inst = gw.sig_proc.installed;
+    for (const [k, tag, v] of [['cl', 'AIT-201', sig.cl], ['ntu', 'AIT-202', sig.ntu], ['ph', 'AIT-203', sig.ph]]) { if (inst.has(tag)) set(k, fmt(v, 2)); else c[k].textContent = 'không lắp'; }
+    if (!inst.has('PT-102')) c.p2.textContent = 'không lắp';
     set('kw', fmt(pl.kw, 2)); set('kwh', fmt(a.st.kpi.energy_kwh, 1));
     pl.pumps.forEach((pu, i) => { c['pu' + i].textContent = (pu.fault ? 'LỖI' : pu.running ? 'chạy' : 'dừng') + ` · ${fmt(pu.f, 1)} Hz · ${fmt(pu.amps, 1)} A · ${pu.starts} lần · ${fmt(pu.run_s / 3600, 1)} h`; });
     set('mv', fmt(pl.outlet_frac * 100, 0)); set('ht', fmt(pl.htWaterL(), 0)); set('back', fmt(pl.backlog, 1));
@@ -86,6 +110,10 @@ export class Panels {
     pane.append(
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Trạm áp dụng'), sel, h('p', { class: 'note' }, 'Sự cố vật lý áp dụng cho cả trạm thông minh và trạm lịch cố định song sinh để so sánh công bằng.')),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Truyền thông – chế độ (b) và (c)'), h('div', { class: 'row' }, this.linkBtn)),
+      h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Mini PC (edge gateway) – thiết bị của giải pháp'), h('div', { class: 'row' }, this.gwBtn = B('Mini PC treo (watchdog)', () => {
+        const s = a.net.smart[a.net.by_id[sel.value]];
+        ev({ type: s.gw_dead ? 'gateway_restore' : 'gateway_fail' });
+      }, 'danger')), h('p', { class: 'note' }, 'Khi mini PC ngừng, rơ-le watchdog chuyển biến tần sang PID nội (nếu có lắp – xem tab Thiết bị). Mất: dừng an toàn theo chất lượng, ghép bơm, đo xa.')),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Chất lượng nước nguồn – chế độ (d)'), h('div', { class: 'grid2' },
         B('Nước nguồn đục 12 NTU (3 h)', () => ev({ type: 'inflow_quality', param: 'ntu', value: 12, until_h: hrs(3) })),
         B('Clo nguồn giảm 0,05 mg/L (12 h)', () => ev({ type: 'inflow_quality', param: 'cl', value: 0.05, until_h: hrs(12) })),
@@ -116,6 +144,8 @@ export class Panels {
     const s = this.app.net.smart[this.app.net.by_id[sid]];
     this.linkBtn.textContent = s.link.up ? 'Ngắt kết nối 4G' : 'Khôi phục kết nối 4G';
     this.linkBtn.className = 'btn ' + (s.link.up ? 'danger' : 'primary');
+    this.gwBtn.textContent = s.gw_dead ? 'Khởi động lại mini PC' : 'Mini PC treo (watchdog)';
+    this.gwBtn.className = 'btn ' + (s.gw_dead ? 'primary' : 'danger');
   }
 
   // ---------------- Kịch bản & lệnh ----------------
@@ -354,15 +384,94 @@ export class Panels {
   }
 
   // ---------------- Ngăn thông tin thiết bị ----------------
+  // ---------------- Thiết bị: hiện trạng / giải pháp / khuyến nghị ----------------
+  buildEquipment(pane) {
+    const a = this.app;
+    this.eqCounts = h('div', { class: 'row' });
+    this.eqList = h('div');
+    this.hwBox = h('div');
+    this.wiOut = h('div');
+    pane.append(
+      h('p', { class: 'note' }, 'Phân biệt rõ thiết bị nhà máy ĐÃ CÓ, thiết bị GIẢI PHÁP đưa vào (mini PC tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ) và thiết bị KHUYẾN NGHỊ để hệ thống vận hành trơn tru. Nút lọc trên khung 3D tô màu đúng nhóm.'),
+      h('div', { class: 'sec' }, this.eqCounts),
+      this.hwDetails = h('details', { class: 'sec hw-details' }, h('summary', { class: 'lbl' }, 'Thử bỏ bớt thiết bị – mô phỏng “nếu không lắp”'),
+        h('p', { class: 'note' }, 'Bỏ chọn rồi bấm "Áp dụng" để chạy lại kịch bản hiện tại; hoặc bấm "So sánh" để chạy nhanh hai phương án có/không lắp trên kịch bản gợi ý.'), this.hwBox),
+      this.wiOut,
+      h('div', { class: 'sec' }, this.eqList));
+    this._buildHw();
+    this.updateEquipment(true);
+  }
+  _buildHw() {
+    const a = this.app, hw = a.cfg.hardware;
+    this.hwChecks = {};
+    const rows = HW_OPTS.map(([k, label, desc, sc, lvl]) => {
+      const cb = h('input', { type: 'checkbox', checked: hw[k] !== false, 'aria-label': label });
+      this.hwChecks[k] = cb;
+      return h('label', { class: 'hw-opt' }, cb, h('span', {}, h('b', {}, label), h('small', {}, desc),
+        h('button', { class: 'btn small', type: 'button', onclick: (e) => { e.preventDefault(); this.whatIf(k, sc, lvl); } }, `So sánh trên ${sc}`)));
+    });
+    this.hwBox.replaceChildren(...rows, h('div', { class: 'row', style: 'margin-top:6px' },
+      h('button', { class: 'btn primary', onclick: () => { const o = {}; for (const [k, cb] of Object.entries(this.hwChecks)) o[k] = cb.checked; a.applyHardware(o); } }, 'Áp dụng & chạy lại'),
+      h('button', { class: 'btn', onclick: () => { for (const cb of Object.values(this.hwChecks)) cb.checked = true; a.applyHardware(Object.fromEntries(HW_OPTS.map((x) => [x[0], true]))); } }, 'Lắp đủ')));
+  }
+  /** Chạy nhanh 2 phương án (có / không lắp) bằng lõi JS, chia nhỏ để không treo trình duyệt. */
+  whatIf(opt, scId, level) {
+    const a = this.app;
+    const sc = a.scenarios.find((s) => s.id === scId);
+    if (!sc || scId === 'S0') { this.wiOut.replaceChildren(h('p', { class: 'note' }, 'Chưa có kịch bản riêng cho tùy chọn này – hãy bỏ chọn rồi tiêm lỗi pH ở tab Sự cố.')); return; }
+    const mk = (inst) => { const cfg = structuredClone(a.cfg); cfg.hardware[opt] = inst; return new TwinSim(cfg, sc, level, { withFixed: false }); };
+    const sims = [mk(true), mk(false)];
+    const n = Math.round((sc.duration_h ?? 24) * 3600 / sims[0].dt);
+    let i = 0;
+    const label = HW_OPTS.find((x) => x[0] === opt)[1];
+    const prog = h('p', { class: 'note' });
+    this.wiOut.replaceChildren(prog);
+    const tick = () => {
+      const t0 = performance.now();
+      while (i < n && performance.now() - t0 < 60) { sims[0].step(); sims[1].step(); i++; }
+      prog.textContent = `Đang chạy ${scId} (${level === 'basic' ? 'cơ bản' : 'nâng cao'}) có/không “${label}”: ${Math.round(100 * i / n)} %`;
+      if (i < n) { setTimeout(tick, 0); return; }
+      const [A, B] = sims.map((s) => s.result().smart);
+      const det = (s) => { const x = s.incidents[0]; return x ? (x.detected === null ? 'không phát hiện' : fmt((x.detected - x.t) / 60, 1, 'phút') + ' (' + x.how + ')') : '–'; };
+      const rows = [['Áp ngoài dải dịch vụ', fmt(A.t_out_min, 0, 'phút'), fmt(B.t_out_min, 0, 'phút')], ['Áp đầu ra > 4,0 bar', fmt(A.t_high_min, 0, 'phút'), fmt(B.t_high_min, 0, 'phút')],
+        ['Áp đầu ra lớn nhất', fmt(A.p_out_max, 2, 'bar'), fmt(B.p_out_max, 2, 'bar')], ['Áp điểm bất lợi nhỏ nhất', fmt(A.p_crit_min, 2, 'bar'), fmt(B.p_crit_min, 2, 'bar')],
+        ['Nước không đạt QCVN đã cấp', fmt(A.quality_viol_m3, 1, 'm³'), fmt(B.quality_viol_m3, 1, 'm³')], ['Báo động khẩn tới tổ trực chậm nhất', fmt(A.notify.max_delay_min, 0, 'phút'), fmt(B.notify.max_delay_min, 0, 'phút')],
+        ['Phát hiện sự cố sau', det(A), det(B)], ['Điện năng', fmt(A.energy_kwh, 1, 'kWh'), fmt(B.energy_kwh, 1, 'kWh')]];
+      this.wiOut.replaceChildren(h('p', { class: 'note' }, h('b', {}, `${sc.name}`), ` – “${label}”`),
+        h('div', { class: 'kpi-wrap' }, h('table', { class: 'kv' }, h('thead', {}, h('tr', {}, h('th', {}, 'Chỉ số'), h('th', {}, 'Có lắp'), h('th', {}, 'Không lắp'))),
+          h('tbody', {}, ...rows.map(([k, x, y]) => h('tr', { class: x !== y ? 'diff' : '' }, h('td', {}, k), h('td', { class: 'num' }, x), h('td', { class: 'num' }, y)))))));
+    };
+    setTimeout(tick, 0);
+  }
+  updateEquipment(force = false) {
+    if (!this.eqList) return;
+    const a = this.app, comps = a.components.filter((c) => c.scope), scope = a.scope ?? 'all';
+    const key = scope + comps.length;
+    if (!force && key === this._eqKey) return;
+    this._eqKey = key;
+    const cnt = (s) => comps.filter((c) => c.scope === s).length;
+    this.eqCounts.replaceChildren(...['hien_trang', 'giai_phap', 'khuyen_nghi'].map((s) => h('button', { class: 'btn small' + (scope === s ? ' on' : ''), onclick: () => a.setScope(scope === s ? 'all' : s) },
+      h('i', { class: 'sdot s-' + s }), `${SCOPE_TXT[s]} · ${cnt(s)}`)));
+    const groups = ['hien_trang', 'giai_phap', 'khuyen_nghi'].filter((s) => scope === 'all' || s === scope);
+    this.eqList.replaceChildren(...groups.map((s) => h('div', { class: 'eq-group s-' + s },
+      h('div', { class: 'row' }, h('span', { class: 'schip s-' + s }, SCOPE_TXT[s]), h('span', { class: 'note' }, SCOPE_DESC[s])),
+      ...comps.filter((c) => c.scope === s).map((c) => h('div', { class: 'eq-row', role: 'button', tabindex: 0, onclick: () => a.openDrawer(c.tag), onkeydown: (e) => { if (e.key === 'Enter') a.openDrawer(c.tag); } },
+        h('b', {}, c.tag), h('span', {}, c.name, h('small', {}, c.role ?? '')), h('span', { class: 'note' }, [CHANGE_TXT[c.change], PRIO_TXT[c.priority]].filter(Boolean).join(' · ')))))));
+  }
+
   componentInfo(tag) {
     const comp = this.app.components.find((c) => c.tag === tag);
     if (!comp) return null;
     const live = this.app.liveValues(tag);
+    const sc = comp.scope;
+    const scopeRows = [['Vai trò', comp.role], ['Giao tiếp với mini PC', comp.interface], ['Thông số điển hình', comp.spec], ['Nếu không có', comp.if_missing], ['Khi hỏng / dự phòng', comp.fallback], ['Thử trong mô phỏng', comp.sim]].filter((x) => x[1]);
     return h('div', {},
       h('div', { class: 'row', style: 'justify-content:space-between' }, h('h3', {}, `${comp.tag} · ${comp.name}`), h('button', { class: 'btn small', onclick: () => this.app.closeDrawer() }, 'Đóng')),
+      sc ? h('div', { class: 'row', style: 'margin:4px 0' }, h('span', { class: 'schip s-' + sc }, SCOPE_TXT[sc]), comp.change ? h('span', { class: 'schip light' }, CHANGE_TXT[comp.change]) : '', comp.priority ? h('span', { class: 'schip light' }, PRIO_TXT[comp.priority]) : '') : '',
       h('p', { class: 'note' }, comp.group + ' — ' + comp.desc),
-      h('table', { class: 'kv' }, h('tbody', {}, ...comp.params.map(([k, v, u]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, v + (u && u !== '–' ? ' ' + u : '')))))),
-      h('p', {}, h('b', {}, 'Dải làm việc: '), comp.range),
+      scopeRows.length ? h('table', { class: 'kv fixed' }, h('tbody', {}, ...scopeRows.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'wrap' }, v))))) : '',
+      (comp.params ?? []).length ? h('table', { class: 'kv' }, h('tbody', {}, ...comp.params.map(([k, v, u]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, v + (u && u !== '–' ? ' ' + u : '')))))) : '',
+      comp.range ? h('p', {}, h('b', {}, 'Dải làm việc: '), comp.range) : '',
       live.length ? h('table', { class: 'kv' }, h('thead', {}, h('tr', {}, h('th', {}, 'Giá trị hiện tại'), h('th', {}, ''))), h('tbody', {}, ...live.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, v))))) : '');
   }
 }

@@ -30,6 +30,9 @@ class NetworkSim:
         for s in self.fixed:
             s.step()
         self.server.step(t)
+        for s in self.smart:
+            if s.gw_dead is not None and not self.server.stations[s.sid]["online"]:
+                s.kpi.detect_kind(t, "gateway_fail", "máy chủ mất nhịp tim (LWT)")
         self.t = self.smart[0].t
 
     def run(self, hours):

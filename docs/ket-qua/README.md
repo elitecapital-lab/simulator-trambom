@@ -314,7 +314,7 @@ Nước nguồn bị đục 12 NTU từ 13:00 đến 16:00. Độ đục trong b
 - `N1 06:40` Ghép bơm thứ hai sớm theo dự báo
 - `N1 08:54` Tách bơm – một bơm đủ đáp ứng
 - `N1 09:27` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 6.0 h – chủ động giảm áp
-- `N1 09:29` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (FT-100 ≈ 0) dù van phao mở – nghi mất nước nguồn
+- `N1 09:29` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn
 - `N1 14:12` BÁO ĐỘNG [LEVEL_LOW] Mức bể thấp (< 1.2 m) – giảm áp tiết kiệm nước
 - `N1 16:04` BÁO ĐỘNG [LEVEL_STOP] Mức bể < 0.6 m – kịch bản dừng bơm chống chạy khô
 - `N1 21:09` Mức bể hồi phục > 1.5 m – cho phép chạy bơm lại
@@ -456,7 +456,7 @@ Hợp nhất kịch bản khi đồng bộ (mức nâng cao):
 - `N2 05:01` BÁO ĐỘNG [CL_WARN] Clo dư 0.30 mg/L ngoài dải làm việc
 - `N2 05:35` Bộ đệm đạt 80% – nén nửa dữ liệu cũ (gộp cặp bản ghi), còn 2595 bản ghi
 - `N2 06:11` BÁO ĐỘNG [TTE_LOW] Dự báo bể cạn sau 6.0 h – chủ động giảm áp
-- `N2 06:33` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (FT-100 ≈ 0) dù van phao mở – nghi mất nước nguồn
+- `N2 06:33` BÁO ĐỘNG [SUPPLY_LOST] Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn
 - `N2 07:59` Bộ đệm đạt 80% – nén nửa dữ liệu cũ (gộp cặp bản ghi), còn 2595 bản ghi
 - `N2 10:22` Bộ đệm đạt 80% – nén nửa dữ liệu cũ (gộp cặp bản ghi), còn 2595 bản ghi
 - `N2 11:10` BÁO ĐỘNG [CL_TRIP] Clo dư vượt ngưỡng QCVN (0.20 mg/L) quá 120 s
@@ -538,6 +538,118 @@ Bảy ngày (có cuối tuần). Dùng để so sánh kWh, kWh/m³, số lần k
 - `N7 18:09` Ghép bơm thứ hai sớm theo dự báo
 - `N7 21:26` Tách bơm – một bơm đủ đáp ứng
 - `N7 23:59` Luân phiên bơm: P-01 → P-02 (đủ 24 h chạy)
+
+</details>
+
+## S11 · Mini PC treo 6 giờ – dự phòng bằng PID nội biến tần
+
+17:00 mini PC (edge gateway) bị treo do lỗi phần mềm. Rơ-le watchdog cắt quyền điều khiển sau 5 s, biến tần bơm chính chạy PID nội giữ áp cố định 3,0 bar bằng tín hiệu PT-101. 23:00 kỹ thuật viên khởi động lại mini PC, gateway đồng bộ lại với trung tâm. Tắt tùy chọn VFD_PID_fallback để xem trường hợp mô-đun I/O giữ nguyên lệnh cuối cùng.
+
+| Chỉ số | Lịch cố định | Thông minh – cơ bản (ngưỡng) | Thông minh – nâng cao (dự báo) |
+|---|---:|---:|---:|
+| Điện năng tiêu thụ (kWh) | 78,5 | 52,4 | 50,8 |
+| Tiết kiệm so với lịch cố định | – | 33,3 % | 35,3 % |
+| Suất điện năng (kWh/m³ cấp vào mạng) | 0,176 | 0,108 | 0,105 |
+| Nước cấp vào mạng (m³) | 445 | 484 | 482 |
+| Rò rỉ trên mạng (m³) | 48,2 | 48,8 | 47,0 |
+| Thiếu nước thực sự – bồn mái cạn (m³) | 0,0 | 0,0 | 0,0 |
+| Áp lực ngoài dải – tổng (phút) | 1121 | 1 | 1 |
+|   · áp điểm bất lợi < 1,4 bar (phút) | 819 | 1 | 1 |
+|   · áp đầu ra > 4,0 bar (phút) | 302 | 0 | 0 |
+| Thời gian đạt dải áp (%) | 37,7 | 100,0 | 100,0 |
+| Áp đầu ra lớn nhất (bar) | 4,29 | 3,66 | 3,61 |
+| Số đợt cấp nước không đạt QCVN | 0 | 0 | 0 |
+| Lượng nước không đạt QCVN đã cấp (m³) | 0,0 | 0,0 | 0,0 |
+| Số lần khởi động bơm (P-01 + P-02) | 4 (1 + 3) | 2 (0 + 2) | 2 (0 + 2) |
+| Giờ chạy P-01 / P-02 (h) | 17,0 / 6,0 | 30,0 / 2,2 | 30,0 / 2,2 |
+| Thời gian bơm chạy khô (phút) | 0,0 | 0,0 | 0,0 |
+| Thời gian phát hiện sự cố | – | 1 phút | 1 phút |
+
+![S11 · Mini PC treo 6 giờ – dự phòng bằng PID nội biến tần](img/S11.png)
+
+<details><summary>Diễn biến chính (mức nâng cao)</summary>
+
+- `N1 06:40` Ghép bơm thứ hai sớm theo dự báo
+- `N1 08:54` Tách bơm – một bơm đủ đáp ứng
+- `N1 17:00` Mini PC (edge gateway) ngừng hoạt động – mất thu thập, điều khiển, an toàn mềm và truyền thông
+- `N1 17:00` Rơ-le watchdog nhả sau 5 s – biến tần P-01 chuyển PID nội giữ 3.0 bar theo PT-101, bơm còn lại dừng
+- `N1 23:00` BÁO ĐỘNG [GW_WATCHDOG] Mini PC ngừng 360 phút (watchdog phát hiện) – biến tần P-01 chạy PID nội giữ 3.0 bar; đã khởi động lại và tiếp quản
+- `N1 23:00` Mini PC khởi động lại: nạp kịch bản v3, mô hình dự báo và 0 bản ghi đệm từ ổ SSD – tiếp quản không xung, chờ đồng bộ
+- `N1 23:00` Khôi phục kết nối sau 0.0 phút – chế độ (c) đồng bộ: gửi bản tin chào, 0 bản ghi đệm
+- `N1 23:00` Hiệu chỉnh đồng hồ gateway: lệch -1.00 s sau thời gian mất mạng
+- `N1 23:00` Đồng bộ hoàn tất sau 4 s – trở lại chế độ (a) bình thường
+- `N2 05:59` Luân phiên bơm: P-01 → P-02 (đủ 24 h chạy)
+
+</details>
+
+## S12 · Điều khiển bơm từ xa và tại chỗ (HMI) – quyền điều khiển, liên động
+
+09:30 kỹ thuật viên tới trạm, lấy quyền điều khiển TAY trên HMI; lệnh từ xa lúc 09:36 bị từ chối vì quyền tại chỗ ưu tiên. 09:45 đóng van MV-02 khi bơm đang chạy: liên động dừng bơm, 09:50 mở lại van thì bơm chạy tiếp. 10:00 đặt P-01 50 Hz: lớp an toàn giới hạn tần số khi áp tới 4,0 bar. 10:30 trả về tự động. 13:00 điều độ viên ở trung tâm lấy quyền TAY từ xa, chạy thử bơm dự phòng P-02 rồi dừng; 13:30 mất 4G khi đang điều khiển từ xa: gateway tự trả về TỰ ĐỘNG. 16:00 trung tâm lại lấy quyền TAY nhưng không thao tác gì: hết thời hạn 30 phút, gateway tự trả về tự động.
+
+| Chỉ số | Lịch cố định | Thông minh – cơ bản (ngưỡng) | Thông minh – nâng cao (dự báo) |
+|---|---:|---:|---:|
+| Điện năng tiêu thụ (kWh) | 53,4 | 32,1 | 31,0 |
+| Tiết kiệm so với lịch cố định | – | 39,9 % | 42,0 % |
+| Suất điện năng (kWh/m³ cấp vào mạng) | 0,172 | 0,105 | 0,102 |
+| Nước cấp vào mạng (m³) | 310 | 304 | 303 |
+| Rò rỉ trên mạng (m³) | 35,0 | 28,9 | 27,8 |
+| Thiếu nước thực sự – bồn mái cạn (m³) | 0,0 | 0,0 | 0,0 |
+| Áp lực ngoài dải – tổng (phút) | 507 | 13 | 24 |
+|   · áp điểm bất lợi < 1,4 bar (phút) | 355 | 13 | 24 |
+|   · áp đầu ra > 4,0 bar (phút) | 152 | 0 | 0 |
+| Thời gian đạt dải áp (%) | 53,0 | 98,8 | 97,7 |
+| Áp đầu ra lớn nhất (bar) | 4,27 | 4,00 | 4,00 |
+| Số đợt cấp nước không đạt QCVN | 0 | 0 | 0 |
+| Lượng nước không đạt QCVN đã cấp (m³) | 0,0 | 0,0 | 0,0 |
+| Số lần khởi động bơm (P-01 + P-02) | 3 (1 + 2) | 3 (1 + 2) | 3 (1 + 2) |
+| Giờ chạy P-01 / P-02 (h) | 13,0 / 2,5 | 17,9 / 2,4 | 17,9 / 2,5 |
+| Thời gian bơm chạy khô (phút) | 0,0 | 0,0 | 0,0 |
+| Thời gian phát hiện sự cố | – | – | – |
+
+| Chỉ số truyền thông & đồng bộ | Cơ bản | Nâng cao |
+|---|---:|---:|
+| Thời gian mất mạng (phút) | 29 | 29 |
+| Bản ghi đo xa sinh ra | 6479 | 6479 |
+| Độ đầy bộ đệm lớn nhất (%) | 4,2 | 4,2 |
+| Số lần nén bộ đệm | 0 | 0 |
+| Bản ghi bị mất do tràn | 0 | 0 |
+| Độ đầy đủ dữ liệu tại máy chủ (%) | 100,0 | 100,0 |
+| Bản ghi đến muộn (phát lại sau đồng bộ) | 176 | 176 |
+| Số xung đột tham số đã giải quyết | 0 | 0 |
+| SMS dự phòng đã gửi | 0 | 0 |
+| Dữ liệu lên / xuống (kB) | 1964 / 617 | 1964 / 617 |
+| Sai số dự báo MAPE (%) | 5,3 | 5,5 |
+
+![S12 · Điều khiển bơm từ xa và tại chỗ (HMI) – quyền điều khiển, liên động](img/S12.png)
+
+<details><summary>Diễn biến chính (mức nâng cao)</summary>
+
+- `N1 06:40` Ghép bơm thứ hai sớm theo dự báo
+- `N1 08:54` Tách bơm – một bơm đủ đáp ứng
+- `N1 09:30` BÁO ĐỘNG [MANUAL_MODE] Trạm ở chế độ TAY – điều khiển tại chỗ (HMI); kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động
+- `N1 09:30` HMI tại trạm – set_mode: chuyển sang chế độ TAY tại chỗ (HMI)
+- `N1 09:36` Lệnh từ xa pump_speed (trực tuyến): TỪ CHỐI – trạm đang điều khiển TẠI CHỖ – quyền HMI tại trạm ưu tiên, từ chối lệnh từ xa
+- `N1 09:45` HMI tại trạm – valve: đóng van MV-02
+- `N1 09:45` Ưu tiên an toàn: chặn lệnh chạy 1 bơm của người vận hành (chờ van MV-02 mở hết (trình tự: mở van trước, chạy bơm sau))
+- `N1 09:50` HMI tại trạm – valve: mở van MV-02
+- `N1 10:00` HMI tại trạm – pump_speed: đặt tần số P-01 = 50.0 Hz
+- `N1 10:30` Kết thúc chế độ TAY tại chỗ (HMI) sau 60 phút (lệnh tại chỗ (HMI)) – kịch bản v3 tiếp quản
+- `N1 10:30` HMI tại trạm – set_mode: trở về TỰ ĐỘNG theo kịch bản v3
+- `N1 13:00` BÁO ĐỘNG [MANUAL_MODE] Trạm ở chế độ TAY – điều khiển từ xa (trung tâm); kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động
+- `N1 13:00` Lệnh từ xa set_mode (trực tuyến): chuyển sang chế độ TAY từ xa (trung tâm), quyền có hạn 30 phút, tự trở về tự động khi mất kết nối
+- `N1 13:02` Lệnh từ xa pump_start (trực tuyến): chạy P-02 ở 30.0 Hz
+- `N1 13:15` Lệnh từ xa pump_stop (trực tuyến): dừng P-02
+- `N1 13:18` Lệnh từ xa pump_speed (trực tuyến): đặt tần số P-01 = 38.0 Hz
+- `N1 13:30` Mất kết nối máy chủ > 60 s – chuyển chế độ (b) tự vận hành bằng kịch bản v3 đã lưu
+- `N1 13:30` BÁO ĐỘNG [COMMS_OFFLINE] Mất kết nối máy chủ điều hành
+- `N1 13:30` Mất kết nối khi đang điều khiển TAY từ xa – tự trở về TỰ ĐỘNG (không để trạm chạy theo lệnh cũ)
+- `N1 13:30` Kết thúc chế độ TAY từ xa (trung tâm) sau 31 phút (mất kết nối) – kịch bản v3 tiếp quản
+- `N1 14:00` Khôi phục kết nối sau 29.1 phút – chế độ (c) đồng bộ: gửi bản tin chào, 181 bản ghi đệm
+- `N1 14:00` Hiệu chỉnh đồng hồ gateway: lệch -0.93 s sau thời gian mất mạng
+- `N1 14:00` Đồng bộ hoàn tất sau 11 s – trở lại chế độ (a) bình thường
+- `N1 16:00` BÁO ĐỘNG [MANUAL_MODE] Trạm ở chế độ TAY – điều khiển từ xa (trung tâm); kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động
+- `N1 16:00` Lệnh từ xa set_mode (trực tuyến): chuyển sang chế độ TAY từ xa (trung tâm), quyền có hạn 30 phút, tự trở về tự động khi mất kết nối
+- `N1 16:30` Kết thúc chế độ TAY từ xa (trung tâm) sau 30 phút (hết thời hạn quyền điều khiển từ xa) – kịch bản v3 tiếp quản
 
 </details>
 

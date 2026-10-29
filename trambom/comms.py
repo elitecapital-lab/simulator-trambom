@@ -14,7 +14,8 @@ NUM_FIELDS = ["p", "p_set", "q", "q_in", "level", "cl", "ntu", "ph", "kw", "f1",
 def merge_records(a, b):
     na, nb = a["n"], b["n"]
     out = {"seq_lo": a["seq_lo"], "seq_hi": b["seq_hi"], "t0": a["t0"], "t1": b["t1"], "ts0": a["ts0"], "ts1": b["ts1"],
-           "n": na + nb, "sent": None, "acked": False, "mode": b["mode"], "kwh": b["kwh"]}
+           "n": na + nb, "sent": None, "acked": False, "mode": b["mode"], "kwh": b["kwh"],
+           "ctl": b.get("ctl", "auto")}
     for k in NUM_FIELDS:
         va, vb = a[k], b[k]
         if va is None or vb is None:
@@ -50,6 +51,16 @@ class CommsClient:
         self.any_acked = False
         self.stats = {"generated": 0, "dropped": 0, "compactions": 0, "max_fill": 0.0,
                       "events_dropped": 0, "syncs": 0, "offline_s": 0.0, "outages": 0, "sms": 0}
+
+    def restart(self, t):
+        """Mini PC khởi động lại: bộ đệm trên ổ SSD còn nguyên, phiên MQTT phải thiết lập lại (đi qua chế độ c)."""
+        self.state = "offline"
+        self.sync_phase = None
+        self.last_ack = t
+        self.next_hb = t
+        self.next_tel = t + self.g["telemetry_s"]
+        self.budget = 0.0
+        self.stats["outages"] += 1
 
     # ---------- nhận ----------
     def receive(self, t):

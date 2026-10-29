@@ -152,9 +152,9 @@ export class Controller {
       pSet = Math.min(pSet, Math.max(pBase + consTte, Math.min(pBase, floor)));
     }
     const qInNow = sig.q_in_f ?? 0.0;
-    if (qInNow < 0.5 && level < 3.4) this.no_inflow_s += dt; else this.no_inflow_s = 0.0;
+    if (sig.q_in_f !== null && sig.q_in_f !== undefined && qInNow < 0.5 && level < 3.4) this.no_inflow_s += dt; else this.no_inflow_s = 0.0;
     A.setHyst(t, dt, 'SUPPLY_LOST', this.no_inflow_s >= lv.supply_lost_s, qInNow > 2.0, 'warning',
-      'Không có nước vào bể (FT-100 ≈ 0) dù van phao mở – nghi mất nước nguồn', 0.0, 60.0);
+      'Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn', 0.0, 60.0);
 
     if (this.level_stop) {
       if (level > lv.restart_m) {
@@ -179,6 +179,11 @@ export class Controller {
     const avail = pumps.filter((p) => !p.fault).length;
 
     if (gw.safety.last_block) {
+      this.n = 0; this.I = fMin; this.stage_timer = 0; this.destage_timer = 0; this.sleep_state = 'awake'; this.last_f_ref = 0; this.p_set = pSet;
+      return { n: 0, f_ref: 0.0, order: [this.duty, 1 - this.duty], p_set: pSet };
+    }
+    // chế độ TAY: kịch bản tạm ngưng; trạng thái được đặt lại để tiếp quản êm
+    if (gw.manual !== null && gw.manual !== undefined) {
       this.n = 0; this.I = fMin; this.stage_timer = 0; this.destage_timer = 0; this.sleep_state = 'awake'; this.last_f_ref = 0; this.p_set = pSet;
       return { n: 0, f_ref: 0.0, order: [this.duty, 1 - this.duty], p_set: pSet };
     }

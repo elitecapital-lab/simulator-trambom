@@ -273,14 +273,14 @@ class Controller:
             # giảm áp chủ động theo dự báo: chỉ bỏ phần biên an toàn, KHÔNG xuống dưới áp tối thiểu tại điểm bất lợi
             floor = pd["p_crit_req_bar"] + pd["margin_min_bar"] + pr["dz_bar"] + pr["r_est"] * q_ff * q_ff
             p_set = min(p_set, max(p_base + cons_tte, min(p_base, floor)))
-        # mất nước nguồn: FT-100 ~ 0 trong khi van phao đang mở (mức < 3,4 m)
+        # mất nước nguồn: lưu lượng vào (FT-100 hoặc ước lượng cân bằng khối lượng) ~ 0 trong khi van phao đang mở (mức < 3,4 m)
         q_in_now = sig["q_in_f"] if sig["q_in_f"] is not None else 0.0
-        if q_in_now < 0.5 and level < 3.4:
+        if sig["q_in_f"] is not None and q_in_now < 0.5 and level < 3.4:
             self.no_inflow_s += dt
         else:
             self.no_inflow_s = 0.0
         gw.alarms.set_hyst(t, dt, "SUPPLY_LOST", self.no_inflow_s >= lv["supply_lost_s"], q_in_now > 2.0, "warning",
-                           "Không có nước vào bể (FT-100 ≈ 0) dù van phao mở – nghi mất nước nguồn", 0.0, 60.0)
+                           "Không có nước vào bể (lưu lượng vào ≈ 0) dù van phao mở – nghi mất nước nguồn", 0.0, 60.0)
 
         if self.level_stop:
             if level > lv["restart_m"]:
@@ -314,6 +314,17 @@ class Controller:
 
         # ---- lớp an toàn đang chặn: giữ bộ điều khiển ở trạng thái dừng (không tích phân, không ghép bơm) ----
         if gw.safety.last_block:
+            self.n = 0
+            self.I = f_min
+            self.stage_timer = 0.0
+            self.destage_timer = 0.0
+            self.sleep_state = "awake"
+            self.last_f_ref = 0.0
+            self.p_set = p_set
+            return {"n": 0, "f_ref": 0.0, "order": [self.duty, 1 - self.duty], "p_set": p_set}
+
+        # ---- chế độ TAY: kịch bản tạm ngưng (đầu ra do người vận hành đặt); trạng thái được đặt lại để tiếp quản êm ----
+        if gw.manual is not None:
             self.n = 0
             self.I = f_min
             self.stage_timer = 0.0

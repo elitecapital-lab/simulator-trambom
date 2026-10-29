@@ -24,6 +24,7 @@ export class NetworkSim {
     for (const s of this.smart) s.step();
     for (const s of this.fixed) if (s) s.step();
     this.server.step(t);
+    for (const s of this.smart) if (s.gw_dead && !this.server.stations[s.sid].online) s.kpi.detectKind(t, 'gateway_fail', 'máy chủ mất nhịp tim (LWT)');
     this.t = this.smart[0].t;
   }
   totals() {

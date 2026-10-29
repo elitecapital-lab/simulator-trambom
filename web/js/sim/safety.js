@@ -81,10 +81,12 @@ export class SafetyLayer {
       } else if (this.level_trip && sig.level > s.level_ll_restart_m) { this.level_trip = false; A.clear(t, 'LEVEL_LL'); }
     }
     A.set(t, 'DRY_RUN_FLOAT', meas['LSLL-101'], 'critical', 'Phao LSLL-101 báo cạn – mạch cứng cắt bơm');
+    const installed = gw.sig_proc.installed;
     for (const key of ['cl', 'ntu', 'ph']) {
       const v = sig[key];
       const [wl, wh, tl, th, delay] = this._bands(key);
       const K = key.toUpperCase();
+      if (!installed.has(QUALITY_TAGS[key])) { this.q_timer[key] = 0; continue; } // không có máy phân tích online
       if (v === null) {
         this.q_timer[key] = s.quality_sensor_fault_action === 'safe_stop' ? this.q_timer[key] + dt : 0;
         A.clear(t, K + '_WARN');
@@ -112,7 +114,7 @@ export class SafetyLayer {
     else if (this.level_trip || meas['LSLL-101']) block = 'mức bể rất thấp';
     else if (meas.outlet_frac < 0.95) block = 'chờ van MV-02 mở hết (trình tự: mở van trước, chạy bơm sau)';
     const n = block ? 0 : co.n;
-    if (block && co.n > 0 && block !== this.last_block) gw.logEvent(t, 'safety', `Ưu tiên an toàn: chặn lệnh chạy ${co.n} bơm của kịch bản (${block})`);
+    if (block && co.n > 0 && block !== this.last_block) gw.logEvent(t, 'safety', `Ưu tiên an toàn: chặn lệnh chạy ${co.n} bơm ${gw.manual !== null ? 'của người vận hành' : 'của kịch bản'} (${block})`);
     this.last_block = block;
     let fRef = co.f_ref;
     if (fRef > this.f_cap) fRef = this.f_cap;

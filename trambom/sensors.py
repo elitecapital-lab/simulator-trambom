@@ -24,6 +24,20 @@ TAG_SOURCE = {
 TAG_ORDER = ["PT-101", "PT-102", "FT-101", "FT-100", "LT-101", "AIT-201", "AIT-202", "AIT-203"]
 
 
+def installed_tags(cfg):
+    """Các cảm biến thực sự được lắp theo tùy chọn cfg["hardware"] (mặc định: lắp đủ)."""
+    hw = cfg.get("hardware", {})
+    out = set(TAG_ORDER)
+    if not hw.get("PT-102", True):
+        out.discard("PT-102")
+    if not hw.get("FT-100_pulse", True):
+        out.discard("FT-100")
+    for tag in ("AIT-201", "AIT-202", "AIT-203"):
+        if not hw.get(tag, True):
+            out.discard(tag)
+    return out
+
+
 class AnalogSensor:
     def __init__(self, tag, spec):
         self.tag = tag
@@ -85,6 +99,7 @@ class SensorSet:
         seed = cfg["sim"]["seed"] if seed is None else seed
         self.rng = stream(seed + station.get("seed_offset", 0), 2)
         self.sensors = {tag: AnalogSensor(tag, cfg["sensors"][tag]) for tag in TAG_ORDER}
+        self.installed = installed_tags(cfg)
         s = cfg["safety"]
         self.lsll_trip = s["float_lsll_m"]
         self.lsll_reset = s["float_lsll_reset_m"]
@@ -95,8 +110,9 @@ class SensorSet:
         src = {"p": plant.p, "q_out": plant.q_out, "q_in": plant.q_in, "level": plant.level,
                "cl": plant.cl, "ntu": plant.ntu, "ph": plant.ph}
         for tag in TAG_ORDER:
-            z = self.rng.gauss()
-            meas[tag] = self.sensors[tag].read(src[TAG_SOURCE[tag]], dt, t, z)
+            z = self.rng.gauss()  # luôn rút số ngẫu nhiên để các phương án lắp đặt dùng chung chuỗi nhiễu
+            v = self.sensors[tag].read(src[TAG_SOURCE[tag]], dt, t, z)
+            meas[tag] = v if tag in self.installed else None
         # phao cứng LSLL-101 có trễ
         if not self.lsll and plant.level < self.lsll_trip:
             self.lsll = True

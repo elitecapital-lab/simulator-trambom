@@ -1,7 +1,8 @@
 // Ghép mô hình, trạm song sinh – tương đương trambom/engine.py
 import { FixedSchedule } from './baseline.js';
 import { Disturbances } from './demand.js';
-import { Gateway } from './gateway.js';
+import { GatewayFallback } from './fallback.js';
+import { Gateway, MANUAL_CMDS } from './gateway.js';
 import { KpiTracker } from './kpi.js';
 import { Link } from './link.js';
 import { Plant } from './physics.js';
@@ -9,8 +10,9 @@ import { SensorSet } from './sensors.js';
 import { OperationsServer } from './server.js';
 import { deepCopy, round3 } from './util.js';
 
-export const HIST_FIELDS = ['t', 'p_out', 'p_set', 'p_crit', 'q_out', 'q_req', 'q_in', 'q_fc', 'level', 'cl', 'ntu', 'ph', 'kw', 'kwh', 'f1', 'f2', 'mode', 'buf', 'online', 'tte', 'q_leak', 'backlog'];
-export const MODE_CODE = { a: 0, b: 1, c: 2, d: 3 };
+export const HIST_FIELDS = ['t', 'p_out', 'p_set', 'p_crit', 'q_out', 'q_req', 'q_in', 'q_fc', 'level', 'cl', 'ntu', 'ph', 'kw', 'kwh', 'f1', 'f2', 'mode', 'buf', 'online', 'tte', 'q_leak', 'backlog', 'manual'];
+export const MODE_CODE = { a: 0, b: 1, c: 2, d: 3, x: 4 }; // x: mini PC ngừng, mạch dự phòng điều khiển
+export const CTL_CODE = { auto: 0, remote: 1, local: 2 };
 
 export function buildScript(cfg, level, station) {
   const doc = deepCopy(cfg.script);
@@ -37,6 +39,7 @@ export class StationSim {
     this.plant = new Plant(cfg, this.station); this.dist = new Disturbances(cfg, this.station, seed);
     this.kpi = new KpiTracker(cfg); this.hist = new History(cfg.sim.history_period_s); this.level_min = 1e9;
     this.gw = null; this.base = null; this.server = server; this._alarm_seen = 0; this.level = level;
+    this.gw_dead = null; this.gw_down_s = 0;
     if (kind === 'smart') {
       this.sensors = new SensorSet(cfg, this.station, seed);
       this.link = new Link(cfg, this.station.seed_offset ?? 0);
@@ -65,7 +68,8 @@ export class StationSim {
     if (this.kind === 'smart') {
       const meas = this.sensors.read(pl, dt, t);
       this.meas = meas;
-      out = this.gw.step(t, dt, meas);
+      if (this.gw_dead === null) out = this.gw.step(t, dt, meas);
+      else { this.link.recvGateway(t); out = this.gw_dead.step(t, dt, meas); } // bản tin tới mini PC đang treo bị mất
       lsll = meas['LSLL-101'];
       const hist = this.gw.alarms.history;
       while (this._alarm_seen < hist.length) {
@@ -90,15 +94,32 @@ export class StationSim {
     this.t = t + dt;
     if (this.hist.due(this.t)) this.hist.add(this.snapshot());
   }
+  failGateway(t) {
+    if (this.gw_dead !== null) return;
+    this.gw_dead = new GatewayFallback(this.cfg, this.gw, this.plant, t);
+    const e = { t, level: 'critical', text: 'Mini PC (edge gateway) ngừng hoạt động – mất thu thập, điều khiển, an toàn mềm và truyền thông' };
+    this.gw.logs.push(e); if (this.gw.onLog) this.gw.onLog(e);
+    this.kpi.addIncident('gateway_fail', t, 'gateway_fail');
+  }
+  restoreGateway(t) {
+    const fb = this.gw_dead;
+    if (fb === null) return;
+    this.gw_dead = null; this.gw_down_s += t - fb.t0;
+    this.gw.restart(t, fb.t0, this.plant.pumps.map((pu) => ({ running: pu.running, f: pu.f })), fb.note());
+  }
   snapshot() {
     const pl = this.plant;
     const row = { t: this.t, p_out: pl.p_net, p_crit: pl.p_crit, q_out: pl.q_out, q_req: pl.q_req, q_in: pl.q_in, level: pl.level, cl: pl.cl, ntu: pl.ntu, ph: pl.ph,
       kw: pl.kw, kwh: this.kpi.energy_kwh, f1: pl.pumps[0].f, f2: pl.pumps[1].f, q_leak: pl.q_leak, backlog: pl.backlog };
-    if (this.gw) {
+    if (this.gw && this.gw_dead) {
+      const g = this.gw;
+      row.p_set = this.gw_dead.p_set ?? NaN; row.q_fc = g.forecaster.meanAt(this.t); row.mode = MODE_CODE.x;
+      row.buf = g.comms.buf.length / this.cfg.gateway.buffer_capacity; row.online = 0;
+    } else if (this.gw) {
       const g = this.gw;
       row.p_set = g.ctrl.p_set; row.q_fc = g.forecaster.meanAt(this.t); row.mode = MODE_CODE[g.mode()];
       row.buf = g.comms.buf.length / this.cfg.gateway.buffer_capacity; row.online = g.comms.state !== 'offline' ? 1 : 0;
-      row.tte = g.ctrl.tte_h ?? NaN;
+      row.tte = g.ctrl.tte_h ?? NaN; row.manual = CTL_CODE[g.controlSrc()];
     } else row.mode = -1;
     return row;
   }
@@ -108,6 +129,10 @@ export class StationSim {
     if (this.gw) {
       const g = this.gw; const c = g.comms.stats;
       s.alarms_raised = { ...g.alarms.raised_count }; s.comms = { ...c }; s.forecast_mape = g.forecaster.mape(); s.sms = c.sms; s.script_version = g.script.version;
+      s.manual_min = g.manual_s / 60.0;
+      s.gw_down_min = (this.gw_down_s + (this.gw_dead ? this.t - this.gw_dead.t0 : 0)) / 60.0;
+      const delays = g.notify.map((n) => ((n.t_notified ?? this.t) - n.t) / 60.0);
+      s.notify = { critical: delays.length, max_delay_min: delays.length ? Math.max(...delays) : 0.0, via: [...new Set(g.notify.map((n) => n.via))].sort() };
       if (this.server) {
         const st = this.server.stations[this.sid];
         s.server_records = st.records; s.completeness = c.generated ? st.records / c.generated : 1.0;
@@ -131,9 +156,15 @@ export function dispatchEvent(ev, t, smart, fixed, server) {
   else if (typ === 'sensor_repair') smart.sensors.clearFault(ev.tag);
   else if (typ === 'link_down') smart.link.setUp(false, t);
   else if (typ === 'link_up') smart.link.setUp(true, t);
-  else if (typ === 'server_command') server.sendCommand(sid, ev.cmd.type, ev.cmd.args ?? {}, t, ev.ttl_s ?? 900.0);
+  else if (typ === 'server_command') {
+    const ttl = ev.ttl_s ?? (MANUAL_CMDS.includes(ev.cmd.type) ? smart.cfg.gateway.manual_cmd_ttl_s : 900.0);
+    server.sendCommand(sid, ev.cmd.type, ev.cmd.args ?? {}, t, ttl);
+  }
   else if (typ === 'server_publish') server.publishScript(sid, ev.patch, t, ev.by ?? 'Điều độ viên', ev.reason ?? '', ev.strategy ?? null);
   else if (typ === 'local_edit') smart.gw.localEdit(ev.patch, t, ev.by ?? 'HMI', ev.reason ?? '');
+  else if (typ === 'local_command') smart.gw.localCommand(ev.cmd.type, ev.cmd.args ?? {}, t);
+  else if (typ === 'gateway_fail') smart.failGateway(t);
+  else if (typ === 'gateway_restore') smart.restoreGateway(t);
 }
 
 export class TwinSim {
@@ -152,6 +183,7 @@ export class TwinSim {
     this.smart.step();
     if (this.fixed) this.fixed.step();
     this.server.step(t);
+    if (this.smart.gw_dead && !this.server.stations[this.smart.sid].online) this.smart.kpi.detectKind(t, 'gateway_fail', 'máy chủ mất nhịp tim (LWT)');
     this.t = this.smart.t;
   }
   run(hours = null) {

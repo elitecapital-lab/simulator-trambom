@@ -248,6 +248,126 @@
       "events": []
     },
     {
+      "id": "S11",
+      "name": "S11 · Mini PC treo 6 giờ – dự phòng bằng PID nội biến tần",
+      "modes": ["a", "b", "c"],
+      "duration_h": 30,
+      "summary": "17:00 mini PC (edge gateway) bị treo do lỗi phần mềm. Rơ-le watchdog cắt quyền điều khiển sau 5 s, biến tần bơm chính chạy PID nội giữ áp cố định 3,0 bar bằng tín hiệu PT-101. 23:00 kỹ thuật viên khởi động lại mini PC, gateway đồng bộ lại với trung tâm. Tắt tùy chọn VFD_PID_fallback để xem trường hợp mô-đun I/O giữ nguyên lệnh cuối cùng.",
+      "questions": [
+        "So sánh áp lực và điện năng trong 6 giờ mini PC hỏng khi có và không có PID nội của biến tần (chạy python -m trambom options).",
+        "Khi mini PC hỏng, những chức năng nào mất hẳn (dừng an toàn theo chất lượng, ghép bơm, luân phiên, đo xa)? Chức năng nào vẫn còn nhờ mạch cứng?",
+        "Vì sao điểm đặt dự phòng chọn cố định 3,0 bar thay vì áp đặt theo lưu lượng?"
+      ],
+      "events": [
+        {"t_h": 17.0, "type": "gateway_fail"},
+        {"t_h": 23.0, "type": "gateway_restore"}
+      ]
+    },
+    {
+      "id": "S12",
+      "name": "S12 · Điều khiển bơm từ xa và tại chỗ (HMI) – quyền điều khiển, liên động",
+      "modes": ["a", "b", "c", "d"],
+      "duration_h": 18,
+      "summary": "09:30 kỹ thuật viên tới trạm, lấy quyền điều khiển TAY trên HMI; lệnh từ xa lúc 09:36 bị từ chối vì quyền tại chỗ ưu tiên. 09:45 đóng van MV-02 khi bơm đang chạy: liên động dừng bơm, 09:50 mở lại van thì bơm chạy tiếp. 10:00 đặt P-01 50 Hz: lớp an toàn giới hạn tần số khi áp tới 4,0 bar. 10:30 trả về tự động. 13:00 điều độ viên ở trung tâm lấy quyền TAY từ xa, chạy thử bơm dự phòng P-02 rồi dừng; 13:30 mất 4G khi đang điều khiển từ xa: gateway tự trả về TỰ ĐỘNG. 16:00 trung tâm lại lấy quyền TAY nhưng không thao tác gì: hết thời hạn 30 phút, gateway tự trả về tự động.",
+      "questions": [
+        "Vì sao lệnh điều khiển tay từ xa phải có thời hạn và tự hủy khi mất kết nối? Điều gì xảy ra nếu không có cơ chế này?",
+        "Vì sao quyền HMI tại trạm được ưu tiên hơn lệnh từ trung tâm? Tình huống bảo trì nào cần điều này?",
+        "Ở chế độ tay, những lớp bảo vệ nào vẫn hoạt động? Thử chạy 50 Hz lúc ít nước và quan sát áp lực, tần số."
+      ],
+      "events": [
+        {
+          "t_h": 9.5,
+          "type": "local_command",
+          "cmd": {
+            "type": "set_mode",
+            "args": {"mode": "manual"}
+          }
+        },
+        {
+          "t_h": 9.6,
+          "type": "server_command",
+          "cmd": {
+            "type": "pump_speed",
+            "args": {"pump": 0, "f_hz": 45}
+          }
+        },
+        {
+          "t_h": 9.75,
+          "type": "local_command",
+          "cmd": {
+            "type": "valve",
+            "args": {"open": false}
+          }
+        },
+        {
+          "t_h": 9.8333,
+          "type": "local_command",
+          "cmd": {
+            "type": "valve",
+            "args": {"open": true}
+          }
+        },
+        {
+          "t_h": 10.0,
+          "type": "local_command",
+          "cmd": {
+            "type": "pump_speed",
+            "args": {"pump": 0, "f_hz": 50}
+          }
+        },
+        {
+          "t_h": 10.5,
+          "type": "local_command",
+          "cmd": {
+            "type": "set_mode",
+            "args": {"mode": "auto"}
+          }
+        },
+        {
+          "t_h": 13.0,
+          "type": "server_command",
+          "cmd": {
+            "type": "set_mode",
+            "args": {"mode": "manual"}
+          }
+        },
+        {
+          "t_h": 13.0333,
+          "type": "server_command",
+          "cmd": {
+            "type": "pump_start",
+            "args": {"pump": 1, "f_hz": 30}
+          }
+        },
+        {
+          "t_h": 13.25,
+          "type": "server_command",
+          "cmd": {
+            "type": "pump_stop",
+            "args": {"pump": 1}
+          }
+        },
+        {
+          "t_h": 13.3,
+          "type": "server_command",
+          "cmd": {
+            "type": "pump_speed",
+            "args": {"pump": 0, "f_hz": 38}
+          }
+        },
+        {"t_h": 13.5, "type": "link_down"},
+        {"t_h": 14.0, "type": "link_up"},
+        {
+          "t_h": 16.0,
+          "type": "server_command",
+          "cmd": {
+            "type": "set_mode",
+            "args": {"mode": "manual"}
+          }
+        }
+      ]
+    },
+    {
       "id": "S0",
       "name": "S0 · Tự do (tự tạo sự cố bằng bảng điều khiển)",
       "modes": ["a", "b", "c", "d"],

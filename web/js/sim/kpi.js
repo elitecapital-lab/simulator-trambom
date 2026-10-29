@@ -41,6 +41,9 @@ export class KpiTracker {
       }
     }
   }
+  detectKind(t, kind, how) {
+    for (const inc of this.incidents) if (inc.detected === null && t >= inc.t && inc.kind === kind) { inc.detected = t; inc.how = how; }
+  }
   detectManual(t, found) {
     for (const inc of this.incidents) if (inc.detected === null && t >= inc.t && found.has(inc.kind)) { inc.detected = t; inc.how = 'công nhân kiểm tra'; }
   }

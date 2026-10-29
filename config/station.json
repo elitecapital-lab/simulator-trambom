@@ -140,7 +140,9 @@
     "script_watch_s": 600.0,
     "script_rollback_err_frac": 0.2,
     "script_rollback_err_bar": 0.3,
-    "msg_bytes": {"tel": 240, "hb": 64, "event": 180, "sync": 1200, "cmd": 160, "ack": 48}
+    "msg_bytes": {"tel": 240, "hb": 64, "event": 180, "sync": 1200, "cmd": 160, "ack": 48},
+    "manual_lease_s": 1800.0,
+    "manual_cmd_ttl_s": 60.0
   },
   "link": {"latency_s": 0.4, "loss_prob": 0.0},
   "server": {"offline_after_s": 60.0, "cmd_resend_s": 30.0},
@@ -249,5 +251,22 @@
     {"id": "ST-02", "name": "Trạm ST-02 · Khu dân cư B", "zone": "DMA-B", "demand_scale": 0.75, "dz_crit_m": 7.0, "seed_offset": 101, "x": 0.42, "y": 0.1},
     {"id": "ST-03", "name": "Trạm ST-03 · Khu tái định cư C", "zone": "DMA-C", "demand_scale": 1.25, "dz_crit_m": 2.0, "seed_offset": 202, "x": 0.6, "y": 0.8},
     {"id": "ST-04", "name": "Trạm ST-04 · Khu nhà phố D", "zone": "DMA-D", "demand_scale": 0.55, "dz_crit_m": 5.0, "seed_offset": 303, "x": 0.2, "y": 0.88}
-  ]
+  ],
+  "hardware": {
+    "note": "Thiết bị có/không lắp (để mô phỏng giá trị của từng hạng mục). true = có lắp. Xem docs/07-hien-trang-va-giai-phap.md.",
+    "PT-102": true,
+    "FT-100_pulse": true,
+    "AIT-201": true,
+    "AIT-202": true,
+    "AIT-203": true,
+    "SMS": true,
+    "VFD_PID_fallback": true
+  },
+  "fallback": {
+    "note": "Dự phòng khi mini PC không hoạt động: rơ-le watchdog cắt quyền điều khiển của mini PC, biến tần bơm chính chuyển sang PID nội dùng tín hiệu PT-101 (chia tín hiệu 4–20 mA). Không có dự phòng: mô-đun I/O giữ nguyên đầu ra cuối cùng.",
+    "p_set_bar": 3.0,
+    "kp_hz_per_bar": 6.0,
+    "ti_s": 15.0,
+    "watchdog_s": 5.0
+  }
 }

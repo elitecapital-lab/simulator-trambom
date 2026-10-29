@@ -5,7 +5,9 @@ import { CSS2DObject, CSS2DRenderer } from 'three/addons/CSS2DRenderer.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const css = (name, fallback) => (getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback);
-const PRIMARY = new Set(['T-01', 'P-01', 'P-02', 'FT-101', 'PT-101', 'MV-02', 'AIT-202', 'GW-01', 'RT-01', 'MANG-LUOI', 'LT-101']);
+const PRIMARY = new Set(['T-01', 'P-01', 'P-02', 'FT-101', 'PT-101', 'MV-02', 'AIT-202', 'CP-01', 'CP-02', 'MPC-01', 'MANG-LUOI', 'LT-101']);
+// Màu phân loại phạm vi thiết bị: hiện trạng / giải pháp đưa vào / khuyến nghị bổ sung
+export const SCOPE_COLOR = { hien_trang: 0xa0703c, giai_phap: 0x7a5af5, khuyen_nghi: 0x0f9fb0 };
 const fmt = (v, nd = 2) => (v === null || v === undefined || Number.isNaN(v) ? '–' : v.toFixed(nd).replace('.', ','));
 
 /** Hạt nước chạy dọc một đường gấp khúc – tốc độ hiển thị tỉ lệ vận tốc nước thật. */
@@ -183,6 +185,34 @@ export class StationScene {
     if (l.last !== text) { l.span.textContent = text; l.last = text; }
     l.div.classList.toggle('alarm', alarm);
   }
+  /** Tô màu theo phạm vi: 'all' | 'hien_trang' | 'giai_phap' | 'khuyen_nghi'. Thiết bị khác phạm vi được làm mờ. */
+  setScopeFilter(scope, scopeOf) {
+    this.scope = scope;
+    this._tint = this._tint || new Map(); this._ghost = this._ghost || new Map();
+    for (const o of this.pickables) {
+      if (!o.userData.mat0) o.userData.mat0 = o.material;
+      const m0 = o.userData.mat0, sc = scopeOf(o.userData.tag);
+      if (scope === 'all') { o.material = m0; continue; }
+      if (sc === scope) {
+        const k = m0.uuid + scope;
+        if (!this._tint.has(k)) {
+          const m = m0.clone();
+          if (m.emissive) { m.emissive = new THREE.Color(SCOPE_COLOR[scope]); m.emissiveIntensity = 0.55; } else m.color = new THREE.Color(SCOPE_COLOR[scope]);
+          if (m0.transparent) m.opacity = Math.max(0.35, m0.opacity);
+          this._tint.set(k, m);
+        }
+        o.material = this._tint.get(k);
+      } else {
+        if (!this._ghost.has(m0.uuid)) { const m = m0.clone(); m.transparent = true; m.opacity = 0.14; m.depthWrite = false; this._ghost.set(m0.uuid, m); }
+        o.material = this._ghost.get(m0.uuid);
+      }
+    }
+    for (const [tag, l] of Object.entries(this.labels)) {
+      const sc = scopeOf(tag);
+      l.div.dataset.scope = sc || '';
+      l.div.classList.toggle('scope-off', scope !== 'all' && sc !== scope);
+    }
+  }
   /** 0 = ẩn, 1 = nhãn chính + nhãn gần camera, 2 = tất cả */
   setLabelMode(m) { this.labelMode = m; this._labelVisibility(); }
 
@@ -350,42 +380,63 @@ export class StationScene {
       this.aitScreens[tag] = sc;
       this._label(tag, V(x, 2.65, -4.2));
     });
-    // ---- tủ điều khiển CP-01 (sát tường sau, cửa kính hướng ra gian bơm) ----
+    // ---- tủ động lực CP-01 (HIỆN TRẠNG: MCCB, 2 biến tần; cải tạo thêm công tắc Tay/0/Tự động, rơ-le watchdog, đồng hồ điện) ----
     const cx = 8.55, cz = -4.2;
     this._box(1.8, 2.1, 0.6, this.mat.cabinet, cx, 1.05, cz, { tag: 'CP-01' });
     const door = this._box(1.7, 1.95, 0.02, this.mat.glass, cx, 1.07, cz + 0.31, { cast: false });
     door.userData.tag = 'CP-01';
-    this._box(0.5, 0.36, 0.1, this.mat.black, cx - 0.5, 1.6, cz + 0.15, { tag: 'GW-01' });
-    this.gwLeds = [];
-    for (let k = 0; k < 4; k++) {
-      const led = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshStandardMaterial({ color: 0x0ca30c, emissive: 0x0ca30c, emissiveIntensity: 0.8 }));
-      led.position.set(cx - 0.68 + k * 0.1, 1.72, cz + 0.21); S.add(led); this.gwLeds.push(led);
-    }
+    for (let k = 0; k < 4; k++) this._box(0.12, 0.22, 0.12, this.mat.black, cx - 0.72 + k * 0.16, 1.75, cz + 0.12, { tag: 'CP-01' }); // MCCB
     this.vfdScreens = [];
     [0, 1].forEach((k) => {
-      this._box(0.36, 0.62, 0.2, this.mat.base, cx + 0.1 + k * 0.45, 1.25, cz + 0.1, { tag: k === 0 ? 'P-01' : 'P-02' });
+      this._box(0.36, 0.62, 0.2, this.mat.base, cx + 0.1 + k * 0.45, 1.25, cz + 0.1, { tag: k === 0 ? 'VFD-01' : 'VFD-02' });
       const sc = canvasTex(128, 96);
       const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.18), new THREE.MeshBasicMaterial({ map: sc.tex }));
-      scr.position.set(cx + 0.1 + k * 0.45, 1.42, cz + 0.205); S.add(scr);
+      scr.position.set(cx + 0.1 + k * 0.45, 1.42, cz + 0.205); this._tag(scr, k === 0 ? 'VFD-01' : 'VFD-02'); S.add(scr);
       this.vfdScreens.push(sc);
     });
     this._box(0.5, 0.32, 0.3, this.mat.black, cx - 0.5, 0.35, cz + 0.05, { tag: 'CP-01' });
-    this._box(0.3, 0.12, 0.18, this.mat.cabinet, cx - 0.5, 1.95, cz + 0.1, { tag: 'RT-01' });
-    // màn HMI trên cửa tủ
-    this.hmi = canvasTex(512, 320);
-    const hmi = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.45), new THREE.MeshBasicMaterial({ map: this.hmi.tex }));
-    hmi.position.set(cx - 0.35, 1.0, cz + 0.325); this._tag(hmi, 'GW-01'); S.add(hmi);
-    // ăng-ten + đèn báo
-    this._cyl(0.025, 1.1, this.mat.black, V(cx + 0.6, 2.65, cz), 'y', { tag: 'RT-01' });
-    this.rings = [0, 1, 2].map((k) => {
-      const r = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.012, 6, 32), new THREE.MeshBasicMaterial({ color: 0x0ca30c, transparent: true, opacity: 0.7 }));
-      r.position.set(cx + 0.6, 3.2, cz); r.rotation.x = Math.PI / 2; S.add(r); r.userData.k = k; return r;
-    });
-    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 16), new THREE.MeshStandardMaterial({ color: 0x772222, emissive: 0x000000 }));
-    this.beacon.position.set(cx - 0.6, 2.2, cz); S.add(this.beacon);
+    // phần cải tạo bên trong CP-01 (thuộc giải pháp)
+    this._box(0.34, 0.16, 0.12, this.mat.yellow, cx - 0.5, 1.2, cz + 0.12, { tag: 'WDR-01' });
+    this._box(0.3, 0.2, 0.04, this.mat.black, cx - 0.5, 0.85, cz + 0.33, { tag: 'EM-101' });
+    [0, 1].forEach((k) => this._cyl(0.035, 0.05, this.mat.red, V(cx + 0.1 + k * 0.45, 0.72, cz + 0.34), 'z', { tag: 'SA-01/02' }));
     this._label('CP-01', V(cx, 2.45, cz + 0.4));
-    this._label('GW-01', V(cx - 0.9, 1.75, cz + 0.6));
-    this._label('RT-01', V(cx + 0.6, 3.55, cz));
+    this._label('VFD-01', V(cx + 0.1, 1.72, cz + 0.45));
+    this._label('VFD-02', V(cx + 0.55, 1.6, cz + 0.55));
+    this._label('WDR-01', V(cx - 0.75, 1.32, cz + 0.5));
+    this._label('EM-101', V(cx - 0.6, 0.75, cz + 0.55));
+    this._label('SA-01/02', V(cx + 0.35, 0.55, cz + 0.6));
+    // ---- tủ điều khiển & truyền thông CP-02 (GIẢI PHÁP: mini PC, I/O từ xa, router 4G, UPS, HMI) – treo tường bên, cửa hướng vào gian bơm ----
+    const kx = 9.42, kz = -2.55, ky = 1.55;
+    this._box(0.3, 1.1, 0.85, this.mat.cabinet, kx, ky, kz, { tag: 'CP-02' });
+    const door2 = this._box(0.02, 1.02, 0.78, this.mat.glass, kx - 0.16, ky, kz, { cast: false });
+    door2.userData.tag = 'CP-02';
+    this._box(0.12, 0.2, 0.3, this.mat.black, kx - 0.04, ky + 0.3, kz - 0.18, { tag: 'MPC-01' });
+    this.gwLeds = [];
+    for (let k = 0; k < 4; k++) {
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshStandardMaterial({ color: 0x0ca30c, emissive: 0x0ca30c, emissiveIntensity: 0.8 }));
+      led.position.set(kx - 0.105, ky + 0.36, kz - 0.29 + k * 0.07); S.add(led); this.gwLeds.push(led);
+    }
+    for (let k = 0; k < 5; k++) this._box(0.1, 0.16, 0.05, this.mat.steel, kx - 0.02, ky + 0.02, kz - 0.25 + k * 0.065, { tag: 'IO-01' });
+    this._box(0.08, 0.12, 0.22, this.mat.cabinet, kx - 0.03, ky + 0.32, kz + 0.2, { tag: 'RT-01' });
+    this._box(0.14, 0.2, 0.32, this.mat.base, kx - 0.02, ky - 0.36, kz, { tag: 'UPS-01' });
+    // màn cảm ứng HMI-01 trên cửa CP-02
+    this.hmi = canvasTex(512, 320);
+    const hmi = new THREE.Mesh(new THREE.PlaneGeometry(0.48, 0.3), new THREE.MeshBasicMaterial({ map: this.hmi.tex }));
+    hmi.rotation.y = -Math.PI / 2; hmi.position.set(kx - 0.175, ky - 0.05, kz + 0.12); this._tag(hmi, 'HMI-01'); S.add(hmi);
+    // ăng-ten 4G + đèn báo trên nóc CP-02
+    this._cyl(0.02, 0.9, this.mat.black, V(kx, ky + 1.0, kz + 0.3), 'y', { tag: 'RT-01' });
+    this.rings = [0, 1, 2].map((k) => {
+      const r = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.011, 6, 32), new THREE.MeshBasicMaterial({ color: 0x0ca30c, transparent: true, opacity: 0.7 }));
+      r.position.set(kx, ky + 1.35, kz + 0.3); r.rotation.x = Math.PI / 2; S.add(r); r.userData.k = k; return r;
+    });
+    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.16, 16), new THREE.MeshStandardMaterial({ color: 0x772222, emissive: 0x000000 }));
+    this.beacon.position.set(kx, ky + 0.63, kz - 0.25); S.add(this.beacon); this._tag(this.beacon, 'CP-02');
+    this._label('CP-02', V(kx - 0.2, ky + 0.85, kz - 0.2));
+    this._label('MPC-01', V(kx - 0.35, ky + 0.42, kz - 0.45));
+    this._label('IO-01', V(kx - 0.35, ky + 0.05, kz - 0.5));
+    this._label('RT-01', V(kx, ky + 1.6, kz + 0.3));
+    this._label('UPS-01', V(kx - 0.3, ky - 0.42, kz + 0.25));
+    this._label('HMI-01', V(kx - 0.3, ky - 0.25, kz + 0.45));
     // ---- khu dân cư (mạng lưới DMA-A) ----
     this.houses = [];
     const hs = [[17, -4, 2], [17, 4, 2], [20.5, -4.5, 1], [20.5, 4, 2], [24, -4, 2], [24, 4.5, 1], [27.5, -3.5, 2], [29, 5, 3]];
@@ -406,7 +457,7 @@ export class StationScene {
       overview: [V(0.5, 11.5, 17.5), V(-1.5, 1.0, 0)],
       tank: [V(-8, 8.5, 12), V(-8, 2, 0)],
       pumps: [V(4.5, 3.6, 6), V(1.4, 0.9, 0)],
-      cabinet: [V(8.0, 1.9, -0.9), V(8.4, 1.3, -4.2)],
+      cabinet: [V(6.3, 1.65, 0.9), V(9.0, 1.4, -3.4)],
       quality: [V(5.8, 2.2, 0.2), V(5.8, 1.9, -4.4)],
       network: [V(14, 12, 24), V(22, 2.5, 0)],
     };
@@ -513,10 +564,10 @@ export class StationScene {
     this.mvLamp.material.color.set(mvc); this.mvLamp.material.emissive.set(mvc);
     if (pl.drain_open) this.drainWheel.rotation.y += dt * 2;
     // tủ điều khiển: LED gateway theo trạng thái kết nối
-    const cs = v.comms;
-    const ledCol = cs === 'online' ? 0x0ca30c : cs === 'resync' ? 0x3987e5 : 0xfab219;
+    const cs = v.comms, dead = v.mode === 'x';
+    const ledCol = dead ? 0xd03b3b : cs === 'online' ? 0x0ca30c : cs === 'resync' ? 0x3987e5 : 0xfab219;
     this.gwLeds.forEach((l, k) => {
-      const on = cs === 'offline' ? Math.sin(this.anim.t * 6 + k) > 0 : (k === 0 || Math.sin(this.anim.t * 10 + k * 1.7) > 0.2);
+      const on = dead ? k === 0 : cs === 'offline' ? Math.sin(this.anim.t * 6 + k) > 0 : (k === 0 || Math.sin(this.anim.t * 10 + k * 1.7) > 0.2);
       l.material.color.set(on ? ledCol : 0x222222); l.material.emissive.set(on ? ledCol : 0x000000);
     });
     this.rings.forEach((r) => {
@@ -526,7 +577,7 @@ export class StationScene {
       r.material.opacity = cs === 'offline' ? 0.9 * (Math.sin(this.anim.t * 6) > 0 ? 1 : 0.2) : 0.8 * (1 - ph);
       r.material.color.set(cs === 'offline' ? 0xd03b3b : cs === 'resync' ? 0x3987e5 : 0x0ca30c);
     });
-    const alarm = v.mode === 'd';
+    const alarm = v.mode === 'd' || v.mode === 'x';
     const on = alarm && Math.sin(this.anim.t * 9) > 0;
     this.beacon.material.emissive.set(on ? 0xff2a2a : 0x000000);
     this.beacon.material.color.set(alarm ? 0xd03b3b : 0x772222);
@@ -560,10 +611,15 @@ export class StationScene {
       draw(this.aitScreens[tag], [[tag + ' · ' + name, 20, '#9fb3b8'], [val === null || val === undefined ? 'LỖI' : fmt(val, nd), 64, col], [unit, 20, '#9fb3b8']]);
     }
     pl.pumps.forEach((pu, k) => draw(this.vfdScreens[k], [[pu.fault ? 'FAULT' : pu.running ? 'RUN' : 'STOP', 22, pu.fault ? '#ff6b6b' : '#9fb3b8'], [fmt(pu.f, 1) + ' Hz', 30], [fmt(pu.amps, 1) + ' A', 20, '#9fb3b8']]));
+    if (v.mode === 'x') {
+      draw(this.hmi, [['HMI-01 · ST-01', 24, '#9fb3b8'], ['MẤT KẾT NỐI', 40, '#ff6b6b'], ['BỘ ĐIỀU KHIỂN MPC-01', 28, '#ff6b6b'], ['Biến tần đang chạy PID nội', 24, '#fab219']], '#120808');
+      return;
+    }
     const modeName = { a: '(a) BÌNH THƯỜNG', b: '(b) TỰ VẬN HÀNH', c: '(c) ĐỒNG BỘ', d: '(d) CẢNH BÁO/AN TOÀN' }[v.mode];
     const mcol = { a: '#8ef0b0', b: '#fab219', c: '#8fc2ff', d: '#ff6b6b' }[v.mode];
+    const ctl = { auto: 'TỰ ĐỘNG', remote: 'TAY · TỪ XA', local: 'TAY · TẠI CHỖ' }[v.ctl ?? 'auto'];
     draw(this.hmi, [
-      ['ST-01 · HMI GW-01', 24, '#9fb3b8'], [modeName, 30, mcol],
+      ['HMI-01 · ST-01 · ' + ctl, 24, v.ctl && v.ctl !== 'auto' ? '#fab219' : '#9fb3b8'], [modeName, 30, mcol],
       [`P  ${fmt(sig.p_ctrl, 2)} bar  đặt ${fmt(v.p_set, 2)}`, 26], [`Q  ${fmt(sig.q_f, 1)} m³/h`, 26],
       [`Mức ${fmt(sig.level, 2)} m  kW ${fmt(pl.kw, 2)}`, 26],
       [`Kịch bản v${v.version} · ${v.strategy}`, 22, '#9fb3b8'], [`Đệm ${v.buffer} bản ghi`, 22, '#9fb3b8'],

@@ -4,6 +4,16 @@ import { stream } from './rng.js';
 export const TAG_SOURCE = { 'PT-101': 'p', 'PT-102': 'p', 'FT-101': 'q_out', 'FT-100': 'q_in', 'LT-101': 'level', 'AIT-201': 'cl', 'AIT-202': 'ntu', 'AIT-203': 'ph' };
 export const TAG_ORDER = ['PT-101', 'PT-102', 'FT-101', 'FT-100', 'LT-101', 'AIT-201', 'AIT-202', 'AIT-203'];
 
+// Các cảm biến thực sự được lắp theo tùy chọn cfg.hardware (mặc định: lắp đủ)
+export function installedTags(cfg) {
+  const hw = cfg.hardware ?? {};
+  const out = new Set(TAG_ORDER);
+  if (hw['PT-102'] === false) out.delete('PT-102');
+  if (hw['FT-100_pulse'] === false) out.delete('FT-100');
+  for (const t of ['AIT-201', 'AIT-202', 'AIT-203']) if (hw[t] === false) out.delete(t);
+  return out;
+}
+
 export class AnalogSensor {
   constructor(tag, spec) {
     this.tag = tag; this.lo = spec.lo; this.hi = spec.hi; this.sd = spec.sd; this.tau = spec.tau_s;
@@ -39,14 +49,16 @@ export class SensorSet {
     this.rng = stream(seed + (station.seed_offset ?? 0), 2);
     this.sensors = {};
     for (const tag of TAG_ORDER) this.sensors[tag] = new AnalogSensor(tag, cfg.sensors[tag]);
+    this.installed = installedTags(cfg);
     this.lsll_trip = cfg.safety.float_lsll_m; this.lsll_reset = cfg.safety.float_lsll_reset_m; this.lsll = false;
   }
   read(plant, dt, t) {
     const meas = {};
     const src = { p: plant.p, q_out: plant.q_out, q_in: plant.q_in, level: plant.level, cl: plant.cl, ntu: plant.ntu, ph: plant.ph };
     for (const tag of TAG_ORDER) {
-      const z = this.rng.gauss();
-      meas[tag] = this.sensors[tag].read(src[TAG_SOURCE[tag]], dt, t, z);
+      const z = this.rng.gauss(); // luôn rút số ngẫu nhiên để các phương án lắp đặt dùng chung chuỗi nhiễu
+      const v = this.sensors[tag].read(src[TAG_SOURCE[tag]], dt, t, z);
+      meas[tag] = this.installed.has(tag) ? v : null;
     }
     if (!this.lsll && plant.level < this.lsll_trip) this.lsll = true;
     else if (this.lsll && plant.level > this.lsll_reset) this.lsll = false;

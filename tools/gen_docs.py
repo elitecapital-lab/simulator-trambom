@@ -1,4 +1,5 @@
-"""Sinh docs/02-thanh-phan-va-tham-so.md từ config/components.json và config/station.json
+"""Sinh docs/02-thanh-phan-va-tham-so.md từ config/components.json và config/station.json, và cập nhật
+các bảng tự động (danh mục thiết bị, kết quả "có lắp / không lắp") trong docs/07-hien-trang-va-giai-phap.md
 để tài liệu luôn khớp với tham số mô phỏng.   python tools/gen_docs.py"""
 import json
 import os
@@ -44,24 +45,71 @@ MODEL = r"""
 """
 
 
+SCOPE = [("hien_trang", "Hiện trạng nhà máy (đã có)"), ("giai_phap", "Giải pháp đưa vào (tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ)"),
+         ("khuyen_nghi", "Khuyến nghị bổ sung (để vận hành trơn tru nhất)")]
+CHANGE = {"giu_nguyen": "giữ nguyên", "cau_hinh_lai": "cấu hình lại", "nang_cap": "nâng cấp", "bo_sung": "bổ sung mới", "thay_the": "thay thế"}
+PRIO = {"bat_buoc": "bắt buộc", "nen_co": "nên có", "tuy_chon": "tùy chọn"}
+FIELDS = [("role", "Vai trò"), ("interface", "Giao tiếp với mini PC"), ("spec", "Thông số điển hình"), ("if_missing", "Nếu không có"),
+          ("fallback", "Khi hỏng / dự phòng"), ("sim", "Thử trong mô phỏng")]
+vn = lambda x: re.sub(r"(\d)\.(\d)", r"\1,\2", x)
+cell = lambda x: (x or "").replace("|", "/").replace("\n", " ")
+
+
+def bom_md(comps):
+    out = []
+    for key, title in SCOPE:
+        items = [c for c in comps if c.get("scope") == key]
+        out += ["### %s – %d hạng mục" % (title, len(items)), "", "| Mã | Thiết bị | Thay đổi | Ưu tiên | Vai trò | Giao tiếp với mini PC |", "|---|---|---|---|---|---|"]
+        for c in items:
+            out.append("| `%s` | %s | %s | %s | %s | %s |" % (c["tag"], cell(c["name"]), CHANGE.get(c.get("change"), ""), PRIO.get(c.get("priority"), ""),
+                                                        cell(c.get("role")), cell(c.get("interface"))))
+        out.append("")
+    return out
+
+
+def whatif_md():
+    path = os.path.join(ROOT, "docs", "ket-qua", "whatif.json")
+    if not os.path.exists(path):
+        return ["_Chưa có kết quả – chạy `python -m trambom options`._"]
+    from trambom.whatif import table_md
+    with open(path, encoding="utf-8") as f:
+        return [table_md(json.load(f))]
+
+
+def inject(path, marker, lines):
+    with open(path, encoding="utf-8") as f:
+        txt = f.read()
+    a, b = "<!-- %s-START -->" % marker, "<!-- %s-END -->" % marker
+    i, j = txt.index(a) + len(a), txt.index(b)
+    txt = txt[:i] + "\n" + "\n".join(lines).rstrip() + "\n" + txt[j:]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(txt)
+
+
 def main():
     comps = load_json("components.json")["components"]
     cfg = load_json("station.json")
-    out = [HEAD, "## Danh mục thành phần", ""]
-    groups = []
-    for c in comps:
-        if c["group"] not in groups:
-            groups.append(c["group"])
-    for g in groups:
-        out += ["### " + g, ""]
-        for c in [c for c in comps if c["group"] == g]:
-            out += ["#### %s · %s" % (c["tag"], c["name"]), "", c["desc"], "",
-                    "| Tham số | Giá trị | Đơn vị |", "|---|---:|---|"]
-            for k, v, u in c["params"]:
-                out.append("| %s | %s | %s |" % (k, v, u))
-            out += ["", "**Dải làm việc:** " + c["range"], ""]
+    out = [HEAD, "Mỗi thiết bị được gắn nhãn phạm vi: **hiện trạng** (nhà máy đã có), **giải pháp** (đưa vào để tiếp nhận – xử lý – điều khiển "
+           "tín hiệu tại chỗ bằng mini PC) hoặc **khuyến nghị** (nên có để vận hành trơn tru). Bảng tổng hợp, sơ đồ đấu nối và phân tích "
+           "\"nếu không lắp\" ở [07-hien-trang-va-giai-phap.md](07-hien-trang-va-giai-phap.md).", "", "## Danh mục thành phần", ""]
+    for key, title in SCOPE:
+        items = [c for c in comps if c.get("scope") == key]
+        out += ["### " + title, ""]
+        for c in items:
+            out += ["#### %s · %s" % (c["tag"], c["name"]), "",
+                    "*%s · %s · %s · nhóm %s*" % (dict(SCOPE)[key].split(" (")[0], CHANGE.get(c.get("change"), ""), PRIO.get(c.get("priority"), ""), c["group"].lower()), "",
+                    c["desc"], ""]
+            rows = [(lbl, c[k]) for k, lbl in FIELDS if c.get(k)]
+            if rows:
+                out += ["| Mục | Nội dung |", "|---|---|"] + ["| %s | %s |" % (lbl, cell(v)) for lbl, v in rows] + [""]
+            if c["params"]:
+                out += ["| Tham số | Giá trị | Đơn vị |", "|---|---:|---|"]
+                for k, v, u in c["params"]:
+                    out.append("| %s | %s | %s |" % (k, v, u))
+                out.append("")
+            if c.get("range"):
+                out += ["**Dải làm việc:** " + c["range"], ""]
     out += ["## Bảng ngưỡng tham số", "", "| Tham số | Ngưỡng | Ghi chú |", "|---|---|---|"]
-    vn = lambda x: re.sub(r"(\d)\.(\d)", r"\1,\2", x)
     for name, val, note in threshold_rows(cfg):
         out.append("| %s | %s | %s |" % (name, vn(val), vn(note)))
     out += ["", "Giới hạn chất lượng nước theo QCVN 01-1:2018/BYT (ban hành kèm Thông tư 41/2018/TT-BYT): clo dư tự do "
@@ -72,6 +120,11 @@ def main():
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
     print("Đã ghi", path)
+    d7 = os.path.join(ROOT, "docs", "07-hien-trang-va-giai-phap.md")
+    if os.path.exists(d7):
+        inject(d7, "BOM", bom_md(comps))
+        inject(d7, "WHATIF", whatif_md())
+        print("Đã cập nhật bảng tự động trong", d7)
 
 
 if __name__ == "__main__":

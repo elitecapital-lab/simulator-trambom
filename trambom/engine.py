@@ -4,7 +4,8 @@ import time
 
 from .baseline import FixedSchedule
 from .demand import Disturbances
-from .gateway import Gateway
+from .fallback import GatewayFallback
+from .gateway import MANUAL_CMDS, Gateway
 from .kpi import KpiTracker, MANUAL_DETECTABLE
 from .link import Link
 from .physics import Plant
@@ -13,8 +14,9 @@ from .server import OperationsServer
 from .util import deep_copy, load_json
 
 HIST_FIELDS = ["t", "p_out", "p_set", "p_crit", "q_out", "q_req", "q_in", "q_fc", "level", "cl", "ntu", "ph",
-               "kw", "kwh", "f1", "f2", "mode", "buf", "online", "tte", "q_leak", "backlog"]
-MODE_CODE = {"a": 0, "b": 1, "c": 2, "d": 3}
+               "kw", "kwh", "f1", "f2", "mode", "buf", "online", "tte", "q_leak", "backlog", "manual"]
+CTL_CODE = {"auto": 0, "remote": 1, "local": 2}
+MODE_CODE = {"a": 0, "b": 1, "c": 2, "d": 3, "x": 4}  # x: mini PC ngừng, mạch dự phòng điều khiển
 NAN = float("nan")
 
 
@@ -71,6 +73,8 @@ class StationSim:
         self.base = None
         self.server = server
         self._alarm_seen = 0
+        self.gw_dead = None
+        self.gw_down_s = 0.0
         if kind == "smart":
             self.sensors = SensorSet(cfg, self.station, seed)
             self.link = Link(cfg, self.station.get("seed_offset", 0))
@@ -106,7 +110,11 @@ class StationSim:
         d = self.dist.step(t, dt)
         if self.kind == "smart":
             meas = self.sensors.read(pl, dt, t)
-            out = self.gw.step(t, dt, meas)
+            if self.gw_dead is None:
+                out = self.gw.step(t, dt, meas)
+            else:
+                self.link.recv_gateway(t)  # bản tin tới mini PC đang treo bị mất
+                out = self.gw_dead.step(t, dt, meas)
             lsll = meas["LSLL-101"]
             hist = self.gw.alarms.history
             while self._alarm_seen < len(hist):
@@ -138,12 +146,36 @@ class StationSim:
         if self.hist.due(self.t):
             self.hist.add(self.snapshot())
 
+    def fail_gateway(self, t):
+        if self.gw_dead is not None:
+            return
+        self.gw_dead = GatewayFallback(self.cfg, self.gw, self.plant, t)
+        self.gw.logs.append({"t": t, "level": "critical",
+                             "text": "Mini PC (edge gateway) ngừng hoạt động – mất thu thập, điều khiển, an toàn mềm và truyền thông"})
+        self.kpi.add_incident("gateway_fail", t, "gateway_fail")
+
+    def restore_gateway(self, t):
+        fb = self.gw_dead
+        if fb is None:
+            return
+        self.gw_dead = None
+        self.gw_down_s += t - fb.t0
+        pumps = [{"running": pu.running, "f": pu.f} for pu in self.plant.pumps]
+        self.gw.restart(t, fb.t0, pumps, fb.note())
+
     def snapshot(self):
         pl = self.plant
         row = {"t": self.t, "p_out": pl.p_net, "p_crit": pl.p_crit, "q_out": pl.q_out, "q_req": pl.q_req, "q_in": pl.q_in,
                "level": pl.level, "cl": pl.cl, "ntu": pl.ntu, "ph": pl.ph, "kw": pl.kw, "kwh": self.kpi.energy_kwh,
                "f1": pl.pumps[0].f, "f2": pl.pumps[1].f, "q_leak": pl.q_leak, "backlog": pl.backlog}
-        if self.gw is not None:
+        if self.gw is not None and self.gw_dead is not None:
+            g = self.gw
+            row["p_set"] = self.gw_dead.p_set if self.gw_dead.p_set is not None else NAN
+            row["q_fc"] = g.forecaster.mean_at(self.t)
+            row["mode"] = MODE_CODE["x"]
+            row["buf"] = len(g.comms.buf) / float(self.cfg["gateway"]["buffer_capacity"])
+            row["online"] = 0.0
+        elif self.gw is not None:
             g = self.gw
             row["p_set"] = g.ctrl.p_set
             row["q_fc"] = g.forecaster.mean_at(self.t)
@@ -151,6 +183,7 @@ class StationSim:
             row["buf"] = len(g.comms.buf) / float(self.cfg["gateway"]["buffer_capacity"])
             row["online"] = 1.0 if g.comms.state != "offline" else 0.0
             row["tte"] = g.ctrl.tte_h if g.ctrl.tte_h is not None else NAN
+            row["manual"] = CTL_CODE[g.control_src()]
         else:
             row["mode"] = -1
         return row
@@ -166,6 +199,11 @@ class StationSim:
             s["forecast_mape"] = g.forecaster.mape()
             s["sms"] = c["sms"]
             s["script_version"] = g.script["version"]
+            s["manual_min"] = g.manual_s / 60.0
+            s["gw_down_min"] = (self.gw_down_s + (self.t - self.gw_dead.t0 if self.gw_dead is not None else 0.0)) / 60.0
+            delays = [((n["t_notified"] if n["t_notified"] is not None else self.t) - n["t"]) / 60.0 for n in g.notify]
+            s["notify"] = {"critical": len(delays), "max_delay_min": max(delays) if delays else 0.0,
+                           "via": sorted(set(n["via"] for n in g.notify))}
             if self.server is not None:
                 st = self.server.stations[self.sid]
                 s["server_records"] = st["records"]
@@ -205,11 +243,18 @@ def dispatch_event(ev, t, smart, fixed, server):
     elif typ == "link_up":
         smart.link.set_up(True, t)
     elif typ == "server_command":
-        server.send_command(sid, ev["cmd"]["type"], ev["cmd"].get("args", {}), t, ev.get("ttl_s", 900.0))
+        ttl = ev.get("ttl_s", smart.cfg["gateway"]["manual_cmd_ttl_s"] if ev["cmd"]["type"] in MANUAL_CMDS else 900.0)
+        server.send_command(sid, ev["cmd"]["type"], ev["cmd"].get("args", {}), t, ttl)
     elif typ == "server_publish":
         server.publish_script(sid, ev["patch"], t, ev.get("by", "Điều độ viên"), ev.get("reason", ""), ev.get("strategy"))
     elif typ == "local_edit":
         smart.gw.local_edit(ev["patch"], t, ev.get("by", "HMI"), ev.get("reason", ""))
+    elif typ == "local_command":
+        smart.gw.local_command(ev["cmd"]["type"], ev["cmd"].get("args", {}), t)
+    elif typ == "gateway_fail":
+        smart.fail_gateway(t)
+    elif typ == "gateway_restore":
+        smart.restore_gateway(t)
 
 
 class TwinSim:
@@ -241,6 +286,8 @@ class TwinSim:
         if self.fixed is not None:
             self.fixed.step()
         self.server.step(t)
+        if self.smart.gw_dead is not None and not self.server.stations[self.smart.sid]["online"]:
+            self.smart.kpi.detect_kind(t, "gateway_fail", "máy chủ mất nhịp tim (LWT)")
         self.t = self.smart.t
 
     def run(self, hours=None, progress=None):

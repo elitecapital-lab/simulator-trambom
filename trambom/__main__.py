@@ -6,6 +6,8 @@ Lệnh:
   run S4 [--level advanced]    chạy một kịch bản, in bảng so sánh, lưu biểu đồ
   compare [--scenarios ...]    chạy nhiều kịch bản ở cả hai mức, xuất báo cáo Markdown + PNG
   network [--hours 24]         mô phỏng 4 trạm trong mạng lưới, in bảng điều hành tổng quát
+  options                      so sánh "có lắp / không lắp" từng thiết bị giải pháp & khuyến nghị
+  run S5 --off PT-102          chạy kịch bản khi bỏ bớt thiết bị (PT-102, FT-100_pulse, AIT-201/202/203, SMS, VFD_PID_fallback)
   check-student <file.py>      chấm kịch bản theo ngưỡng của học viên
   web [--port 8000]            chạy máy chủ web tĩnh cho bản mô phỏng 3D
 """
@@ -70,9 +72,11 @@ def cmd_run(args):
         from .student import load_custom
         custom = load_custom(args.script)
     sc = load_scenarios()[args.scenario]
-    print("Chạy %s – mức %s ..." % (sc["name"], args.level))
+    off = [x for x in (args.off or "").split(",") if x]
+    print("Chạy %s – mức %s%s ..." % (sc["name"], args.level, (" – KHÔNG lắp: " + ", ".join(off)) if off else ""))
     t0 = time.time()
-    r = run_scenario(args.scenario, args.level, args.hours, args.dt, custom, progress=_progress)
+    from .whatif import config_with
+    r = run_scenario(args.scenario, args.level, args.hours, args.dt, custom, cfg=config_with(off), progress=_progress)
     sys.stderr.write("\n")
     print("Xong sau %.1f s\n" % (time.time() - t0))
     basic = r if args.level == "basic" else None
@@ -154,6 +158,23 @@ def cmd_network(args):
     print("Cảnh báo tập trung đã ghi nhận: %d" % t["central_alarms"])
 
 
+def cmd_options(args):
+    from .report import save_json
+    from .whatif import run_all, table_md
+    t0 = time.time()
+    print("Chạy các cặp có lắp / không lắp ...")
+    rows = run_all(args.jobs, lambda job: print("  xong %s %s/%s %s sau %.0f s" % (job[0], job[1], job[2], "có" if job[3] else "không", time.time() - t0)))
+    md = table_md(rows)
+    print()
+    print(md)
+    out = args.out or os.path.join(ROOT, "docs", "ket-qua")
+    os.makedirs(out, exist_ok=True)
+    save_json(rows, os.path.join(out, "whatif.json"))
+    with open(os.path.join(out, "whatif.md"), "w", encoding="utf-8") as f:
+        f.write("# Giá trị của từng thiết bị: có lắp / không lắp\n\nSinh tự động bởi `python -m trambom options`.\n\n" + md + "\n")
+    print("\nĐã ghi %s" % os.path.join(out, "whatif.md"))
+
+
 def cmd_check(args):
     from .student import check
     print("Chấm kịch bản %s ..." % args.file)
@@ -196,6 +217,7 @@ def main(argv=None):
     p.add_argument("--hours", type=float)
     p.add_argument("--dt", type=float)
     p.add_argument("--script", help="file kịch bản học viên (hàm dieu_khien)")
+    p.add_argument("--off", help="thiết bị không lắp, phân cách bằng dấu phẩy: PT-102,FT-100_pulse,AIT-201,AIT-202,AIT-203,SMS,VFD_PID_fallback")
     p.add_argument("--out")
     p = sub.add_parser("compare")
     p.add_argument("--scenarios")
@@ -205,6 +227,9 @@ def main(argv=None):
     p = sub.add_parser("network")
     p.add_argument("--hours", type=float, default=24)
     p.add_argument("--level", choices=["basic", "advanced"], default="basic")
+    p = sub.add_parser("options")
+    p.add_argument("--jobs", type=int, default=4)
+    p.add_argument("--out")
     p = sub.add_parser("check-student")
     p.add_argument("file")
     p.add_argument("--quick", action="store_true")
@@ -212,7 +237,7 @@ def main(argv=None):
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--no-browser", action="store_true")
     args = ap.parse_args(argv)
-    fn = {"list": cmd_list, "thresholds": cmd_thresholds, "run": cmd_run, "compare": cmd_compare, "network": cmd_network,
+    fn = {"list": cmd_list, "thresholds": cmd_thresholds, "run": cmd_run, "compare": cmd_compare, "network": cmd_network, "options": cmd_options,
           "check-student": cmd_check, "web": cmd_web}.get(args.cmd)
     if fn is None:
         ap.print_help()

@@ -1,11 +1,13 @@
-// Màn hình HMI 2D theo phong cách ISA-101 (hiệu năng cao): nền xám trung tính, màu chỉ dành cho bất thường.
-// Hai vị trí vận hành:
+// Màn hình HMI/SCADA 2D theo kiểu runtime đang dùng ở các nhà máy nước (WinCC, InTouch, iFIX, Ignition):
+// thanh tiêu đề, dòng báo động, nhiều màn hình chọn bằng thanh nút phía dưới, bảng điều khiển nổi (faceplate)
+// cho bơm, van, thiết bị đo và chế độ trạm. Hai giao diện màu: Tối (SCADA xanh thép) và Sáng (WinCC xám).
+// Hai vị trí vận hành (xem ops.js):
 //   - Tại trạm (màn cảm ứng HMI-01 trên cửa tủ CP-02): đọc trực tiếp từ gateway, lệnh đi thẳng, không qua mạng.
 //   - Trung tâm (SCADA): chỉ thấy dữ liệu MÁY CHỦ đã nhận qua MQTT (chu kỳ 10 s, đứng yên khi mất mạng);
 //     lệnh đi qua máy chủ, có thời hạn ngắn, có thể bị từ chối (quyền tại chỗ) hoặc hết hạn (mất mạng).
-import { fmtClock } from '../sim/util.js';
-import { h, fmt, SEV_LABEL, tShort } from './dom.js';
-import { ackAlarm, commandLog, CTL_NAME, MODE_CHIP, MODE_NAME, permissives, sendCommand, SEV_ORDER, stationData } from './ops.js';
+import { fmtClock, fmtHM } from '../sim/util.js';
+import { h, SEV_LABEL, tShort } from './dom.js';
+import { ackAlarm, CMD_STATUS, commandLog, CTL_NAME, MODE_NAME, permissives, sendCommand, SEV_ORDER, stationData } from './ops.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 function S(tag, attrs = {}, ...kids) {
@@ -19,369 +21,1238 @@ function S(tag, attrs = {}, ...kids) {
   for (const c of kids.flat()) if (c !== null && c !== undefined) el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   return el;
 }
-const TANK = { x: 100, y0: 130, y1: 470, w: 200, hMax: 4.2 };
-const lvY = (L) => TANK.y1 - (Math.max(0, Math.min(TANK.hMax, L)) / TANK.hMax) * (TANK.y1 - TANK.y0);
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const num = (v, nd) => v.toFixed(nd).replace('.', ',');
+// chỉ ghi DOM khi giá trị thay đổi (update() chạy mỗi 250 ms)
+const setT = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
+const setC = (el, c) => { if (el._c !== c) { el._c = c; el.setAttribute('class', c); } };
+const setA = (el, k, v) => { const m = el._a || (el._a = {}); if (m[k] !== v) { m[k] = v; el.setAttribute(k, v); } };
+const setD = (el, on) => { if (el.disabled !== on) el.disabled = on; };
+const setH = (el, on) => { if (el.hidden !== on) el.hidden = on; };
+const icon = (d, cls = 'h-ico') => S('svg', { viewBox: '0 0 20 20', class: cls, 'aria-hidden': 'true' }, S('path', { d }));
+const ICON = {
+  ov: 'M2 3h6v5H2zM12 12h6v5h-6zM5 8v6.5h7M8 5.5h7v6.5', pump: 'M10 3a7 7 0 1 0 .01 0zM7.5 6.5l6.5 3.5-6.5 3.5z',
+  qual: 'M10 2.5c3 4 5.5 6.6 5.5 9.5a5.5 5.5 0 0 1-11 0c0-2.9 2.5-5.5 5.5-9.5zM7.5 12.3l2 2 3.5-4', trend: 'M2 17h16M2 3v14M4 13l4-5 3 3 4-6 3 3',
+  alarm: 'M10 2.8a5 5 0 0 1 5 5v4l1.6 2.6H3.4L5 11.8v-4a5 5 0 0 1 5-5zM8 16.6a2 2 0 0 0 4 0', log: 'M7 5h10M7 10h10M7 15h10M3 5h1.5M3 10h1.5M3 15h1.5',
+  par: 'M4 3v14M10 3v14M16 3v14M2 7h4M8 12.5h4M14 6h4', user: 'M10 10a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM3 18c.6-3.8 3.4-6 7-6s6.4 2.2 7 6',
+  skin: 'M10 2.5a7.5 7.5 0 1 0 0 15zM10 2.5a7.5 7.5 0 0 1 0 15', bell: 'M10 2.8a5 5 0 0 1 5 5v4l1.6 2.6H3.4L5 11.8v-4a5 5 0 0 1 5-5zM8 16.6a2 2 0 0 0 4 0',
+};
+const SCREENS = [
+  ['ov', 'TỔNG QUAN', 'TỔNG QUAN TRẠM BƠM'], ['pump', 'BƠM – BIẾN TẦN', 'BƠM TĂNG ÁP VÀ BIẾN TẦN'], ['qual', 'CHẤT LƯỢNG NƯỚC', 'CHẤT LƯỢNG NƯỚC SAU BỂ CHỨA'],
+  ['trend', 'XU HƯỚNG', 'XU HƯỚNG VẬN HÀNH'], ['alarm', 'BÁO ĐỘNG', 'DANH SÁCH BÁO ĐỘNG'], ['log', 'NHẬT KÝ', 'NHẬT KÝ LỆNH VÀ SỰ KIỆN'], ['par', 'THÔNG SỐ', 'THÔNG SỐ CÀI ĐẶT VÀ GIỚI HẠN'],
+];
+const POS = {
+  local: { name: 'TẠI TRẠM · HMI-01', role: 'Kỹ thuật viên vận hành', desc: 'Màn cảm ứng trên tủ CP-02 – đọc trực tiếp gateway, lệnh không qua mạng' },
+  remote: { name: 'TRUNG TÂM · SCADA', role: 'Điều độ viên trung tâm', desc: 'Máy chủ điều hành – dữ liệu qua MQTT 10 s, lệnh có hạn 60 s' },
+};
+// thiết bị đo: trường trong stationData, đơn vị, số lẻ, cột lịch sử tại trạm, cột chuỗi phút ở máy chủ
+const INST = {
+  'PT-101': { k: 'p1', u: 'bar', nd: 2, hk: 'p_out', sk: 'p', lbl: 'Áp lực đầu ra (điều khiển)' }, 'PT-102': { k: 'p2', u: 'bar', nd: 2, hk: 'p_out', lbl: 'Áp lực đầu ra (bảo vệ)' },
+  'FT-100': { k: 'q_in', u: 'm³/h', nd: 1, hk: 'q_in', lbl: 'Lưu lượng nước vào bể' }, 'FT-101': { k: 'q', u: 'm³/h', nd: 1, hk: 'q_out', sk: 'q', lbl: 'Lưu lượng ra mạng lưới' },
+  'LT-101': { k: 'level', u: 'm', nd: 2, hk: 'level', sk: 'level', lbl: 'Mức nước bể T-01' }, 'AIT-201': { k: 'cl', u: 'mg/L', nd: 2, hk: 'cl', lbl: 'Clo dư tự do' },
+  'AIT-202': { k: 'ntu', u: 'NTU', nd: 2, hk: 'ntu', lbl: 'Độ đục' }, 'AIT-203': { k: 'ph', u: '', nd: 2, hk: 'ph', lbl: 'pH' },
+  'PL-301': { k: 'p_crit', u: 'bar', nd: 2, hk: 'p_crit', lbl: 'Áp lực điểm bất lợi DMA-A' },
+};
+const PUMP_TAG = ['P-01', 'P-02'];
+const PEN_COL = { dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'], light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6'] };
+const PENS = [
+  { k: 'p_out', sk: 'p', name: 'Áp đầu ra PT-101', u: 'bar', lo: 0, hi: 6, nd: 2 }, { k: 'p_set', name: 'Áp đặt P_set', u: 'bar', lo: 0, hi: 6, nd: 2, dash: [7, 5] },
+  { k: 'p_crit', name: 'Áp điểm bất lợi PL-301', u: 'bar', lo: 0, hi: 6, nd: 2, dash: [2, 4] }, { k: 'q_out', sk: 'q', name: 'Lưu lượng ra FT-101', u: 'm³/h', lo: 0, hi: 40, nd: 1 },
+  { k: 'level', sk: 'level', name: 'Mức bể LT-101', u: 'm', lo: 0, hi: 5, nd: 2 }, { k: 'kw', sk: 'kw', name: 'Công suất điện', u: 'kW', lo: 0, hi: 15, nd: 2 },
+];
+const SEV_TXT = { critical: 'KHẨN', alarm: 'BÁO ĐỘNG', warning: 'CẢNH BÁO', info: 'THÔNG TIN' };
+const TK = { x: 210, y0: 150, y1: 530, w: 180, hMax: 4.2 };
+const lvY = (L) => TK.y1 - (clamp(L, 0, TK.hMax) / TK.hMax) * (TK.y1 - TK.y0);
 
 export class HmiView {
   constructor(host, app) {
     this.app = app;
     this.where = 'local';
-    this.sel = 0; // 0 = P-01, 1 = P-02, 2 = MV-02
-    this.R = {};
-    this.F = {};
-    this.root = h('div', { class: 'hmi', hidden: true, 'aria-label': 'Màn hình HMI trạm bơm' });
+    this.visible = false;
+    this.scr = 'ov';
+    this.D = {}; this.PF = {}; this.O = {}; this.fps = []; this._keys = {}; this._z = 20;
+    this.TR = { range: 3600, sel: 0, hide: new Set(), hx: null, last: 0 };
+    this.skin = 'dark';
+    try { if (localStorage.getItem('trambom-hmi-skin') === 'light') this.skin = 'light'; } catch (e) { /* bỏ qua */ }
+    this.root = h('div', { class: 'hmi', hidden: true, 'aria-label': 'Màn hình HMI/SCADA trạm bơm ST-01' });
     host.append(this.root);
     this._build();
+    new ResizeObserver(() => this._resize()).observe(this.root);
   }
-  show(on) { this.visible = on; this.root.hidden = !on; if (on) this.update(true); }
-  setWhere(w) { this.where = w; this._editing = false; this.update(true); }
+  show(on) { this.visible = on; this.root.hidden = !on; if (on) { this._resize(); this.update(true); } }
+  setWhere(w) {
+    this.where = w === 'remote' ? 'remote' : 'local';
+    for (const fp of this.fps) this._cancel(fp);
+    this._keys = {}; this.TR.last = 0;
+    this.update(true);
+  }
+  go(k) {
+    this.scr = k;
+    for (const [n, el] of Object.entries(this.screens)) el.hidden = n !== k;
+    for (const [n, b] of Object.entries(this.navBtns)) { b.classList.toggle('on', n === k); b.setAttribute('aria-pressed', n === k); }
+    const i = SCREENS.findIndex((s) => s[0] === k);
+    this.H.title.replaceChildren(h('small', {}, String(i + 1).padStart(2, '0')), SCREENS[i][2]);
+    this._keys = {}; this.TR.last = 0;
+    this.update(true);
+  }
+  toggleSkin() {
+    this.skin = this.skin === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('trambom-hmi-skin', this.skin); } catch (e) { /* bỏ qua */ }
+    this._applySkin(); this.TR.last = 0; this.update(true);
+  }
+  _applySkin() { this.root.classList.toggle('h-light', this.skin === 'light'); setT(this.H.skinTxt, this.skin === 'light' ? 'SÁNG' : 'TỐI'); }
+  _resize() {
+    const w = this.root.clientWidth;
+    if (!w) return;
+    const narrow = w < 700;
+    if (narrow !== this.narrow) { this.narrow = narrow; this.root.classList.toggle('h-narrow', narrow); while (narrow && this.fps.length > 1) this._fpClose(this.fps[0]); }
+    for (const fp of this.fps) this._fpClamp(fp);
+    this.TR.last = 0;
+    if (this.visible && this.ctx && this.scr === 'trend') this._updTrend(this._d, true);
+  }
 
-  // ---------------- dựng giao diện ----------------
+  // ================= khung runtime =================
   _build() {
-    this.title = h('b', { class: 'hmi-title' });
-    this.whereSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Vị trí người vận hành' },
-      h('button', { 'data-w': 'local', onclick: () => this.setWhere('local') }, 'Tại trạm · HMI-01'),
-      h('button', { 'data-w': 'remote', onclick: () => this.setWhere('remote') }, 'Trung tâm · SCADA'));
-    this.chips = h('div', { class: 'hmi-chips' });
-    this.clock = h('span', { class: 'mono hmi-clock' });
-    const top = h('div', { class: 'hmi-top' }, this.title, this.whereSeg, this.chips, h('span', { class: 'spacer' }), this.clock);
-    this.alarmBox = h('div', { class: 'hmi-alarms', 'aria-live': 'polite' });
-    this.stale = h('div', { class: 'hmi-stale', hidden: true });
-    this.svg = this._pid();
-    this.side = this._faceplates();
-    const body = h('div', { class: 'hmi-body' }, h('div', { class: 'hmi-pidwrap' }, this.svg, this.stale), this.side);
-    this.root.append(top, this.alarmBox, body);
+    this.root.append(this._header(), this._alarmBar());
+    this.stateBar = h('div', { class: 'h-statebar', hidden: true, role: 'status' });
+    this.area = h('div', { class: 'h-area' });
+    this.screens = {};
+    for (const [k] of SCREENS) { this.screens[k] = h('div', { class: 'h-scr h-scr-' + k, hidden: k !== this.scr }); this.area.append(this.screens[k]); }
+    this._buildOverview(this.screens.ov); this._buildPumps(this.screens.pump); this._buildQuality(this.screens.qual); this._buildTrend(this.screens.trend);
+    this._buildAlarms(this.screens.alarm); this._buildLog(this.screens.log); this._buildParams(this.screens.par);
+    this.deadMsg = h('div', { class: 'h-dead-m' });
+    this.deadBox = h('div', { class: 'h-dead', hidden: true },
+      h('div', { class: 'h-dead-box', role: 'alertdialog', 'aria-label': 'Mất kết nối với bộ điều khiển' },
+        h('div', { class: 'h-dead-t' }, h('span', { class: 'h-dead-ic' }, '!'), 'MẤT KẾT NỐI VỚI BỘ ĐIỀU KHIỂN MPC-01'), this.deadMsg,
+        h('div', { class: 'h-brow' }, h('button', { class: 'h-btn', onclick: () => { this._deadHide = this.app.st.gw_dead; this.update(true); } }, 'ẨN THÔNG BÁO'))));
+    this.area.append(this.deadBox);
+    this.root.append(this.stateBar, this.area, this._nav(), this._status());
+    this.root.addEventListener('pointerdown', (e) => {
+      this._ax = e.clientX; // vị trí nhấp – để đặt faceplate không che thiết bị
+      if (!this.H.menu.hidden && !this.H.menu.contains(e.target) && !this.H.user.contains(e.target)) this.H.menu.hidden = true;
+    });
+    this.root.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!this.H.menu.hidden) this.H.menu.hidden = true; else if (this.fps.length) this._fpClose(this.fps[this.fps.length - 1]); } });
+    this._applySkin();
+    this.go(this.scr);
   }
 
-  _bubble(tag, x, y, lineTo = null) {
-    const [a, b] = tag.split('-');
-    const g = S('g', { class: 'hmi-inst', onclick: () => this.app.openDrawer(tag) },
-      lineTo ? S('line', { x1: x, y1: y + 16, x2: lineTo[0], y2: lineTo[1], class: 'hmi-lead' }) : null,
-      S('circle', { cx: x, cy: y, r: 16 }),
-      S('line', { x1: x - 16, y1: y, x2: x + 16, y2: y, class: 'hmi-bar' }),
-      S('text', { x, y: y - 4, class: 'hmi-it', text: a }),
-      S('text', { x, y: y + 11, class: 'hmi-it', text: b }));
-    g.append(S('title', { text: tag }));
+  _header() {
+    const H = this.H = {};
+    const logo = S('svg', { viewBox: '0 0 32 32', class: 'h-logo', 'aria-hidden': 'true' }, S('circle', { cx: 16, cy: 16, r: 15, class: 'h-logo-c' }),
+      S('path', { d: 'M16 5.5c4.2 5.6 7.4 9.1 7.4 13a7.4 7.4 0 0 1-14.8 0c0-3.9 3.2-7.4 7.4-13z', class: 'h-logo-d' }), S('path', { d: 'M12.4 18.8a3.7 3.7 0 0 0 3.6 3.5', class: 'h-logo-s' }));
+    H.title = h('div', { class: 'h-ttl', 'aria-live': 'polite' });
+    H.man = h('span', { class: 'h-manbadge', hidden: true, title: 'Trạm đang ở chế độ điều khiển TAY – kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động' }, 'TAY');
+    H.leds = {};
+    const led = (k, label) => { const i = h('i'); const s = h('span', { class: 'h-led' }, i, h('span', {}, label)); H.leds[k] = { i, s }; return s; };
+    H.almN = h('b', {}, '0');
+    H.alm = h('button', { class: 'h-almcnt', onclick: () => this.go('alarm'), title: 'Báo động đang hoạt động – mở danh sách báo động' }, icon(ICON.bell), H.almN);
+    H.date = h('small', {}); H.time = h('b', {});
+    H.uPos = h('b'); H.uRole = h('small');
+    H.user = h('button', { class: 'h-user', 'aria-haspopup': 'menu', title: 'Đổi vị trí vận hành', onclick: () => { H.menu.hidden = !H.menu.hidden; this._syncMenu(); } }, icon(ICON.user), h('span', {}, H.uPos, H.uRole));
+    H.skinTxt = h('span');
+    H.skin = h('button', { class: 'h-skinbtn', onclick: () => this.toggleSkin(), title: 'Đổi giao diện màn hình HMI: Tối / Sáng' }, icon(ICON.skin), H.skinTxt);
+    H.menu = h('div', { class: 'h-menu', hidden: true, role: 'menu', 'aria-label': 'Vị trí vận hành' }, h('div', { class: 'h-menu-t' }, 'ĐĂNG NHẬP VỊ TRÍ VẬN HÀNH'),
+      ...['local', 'remote'].map((w) => h('button', { role: 'menuitemradio', 'data-w': w, onclick: () => { H.menu.hidden = true; this.setWhere(w); } },
+        icon(ICON.user), h('span', {}, h('b', {}, POS[w].name), h('small', {}, POS[w].role + ' – ' + POS[w].desc)))));
+    return h('header', { class: 'h-hdr' },
+      h('div', { class: 'h-brand' }, logo, h('div', { class: 'h-bfull' }, h('small', {}, 'HỆ THỐNG SCADA CẤP NƯỚC'), h('b', {}, 'TRẠM BƠM TĂNG ÁP ST-01 · DMA-A')), h('b', { class: 'h-bshort' }, 'ST-01')),
+      H.title,
+      h('div', { class: 'h-hright' }, H.man, h('div', { class: 'h-leds', role: 'group', 'aria-label': 'Trạng thái truyền thông' }, led('gw', 'GW'), led('lte', '4G'), led('srv', 'MÁY CHỦ')),
+        H.alm, h('div', { class: 'h-clock' }, H.date, H.time), H.user, H.skin),
+      H.menu);
+  }
+  _syncMenu() { this.H.menu.querySelectorAll('button[data-w]').forEach((b) => { b.classList.toggle('on', b.dataset.w === this.where); b.setAttribute('aria-checked', b.dataset.w === this.where); }); }
+
+  _alarmBar() {
+    const A = this.AB = {};
+    A.sev = h('span', { class: 'h-ab-sev' }); A.time = h('span', { class: 'h-ab-t' }); A.code = h('b', { class: 'h-ab-c' }); A.msg = h('span', { class: 'h-ab-m' }); A.more = h('span', { class: 'h-ab-more' });
+    A.ack = h('button', { class: 'h-btn sm', onclick: () => { if (this._top) this._ack(this._top.code); } }, 'XÁC NHẬN');
+    A.list = h('button', { class: 'h-btn sm ghost', onclick: () => this.go('alarm') }, 'DANH SÁCH');
+    A.el = h('div', { class: 'h-ab', 'aria-live': 'polite' }, A.sev, A.time, A.code, A.msg, A.more, A.ack, A.list);
+    return A.el;
+  }
+  _nav() {
+    this.navBtns = {};
+    this.navBadge = h('em', { hidden: true });
+    return h('nav', { class: 'h-nav', 'aria-label': 'Chọn màn hình' }, ...SCREENS.map(([k, label], i) => {
+      const b = h('button', { class: 'h-nb', onclick: () => this.go(k) }, h('small', {}, String(i + 1).padStart(2, '0')), icon(ICON[k]), h('span', {}, label), k === 'alarm' ? this.navBadge : null);
+      this.navBtns[k] = b;
+      return b;
+    }));
+  }
+  _status() {
+    const B = this.SB = {};
+    const item = (k, label) => h('span', { class: 'h-sbi' }, h('small', {}, label), (B[k] = h('b')));
+    B.src = h('span', { class: 'h-sbsrc' });
+    return h('footer', { class: 'h-sb' }, item('ctl', 'ĐIỀU KHIỂN'), item('mode', 'GATEWAY'), item('scr', 'KỊCH BẢN'), item('pset', 'P ĐẶT'), item('kwh', 'ĐIỆN NĂNG'), h('span', { class: 'h-sbsp' }), B.src);
+  }
+
+  // ================= hiển thị số =================
+  /** [chữ, trạng thái] cho một giá trị: '####' = không hợp lệ/không biết, 'N/A' = không lắp hoặc vị trí này không nhận. */
+  _fv(v, nd, o = {}) {
+    const c = this.ctx;
+    if (c.dead && !o.live) return ['####', 'bad'];
+    if (o.absent) return ['N/A', 'na'];
+    if (v === undefined && c.remote) return ['N/A', 'na'];
+    if (typeof v === 'string') return [v, o.st || 'ok'];
+    if (!isNum(v)) return ['####', 'bad'];
+    return [num(v, nd), o.lim ? o.lim(v) : 'ok'];
+  }
+  _disp(key, x, y, w, unit = '') {
+    const t = S('text', { x: x + w - 5, y: y + 16.5, class: 'h-dv', 'text-anchor': 'end' });
+    const g = S('g', { class: 'h-d ok' }, S('rect', { x, y, width: w, height: 23, rx: 2, class: 'h-db' }), S('rect', { x: x + 1, y: y + 1, width: w - 2, height: 2, class: 'h-dbs' }), t,
+      S('text', { x: x + 4, y: y + 16, class: 'h-dq', text: '?' }), unit ? S('text', { x: x + w + 4, y: y + 16.5, class: 'h-du', text: unit }) : null);
+    this.D[key] = { g, t };
     return g;
   }
-  _value(key, x, y, w = 92) {
-    const r = S('rect', { x, y, width: w, height: 20, rx: 3, class: 'hmi-vbox' });
-    const t = S('text', { x: x + w - 6, y: y + 14.5, class: 'hmi-val', 'text-anchor': 'end' });
-    this.R['v:' + key] = { r, t };
-    return S('g', {}, r, t);
+  _sv(key, v, nd, o) {
+    const D = this.D[key];
+    const [txt, st] = this._fv(v, nd, o);
+    setT(D.t, txt); setC(D.g, 'h-d ' + st + (this.ctx.stale ? ' stale' : ''));
+    return st;
   }
-  _setVal(key, text, state = '') {
-    const v = this.R['v:' + key];
-    if (!v) return;
-    if (v.t.textContent !== text) v.t.textContent = text;
-    v.r.setAttribute('class', 'hmi-vbox' + (state ? ' ' + state : ''));
+  /** Ô số HTML (faceplate, bảng). */
+  _hd(unit = '', big = false) {
+    const b = h('b'), el = h('span', { class: 'h-hdw' + (big ? ' big' : '') }, h('span', { class: 'h-hd ok' }, h('i', {}, '?'), b), unit ? h('small', { class: 'h-hu' }, unit) : null);
+    return { el, box: el.firstChild, b };
   }
-  _pid() {
-    const svg = S('svg', { viewBox: '0 0 1000 580', class: 'hmi-pid', role: 'img', 'aria-label': 'Sơ đồ công nghệ trạm bơm ST-01' });
-    const R = this.R;
-    const line = (d, cls = 'hmi-pipe') => S('path', { d, class: cls });
-    // ---- cấp nước vào: ống thành phố -> FT-100 -> FV-01 -> bể ----
-    svg.append(S('text', { x: 12, y: 92, class: 'hmi-lbl', text: 'ỐNG CẤP THÀNH PHỐ' }),
-      line('M10 70 H150 V128'), S('rect', { x: 58, y: 63, width: 26, height: 14, class: 'hmi-eq' }),
-      this._bubble('FT-100', 71, 30, [71, 63]), this._value('qin', 92, 20, 84),
-      S('path', { d: 'M142 92 L158 108 L158 92 L142 108 Z', class: 'hmi-eq', onclick: () => this.app.openDrawer('FV-01') }),
-      S('text', { x: 164, y: 104, class: 'hmi-tag', text: 'FV-01' }));
-    // ---- bể chứa T-01 ----
-    R.water = S('rect', { x: TANK.x + 2, y: TANK.y1, width: TANK.w - 4, height: 0, class: 'hmi-water' });
-    svg.append(S('rect', { x: TANK.x, y: TANK.y0, width: TANK.w, height: TANK.y1 - TANK.y0, class: 'hmi-tank', onclick: () => this.app.openDrawer('T-01') }), R.water);
-    for (const [L, txt] of [[3.8, '3,8 phao đóng'], [1.2, '1,2 tiết kiệm'], [0.6, '0,6 dừng bơm'], [0.35, '0,35 LSLL']]) {
-      svg.append(S('line', { x1: TANK.x, y1: lvY(L), x2: TANK.x + TANK.w, y2: lvY(L), class: 'hmi-mark' }),
-        S('text', { x: TANK.x + TANK.w - 4, y: lvY(L) - 3, class: 'hmi-small', 'text-anchor': 'end', text: txt }));
-    }
-    svg.append(S('text', { x: TANK.x + 8, y: TANK.y0 + 18, class: 'hmi-tag', text: 'T-01 · BỂ 192 m³ (hữu ích 154 m³)' }),
-      this._bubble('LT-101', 262, 96, [262, 130]), this._value('level', 162, 86, 80),
-      this._bubble('LSLL-101', 66, lvY(0.35) - 26), S('line', { x1: 82, y1: lvY(0.35) - 26, x2: 100, y2: lvY(0.35), class: 'hmi-lead' }),
-      S('path', { d: `M100 455 H76 M68 447 L84 463 M68 463 L84 447`, class: 'hmi-eq', onclick: () => this.app.openDrawer('VX-01') }),
-      S('text', { x: 40, y: 480, class: 'hmi-tag', text: 'VX-01' }));
-    R.lsll = S('circle', { cx: 66, cy: lvY(0.35) - 26, r: 16, class: 'hmi-lsll' });
-    svg.append(R.lsll);
-    // ---- ống hút + cụm bơm ----
-    svg.append(line('M300 440 H380 M380 250 V410 M380 250 H420 M380 410 H420'),
-      line('M480 250 H530 M480 410 H530 M530 410 V180'));
-    R.pumps = [];
-    [250, 410].forEach((y, i) => {
-      const tag = i === 0 ? 'P-01' : 'P-02';
-      const body = S('circle', { cx: 450, cy: y, r: 30, class: 'hmi-pump' });
-      const tri = S('path', { d: `M432 ${y - 16} L472 ${y} L432 ${y + 16} Z`, class: 'hmi-pumptri' });
-      const sel = S('rect', { x: 412, y: y - 38, width: 76, height: 76, rx: 6, class: 'hmi-sel' });
-      const g = S('g', { class: 'hmi-click', onclick: () => { this.sel = i; this._editing = false; this.update(true); } }, sel, body, tri,
-        S('text', { x: 450, y: y + 50, class: 'hmi-tag', 'text-anchor': 'middle', text: tag }), S('title', { text: tag + ' – nhấp để mở bảng điều khiển' }));
-      // van một chiều + đồng hồ áp kim
-      svg.append(g, S('path', { d: `M500 ${y - 8} L516 ${y} L500 ${y + 8} Z M517 ${y - 9} V${y + 9}`, class: 'hmi-eq' }),
-        S('circle', { cx: 500, cy: y - 24, r: 7, class: 'hmi-eq' }), S('line', { x1: 500, y1: y - 17, x2: 500, y2: y, class: 'hmi-lead' }));
-      // hộp biến tần VFD (hiện trạng)
-      const vy = y + 62;
-      const box = S('rect', { x: 384, y: vy, width: 142, height: 50, rx: 4, class: 'hmi-vfd' });
-      const t1 = S('text', { x: 390, y: vy + 14, class: 'hmi-small' }), t2 = S('text', { x: 390, y: vy + 30, class: 'hmi-val' }), t3 = S('text', { x: 390, y: vy + 44, class: 'hmi-small' });
-      const fbar = S('rect', { x: 384, y: vy + 50, width: 0, height: 4, class: 'hmi-fbar' });
-      svg.append(S('g', { class: 'hmi-click', onclick: () => { this.sel = i; this._editing = false; this.update(true); } }, box, t1, t2, t3,
-        S('rect', { x: 384, y: vy + 50, width: 142, height: 4, class: 'hmi-ftrack' }), fbar));
-      R.pumps.push({ body, tri, sel, t1, t2, t3, fbar, box });
-    });
-    // ---- ống đẩy: PT-101/102, HT-01, PSV-01, FT-101, MV-02 -> mạng lưới ----
-    svg.append(line('M530 180 H958'), S('path', { d: 'M958 172 L974 180 L958 188 Z', class: 'hmi-pipehead' }),
-      this._bubble('PT-101', 580, 132, [580, 180]), this._value('p1', 534, 92, 92),
-      this._bubble('PT-102', 680, 132, [680, 180]), this._value('p2', 634, 92, 92));
-    svg.append(line('M730 180 V202'), S('rect', { x: 714, y: 202, width: 32, height: 60, rx: 16, class: 'hmi-eq', onclick: () => this.app.openDrawer('HT-01') }),
-      S('text', { x: 730, y: 280, class: 'hmi-tag', 'text-anchor': 'middle', text: 'HT-01' }));
-    R.psv = S('path', { d: 'M790 186 L782 204 L798 204 Z M782 212 L798 212 L790 204 Z', class: 'hmi-eq' });
-    svg.append(line('M790 180 V186'), R.psv, S('text', { x: 802, y: 210, class: 'hmi-tag', text: 'PSV-01' }), this._value('psv', 776, 222, 70));
-    svg.append(S('rect', { x: 806, y: 172, width: 28, height: 16, class: 'hmi-eq' }), this._bubble('FT-101', 820, 132, [820, 172]), this._value('q', 774, 92, 92));
-    R.valve = S('path', { d: 'M866 168 L894 192 L894 168 L866 192 Z', class: 'hmi-valve' });
-    R.valveSel = S('rect', { x: 858, y: 136, width: 44, height: 64, rx: 6, class: 'hmi-sel' });
-    svg.append(S('g', { class: 'hmi-click', onclick: () => { this.sel = 2; this.update(true); } }, R.valveSel, R.valve,
-      S('rect', { x: 872, y: 144, width: 16, height: 14, class: 'hmi-eq' }), S('text', { x: 880, y: 155, class: 'hmi-it', text: 'M' }),
-      S('line', { x1: 880, y1: 158, x2: 880, y2: 180, class: 'hmi-lead' }), S('title', { text: 'MV-02 – nhấp để mở bảng điều khiển' })),
-    S('text', { x: 880, y: 212, class: 'hmi-tag', 'text-anchor': 'middle', text: 'MV-02' }), this._value('valve', 852, 218, 66),
-    S('text', { x: 992, y: 150, class: 'hmi-lbl', 'text-anchor': 'end', text: 'MẠNG DMA-A' }));
-    // ---- chỉ thị tương tự (moving analog) ----
-    svg.append(S('text', { x: 600, y: 286, class: 'hmi-lbl', text: 'CHỈ THỊ CHÍNH' }));
-    R.bars = {};
-    [['p', 'Áp đầu ra', 'bar', 0, 6, 306], ['pc', 'Áp điểm bất lợi', 'bar', 0, 4, 336], ['qb', 'Lưu lượng ra', 'm³/h', 0, 40, 366], ['kw', 'Công suất điện', 'kW', 0, 12, 396]].forEach(([k, name, unit, lo, hi, y]) => {
-      const x0 = 712, w = 170;
-      const band = S('rect', { x: x0, y: y - 6, width: 0, height: 12, class: 'hmi-band' });
-      const sp = S('path', { d: '', class: 'hmi-sp' });
-      const ptr = S('path', { d: '', class: 'hmi-ptr' });
-      const val = S('text', { x: 970, y: y + 4, class: 'hmi-val', 'text-anchor': 'end' });
-      svg.append(S('text', { x: 600, y: y + 4, class: 'hmi-small', text: name }), S('rect', { x: x0, y: y - 3, width: w, height: 6, class: 'hmi-track' }), band, sp, ptr, val,
-        S('text', { x: x0, y: y + 17, class: 'hmi-tiny', text: String(lo) }), S('text', { x: x0 + w, y: y + 17, class: 'hmi-tiny', 'text-anchor': 'end', text: hi + ' ' + unit }));
-      R.bars[k] = { x0, w, lo, hi, y, band, sp, ptr, val };
-    });
-    // ---- chất lượng nước ----
-    svg.append(S('text', { x: 20, y: 502, class: 'hmi-lbl', text: 'CHẤT LƯỢNG NƯỚC (QCVN 01-1:2018/BYT)' }));
-    R.qual = {};
-    [['cl', 'AIT-201', 'Clo dư', 'mg/L', '0,2–1,0'], ['ntu', 'AIT-202', 'Độ đục', 'NTU', '≤ 2'], ['ph', 'AIT-203', 'pH', '', '6,0–8,5']].forEach(([k, tag, name, unit, lim], i) => {
-      const x = 20 + i * 104;
-      const r = S('rect', { x, y: 510, width: 100, height: 60, rx: 4, class: 'hmi-qbox' });
-      const v = S('text', { x: x + 94, y: 546, class: 'hmi-val big', 'text-anchor': 'end' });
-      svg.append(S('g', { class: 'hmi-click', onclick: () => this.app.openDrawer(tag) }, r, S('text', { x: x + 6, y: 524, class: 'hmi-small', text: name }), v,
-        S('text', { x: x + 6, y: 563, class: 'hmi-tiny', text: `${tag} · ${lim}${unit ? ' ' + unit : ''}` }), S('title', { text: `${tag} ${name} – giới hạn ${lim}` })));
-      R.qual[k] = { r, v };
-    });
-    // ---- xu hướng 2 giờ ----
-    const tx = 560, ty = 430, tw = 410, th = 130;
-    R.trend = { x: tx, y: ty, w: tw, h: th };
-    svg.append(S('text', { x: tx, y: ty - 8, class: 'hmi-lbl', text: 'XU HƯỚNG ÁP LỰC 2 GIỜ (bar)' }),
-      S('rect', { x: tx, y: ty, width: tw, height: th, class: 'hmi-trendbg' }));
-    for (const v of [1.4, 4.0]) {
-      const y = ty + th - (v / 5) * th;
-      svg.append(S('line', { x1: tx, y1: y, x2: tx + tw, y2: y, class: 'hmi-mark' }), S('text', { x: tx + 4, y: y - 3, class: 'hmi-tiny', text: fmt(v, 1) }));
-    }
-    R.trP = S('polyline', { points: '', class: 'hmi-tr-p' });
-    R.trS = S('polyline', { points: '', class: 'hmi-tr-s' });
-    R.trC = S('polyline', { points: '', class: 'hmi-tr-c' });
-    R.trLegend = S('text', { x: tx + tw - 4, y: ty + 12, class: 'hmi-tiny', 'text-anchor': 'end' });
-    svg.append(R.trC, R.trS, R.trP, R.trLegend);
-    return svg;
+  _hv(D, v, nd, o) {
+    const [txt, st] = this._fv(v, nd, o);
+    setT(D.b, txt); setC(D.box, 'h-hd ' + st + (this.ctx.stale ? ' stale' : ''));
+    return st;
+  }
+  _lamp(txt) { const t = h('span', {}, txt); const el = h('span', { class: 'h-lamp' }, h('i'), t); return { el, t }; }
+  _setLamp(L, cls, txt) { setC(L.el, 'h-lamp' + (cls ? ' ' + cls : '')); if (txt !== undefined) setT(L.t, txt); }
+  _changed(k, key, force) { if (!force && this._keys[k] === key) return false; this._keys[k] = key; return true; }
+  _hit(g, fn, label) {
+    g.setAttribute('class', (g.getAttribute('class') || '') + ' h-hit');
+    g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button'); g.setAttribute('aria-label', label);
+    g.addEventListener('click', (e) => { this._ax = e.clientX; fn(); });
+    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._ax = g.getBoundingClientRect().left; fn(); } });
+    g.append(S('title', { text: label }));
+    return g;
   }
 
-  _faceplates() {
-    const F = this.F;
-    F.ctlName = h('div', { class: 'hmi-ctlname' });
-    F.ctlDetail = h('p', { class: 'note' });
-    F.btnManual = h('button', { class: 'btn', onclick: () => this.send('set_mode', { mode: 'manual' }) }, 'Chuyển sang TAY');
-    F.btnAuto = h('button', { class: 'btn', onclick: () => this.send('set_mode', { mode: 'auto' }) }, 'Trả về TỰ ĐỘNG');
-    F.auth = h('p', { class: 'note hmi-warn', hidden: true });
-    F.eqSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Chọn thiết bị' },
-      ...['P-01', 'P-02', 'MV-02'].map((tag, i) => h('button', { onclick: () => { this.sel = i; this._editing = false; this.update(true); } }, tag)));
-    F.eqChip = h('span', { class: 'chip' });
-    F.eqRows = h('tbody');
-    F.btnStart = h('button', { class: 'btn', onclick: () => this.send('pump_start', { pump: this.sel, f_hz: +F.range.value }) }, 'CHẠY');
-    F.btnStop = h('button', { class: 'btn', onclick: () => this.send('pump_stop', { pump: this.sel }) }, 'DỪNG');
-    F.range = h('input', { type: 'range', min: 25, max: 50, step: 0.5, value: 40, 'aria-label': 'Tần số đặt (Hz)', oninput: () => { this._editing = true; F.rangeVal.textContent = fmt(+F.range.value, 1, 'Hz'); } });
-    F.rangeVal = h('span', { class: 'mono' });
-    F.btnSpeed = h('button', { class: 'btn', onclick: () => { this._editing = false; this.send('pump_speed', { pump: this.sel, f_hz: +F.range.value }); } }, 'Đặt tần số');
-    F.pumpCtl = h('div', { class: 'hmi-ctlbox' }, h('div', { class: 'row' }, F.btnStart, F.btnStop),
-      h('div', { class: 'row' }, F.range, F.rangeVal), h('div', { class: 'row' }, F.btnSpeed));
-    F.btnOpen = h('button', { class: 'btn', onclick: () => this.send('valve', { open: true }) }, 'MỞ VAN');
-    F.btnClose = h('button', { class: 'btn', onclick: () => this.send('valve', { open: false }) }, 'ĐÓNG VAN');
-    F.valveCtl = h('div', { class: 'hmi-ctlbox row' }, F.btnOpen, F.btnClose);
-    F.lockNote = h('p', { class: 'note' });
-    F.perm = h('ul', { class: 'hmi-perm' });
-    F.btnReset = h('button', { class: 'btn small', onclick: () => this.send('reset_safe_stop', {}) }, 'Đặt lại dừng an toàn');
-    F.btnRotate = h('button', { class: 'btn small', onclick: () => this.send('rotate_pumps', {}) }, 'Luân phiên bơm');
-    F.cmdLog = h('div', { class: 'hmi-cmdlog' });
-    return h('div', { class: 'hmi-side' },
-      h('section', {}, h('span', { class: 'lbl' }, 'Chế độ điều khiển trạm'), F.ctlName, F.ctlDetail, h('div', { class: 'row' }, F.btnManual, F.btnAuto), F.auth),
-      h('section', {}, h('div', { class: 'row' }, F.eqSeg, F.eqChip), h('table', { class: 'kv fixed' }, F.eqRows), F.pumpCtl, F.valveCtl, F.lockNote),
-      h('section', {}, h('span', { class: 'lbl' }, 'Điều kiện cho phép & liên động'), F.perm),
-      h('section', {}, h('div', { class: 'row' }, F.btnReset, F.btnRotate)),
-      h('section', {}, h('span', { class: 'lbl' }, 'Nhật ký lệnh'), F.cmdLog));
+  // ================= giới hạn / trạng thái =================
+  _lv() { return (this.app.st?.gw?.script?.params ?? this.app.cfg.script.params).level; }
+  _lim(tag) {
+    const c = this.app.cfg, s = c.safety, q = c.quality_limits, sv = c.service, lv = this._lv(), f1 = (v) => num(v, 1), f2 = (v) => num(v, 2);
+    // st: trạng thái màu của giá trị; txt: mô tả ngưỡng; qc/wt: giới hạn QCVN / cảnh báo; lines: vạch trên xu hướng; scale: thang thanh chỉ thị
+    switch (tag) {
+      case 'PT-101': case 'PT-102': return {
+        st: (v) => (v > sv.p_out_max_bar ? 'alarm' : v < s.p_low_bar ? 'warn' : 'ok'),
+        txt: `Cao ${f1(sv.p_out_max_bar)} · rất cao ${f1(s.p_highhigh_bar)} (cắt) · thấp ${f1(s.p_low_bar)} bar`, lines: [[sv.p_out_max_bar, 'alarm'], [s.p_highhigh_bar, 'alarm'], [s.p_low_bar, 'warn']] };
+      case 'PL-301': return { st: (v) => (v < sv.p_crit_min_bar ? 'alarm' : 'ok'), txt: `Tối thiểu ${f1(sv.p_crit_min_bar)} bar tại điểm bất lợi`, lines: [[sv.p_crit_min_bar, 'alarm']] };
+      case 'LT-101': return {
+        st: (v) => (v < lv.stop_m ? 'alarm' : v < lv.conserve_m || v > s.level_high_m ? 'warn' : 'ok'),
+        txt: `Cao ${f1(s.level_high_m)} · tiết kiệm ${f1(lv.conserve_m)} · dừng bơm ${f1(lv.stop_m)} · LSLL ${f2(s.float_lsll_m)} m`, lines: [[s.level_high_m, 'warn'], [lv.conserve_m, 'warn'], [lv.stop_m, 'alarm']] };
+      case 'AIT-201': return {
+        st: (v) => (v < q.cl_min || v > q.cl_max ? 'alarm' : v < s.cl_warn_low || v > s.cl_warn_high ? 'warn' : 'ok'),
+        txt: `QCVN ${f1(q.cl_min)}–${f1(q.cl_max)} mg/L · cảnh báo ngoài ${f1(s.cl_warn_low)}–${f1(s.cl_warn_high)}`, qc: `${f1(q.cl_min)} – ${f1(q.cl_max)} mg/L`,
+        wt: `Ngưỡng cảnh báo: ${f1(s.cl_warn_low)} – ${f1(s.cl_warn_high)} mg/L`, lines: [[q.cl_min, 'alarm'], [q.cl_max, 'alarm']], scale: [0, 1.5] };
+      case 'AIT-202': return {
+        st: (v) => (v > q.ntu_max ? 'alarm' : v > s.ntu_warn ? 'warn' : 'ok'), txt: `QCVN ≤ ${f1(q.ntu_max)} NTU · cảnh báo > ${f1(s.ntu_warn)}`, qc: `≤ ${f1(q.ntu_max)} NTU`,
+        wt: `Ngưỡng cảnh báo: > ${f1(s.ntu_warn)} NTU`, lines: [[q.ntu_max, 'alarm'], [s.ntu_warn, 'warn']], scale: [0, 5] };
+      case 'AIT-203': return {
+        st: (v) => (v < q.ph_min || v > q.ph_max ? 'alarm' : v < s.ph_warn_low || v > s.ph_warn_high ? 'warn' : 'ok'),
+        txt: `QCVN ${f1(q.ph_min)}–${f1(q.ph_max)} · cảnh báo ngoài ${f1(s.ph_warn_low)}–${f1(s.ph_warn_high)}`, qc: `${f1(q.ph_min)} – ${f1(q.ph_max)}`,
+        wt: `Ngưỡng cảnh báo: ngoài ${f1(s.ph_warn_low)} – ${f1(s.ph_warn_high)}`, lines: [[q.ph_min, 'alarm'], [q.ph_max, 'alarm']], scale: [5, 10] };
+      case 'FT-101': return { st: (v) => (v > s.burst_q_m3h ? 'warn' : 'ok'), txt: `Nghi vỡ ống khi > ${num(s.burst_q_m3h, 0)} m³/h kéo dài`, lines: [[s.burst_q_m3h, 'warn']] };
+      default: return { st: () => 'ok', txt: '–', lines: [] };
+    }
+  }
+  _absent(tag) { const d = this._d; return Boolean(d && d.installed && INST[tag] && tag !== 'PL-301' && !d.installed.has(tag)); }
+  _ival(tag) { const d = this._d; return d[INST[tag].k]; }
+  _ctlText(d) {
+    if (d.dead) { const fb = this.app.st.gw_dead; return fb.enabled && !fb.inhibit ? 'PID BIẾN TẦN' : 'KHÔNG ĐIỀU KHIỂN'; }
+    return CTL_NAME[d.ctl] || d.ctl;
+  }
+  _script() {
+    const a = this.app;
+    if (this.where === 'local') { const g = a.st.gw; return { v: g.script.version, s: g.ctrl.strategy_used === 'custom' ? 'của học viên' : g.script.strategy }; }
+    const S0 = a.server.stations[a.st.sid], v = S0.reported ?? S0.target;
+    return { v, s: S0.repo?.[v]?.strategy ?? '' };
+  }
+  _fset(d, i) {
+    const p = d.pumps[i];
+    if (isNum(p.f_set)) return p.f_set;
+    if (this.where === 'local' && !d.dead) { const o = this.app.st.gw.out; return o ? o.f_ref[i] : null; }
+    return undefined;
   }
 
-  // ---------------- lệnh ----------------
-  send(type, args) { sendCommand(this.app, this.where, type, args); }
-  ackAlarm(code) { if (ackAlarm(this.app, this.where, code)) this.update(true); }
-  _data() { return stationData(this.app, this.where); }
-
-  // ---------------- cập nhật ----------------
-  update(force = false) {
-    if (!this.visible || !this.app.st) return;
-    const a = this.app, d = this._data(), R = this.R, F = this.F, local = this.where === 'local';
-    const g = a.st.gw;
-    this.root.classList.toggle('remote', !local);
-    this.title.textContent = local ? 'ST-01 · HMI-01 TẠI TRẠM' : 'TRUNG TÂM ĐIỀU HÀNH · SCADA · ST-01';
-    this.whereSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.w === this.where));
-    this.clock.textContent = fmtClock(d.t, a.cfg.sim.start_dow);
-    const chip = (cls, txt) => h('span', { class: 'chip ' + cls }, txt);
-    this.svg.classList.toggle('stale', Boolean(d.dead || d.stale));
-    const fbOn = d.dead && a.st.gw_dead.enabled && !a.st.gw_dead.inhibit;
-    this.chips.replaceChildren(d.dead ? chip('critical', fbOn ? 'PID BIẾN TẦN' : 'KHÔNG CÓ ĐIỀU KHIỂN') : chip(d.ctl === 'auto' ? 'good' : 'warning', CTL_NAME[d.ctl]),
-      chip(MODE_CHIP[d.mode] || 'off', d.mode === 'x' ? (fbOn ? MODE_NAME.x : 'Mini PC lỗi') : (MODE_NAME[d.mode] || d.mode)),
-      chip(d.comms === 'online' ? 'good' : d.comms === 'resync' ? 'info' : 'off', { online: '4G trực tuyến', resync: 'đang đồng bộ', offline: 'mất kết nối' }[d.comms]));
-    // dữ liệu cũ (trung tâm khi mất mạng) / mini PC lỗi
-    if (d.dead) { this.stale.hidden = false; this.stale.textContent = 'MINI PC NGỪNG – HMI-01 MẤT DỮ LIỆU · ' + a.st.gw_dead.note(); }
-    else if (d.stale) { this.stale.hidden = false; this.stale.textContent = `DỮ LIỆU CŨ – mất kết nối với trạm, bản tin cuối ${d.age !== null ? (d.age / 60).toFixed(0) + ' phút trước' : '–'}`; }
-    else this.stale.hidden = true;
-    // báo động
-    const al = d.alarms.sort((x, y) => (SEV_ORDER[x.sev] - SEV_ORDER[y.sev]) || (y.t - x.t));
-    const key = al.map((x) => x.code + x.acked).join(',') + this.where;
-    if (force || key !== this._alKey) {
-      this._alKey = key;
-      this.alarmBox.replaceChildren(...(al.length ? al.slice(0, 4).map((x) => h('div', { class: 'hmi-al ' + x.sev + (x.acked ? ' acked' : '') },
-        h('span', { class: 'chip ' + x.sev }, SEV_LABEL[x.sev] ?? x.sev), h('span', { class: 'mono' }, tShort(x.t)), h('b', {}, x.code), h('span', { class: 'msg' }, x.msg || ''),
-        x.acked || x.code === 'STATION_OFFLINE' ? h('span', { class: 'note' }, x.acked ? 'đã xác nhận' : '') : h('button', { class: 'btn small', onclick: () => this.ackAlarm(x.code) }, 'Xác nhận')))
-        : [h('div', { class: 'hmi-al none' }, 'Không có báo động đang hoạt động')]),
-      al.length > 4 ? h('div', { class: 'note' }, `… và ${al.length - 4} báo động khác (xem tab Nhật ký)`) : '');
-    }
-    // giá trị trên sơ đồ
-    const hw = d.installed;
-    const absent = (tag) => hw && !hw.has(tag);
-    const s = a.cfg.service;
-    this._setVal('qin', absent('FT-100') ? (d.q_in !== null && d.q_in !== undefined ? '≈' + fmt(d.q_in, 1, 'm³/h') : 'không lắp') : fmt(d.q_in, 1, 'm³/h'));
-    this._setVal('level', fmt(d.level, 2, 'm'), d.level !== undefined && d.level !== null && d.level < 1.2 ? 'warn' : '');
-    this._setVal('p1', fmt(d.p1, 2, 'bar'), d.p1 > s.p_out_max_bar ? 'alarm' : '');
-    this._setVal('p2', absent('PT-102') ? 'không lắp' : local ? fmt(d.p2, 2, 'bar') : 'không gửi', d.p2 > s.p_out_max_bar ? 'alarm' : '');
-    this._setVal('q', fmt(d.q, 1, 'm³/h'));
-    this._setVal('psv', d.psv === undefined ? '–' : d.psv > 0 ? 'XẢ ' + fmt(d.psv, 1) : 'đóng', d.psv > 0 ? 'alarm' : '');
-    this._setVal('valve', d.valve === undefined ? '–' : d.valve > 0.99 ? 'MỞ' : d.valve < 0.01 ? 'ĐÓNG' : fmt(d.valve * 100, 0, '%'), d.valve !== undefined && d.valve < 0.99 ? 'warn' : '');
-    const lv = d.level ?? 0;
-    R.water.setAttribute('y', lvY(lv)); R.water.setAttribute('height', Math.max(0, TANK.y1 - lvY(lv)));
-    R.lsll.setAttribute('class', 'hmi-lsll' + (local && a.st.sensors.lsll ? ' on' : ''));
-    R.valve.setAttribute('class', 'hmi-valve' + (d.valve === undefined ? ' unk' : d.valve > 0.99 ? ' open' : d.valve < 0.01 ? ' closed' : ' moving'));
-    R.valveSel.classList.toggle('on', this.sel === 2);
-    R.psv.setAttribute('class', 'hmi-eq' + (d.psv > 0 ? ' alarmfill' : ''));
-    d.pumps.forEach((p, i) => {
-      const P = R.pumps[i];
-      P.body.setAttribute('class', 'hmi-pump' + (p.fault ? ' fault' : p.running ? ' run' : ''));
-      P.tri.setAttribute('class', 'hmi-pumptri' + (p.running ? ' run' : ''));
-      P.sel.classList.toggle('on', this.sel === i);
-      P.t1.textContent = `VFD-0${i + 1} ${p.fault ? 'LỖI' : p.running ? 'CHẠY' : 'DỪNG'} · ${d.ctl !== 'auto' ? 'TAY' : 'TỰ ĐỘNG'}`;
-      P.t2.textContent = `${fmt(p.f, 1, 'Hz')}${p.kw !== undefined ? ' · ' + fmt(p.kw, 2, 'kW') : ''}`;
-      P.t3.textContent = p.f_set !== null && p.f_set !== undefined ? (p.want ? `đặt TAY ${fmt(p.f_set, 1)} Hz` : `dừng (đặt ${fmt(p.f_set, 1)} Hz)`) : p.amps !== undefined ? `${fmt(p.amps, 1, 'A')} · ${fmt(p.run_h, 1, 'h')} chạy` : 'bản tin 10 s';
-      P.box.setAttribute('class', 'hmi-vfd' + (p.fault ? ' fault' : ''));
-      P.fbar.setAttribute('width', Math.max(0, Math.min(142, ((p.f ?? 0) / 50) * 142)));
-    });
-    // chỉ thị tương tự
-    const bar = (k, v, band, sp, bad) => {
-      const B = R.bars[k], X = (x) => B.x0 + Math.max(0, Math.min(1, (x - B.lo) / (B.hi - B.lo))) * B.w;
-      if (band) { B.band.setAttribute('x', X(band[0])); B.band.setAttribute('width', X(band[1]) - X(band[0])); } else B.band.setAttribute('width', 0);
-      B.sp.setAttribute('d', sp !== null && sp !== undefined && !Number.isNaN(sp) ? `M${X(sp)} ${B.y + 4} l-5 8 h10 z` : '');
-      B.ptr.setAttribute('d', v !== null && v !== undefined && !Number.isNaN(v) ? `M${X(v)} ${B.y - 4} l-6 -9 h12 z` : '');
-      B.val.textContent = v === undefined ? 'không đo' : fmt(v, 2);
-      B.val.setAttribute('class', 'hmi-val' + (bad ? ' alarmtxt' : ''));
+  // ================= màn 01: tổng quan P&ID =================
+  _defs() {
+    const lg = (id, x2, y2, stops) => S('linearGradient', { id, x1: 0, y1: 0, x2, y2 }, ...stops.map(([o, cls, op]) => S('stop', { offset: o, class: cls, 'stop-opacity': op ?? 1 })));
+    return S('defs', {},
+      lg('hmiG-steel', 1, 0, [[0, 'h-s1'], [0.3, 'h-s2'], [0.62, 'h-s3'], [1, 'h-s1']]), lg('hmiG-water', 0, 1, [[0, 'h-w1'], [1, 'h-w2']]),
+      lg('hmiG-glass', 1, 0, [[0, 'h-gl', 0], [0.2, 'h-gl', 0.22], [0.42, 'h-gl', 0.05], [1, 'h-gl', 0]]), lg('hmiG-motor', 0, 1, [[0, 'h-m1'], [0.45, 'h-m2'], [1, 'h-m1']]),
+      lg('hmiG-blk', 0, 1, [[0, 'h-k1'], [1, 'h-k2']]), lg('hmiG-btn', 0, 1, [[0, 'h-b1'], [1, 'h-b2']]),
+      S('radialGradient', { id: 'hmiG-shine', cx: 0.36, cy: 0.3, r: 0.75 }, S('stop', { offset: 0, 'stop-color': '#fff', 'stop-opacity': 0.6 }), S('stop', { offset: 0.65, 'stop-color': '#fff', 'stop-opacity': 0 })),
+      S('radialGradient', { id: 'hmiG-vign', cx: 0.5, cy: 0.42, r: 0.75 }, S('stop', { offset: 0, class: 'h-vg', 'stop-opacity': 0.07 }), S('stop', { offset: 1, class: 'h-vg', 'stop-opacity': 0 })),
+      S('pattern', { id: 'hmiG-hatch', width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, S('rect', { width: 10, height: 10, class: 'h-hatchbg' }), S('rect', { width: 3, height: 10, class: 'h-hatch' })));
+  }
+  _buildOverview(host) {
+    const svg = S('svg', { viewBox: '0 0 1280 660', class: 'h-pid', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Sơ đồ công nghệ trạm bơm tăng áp ST-01' });
+    const O = this.O, cfg = this.app.cfg, add = (...els) => svg.append(...els);
+    const txt = (x, y, s, cls = 'h-tag', anchor = null) => S('text', { x, y, class: cls, 'text-anchor': anchor, text: s });
+    const pipe = (d, id = null) => {
+      const g = S('g', { class: 'h-pipe' }, S('path', { d, class: 'h-pe' }), S('path', { d, class: 'h-pb' }), S('path', { d, class: 'h-ph' }));
+      if (id) { const f = S('path', { d, class: 'h-pf' }); g.append(f); (this.PF[id] ||= []).push(f); }
+      add(g);
     };
-    bar('p', d.p1, [a.cfg.script.params.pressure.p_set_min_bar, s.p_out_max_bar], d.p_set, d.p1 > s.p_out_max_bar);
-    bar('pc', d.p_crit, [s.p_crit_min_bar, 4], null, d.p_crit !== undefined && d.p_crit < s.p_crit_min_bar);
-    bar('qb', d.q, null, null, false);
-    bar('kw', d.kw, null, null, false);
-    // chất lượng
-    const ql = a.cfg.quality_limits;
-    for (const [k, v, bad, tag] of [['cl', d.cl, (x) => x < ql.cl_min || x > ql.cl_max, 'AIT-201'], ['ntu', d.ntu, (x) => x > ql.ntu_max, 'AIT-202'], ['ph', d.ph, (x) => x < ql.ph_min || x > ql.ph_max, 'AIT-203']]) {
-      const Q = R.qual[k];
-      const none = absent(tag);
-      Q.v.textContent = none ? 'không lắp' : fmt(v, 2);
-      Q.v.setAttribute('class', 'hmi-val big' + (none ? ' dim' : ''));
-      Q.r.setAttribute('class', 'hmi-qbox' + (!none && v !== null && v !== undefined && bad(v) ? ' alarm' : ''));
+    const bowtie = (x, y, cls, vert = false) => S('path', { class: cls, d: vert
+      ? `M${x - 9} ${y - 12} L${x} ${y} L${x + 9} ${y - 12} Z M${x - 9} ${y + 12} L${x} ${y} L${x + 9} ${y + 12} Z`
+      : `M${x - 12} ${y - 9} L${x} ${y} L${x - 12} ${y + 9} Z M${x + 12} ${y - 9} L${x} ${y} L${x + 12} ${y + 9} Z` });
+    const bubble = (tag, x, y, lineTo) => {
+      const [a, b] = tag.split('-');
+      const g = S('g', { class: 'h-inst' }, S('line', { x1: x, y1: y + 17, x2: x, y2: lineTo, class: 'h-lead' }), S('circle', { cx: x, cy: y, r: 17 }), S('line', { x1: x - 17, y1: y, x2: x + 17, y2: y, class: 'h-ibar' }),
+        txt(x, y - 4, a, 'h-it', 'middle'), txt(x, y + 12, b, 'h-it', 'middle'));
+      return g;
+    };
+    const instHit = (tag, ...els) => { const g = S('g', {}, S('rect', { class: 'h-selr', ...els.shift() }), ...els); this._hit(g, () => this._fpOpen('inst', tag), `${tag} – mở bảng thiết bị đo`); return g; };
+    const drawer = (tag, g) => this._hit(g, () => this.app.openDrawer(tag), `${tag} – xem thông số thiết bị`);
+    svg.append(this._defs());
+    add(S('rect', { x: 0, y: 0, width: 1280, height: 660, class: 'h-pidbg' }), S('rect', { x: 0, y: 0, width: 1280, height: 660, fill: 'url(#hmiG-vign)', 'pointer-events': 'none' }));
+    // ---- chú giải màu ----
+    const lg = S('g', { class: 'h-legend' });
+    [['run', 'CHẠY / MỞ'], ['stop', 'DỪNG'], ['fault', 'LỖI / ĐÓNG'], ['move', 'HÀNH TRÌNH'], ['unk', 'KHÔNG RÕ']].forEach(([k, s], i) => {
+      lg.append(S('rect', { x: 430 + i * 104, y: 22, width: 14, height: 14, rx: 2, class: 'h-lgsw ' + k }), txt(450 + i * 104, 34, s, 'h-lgt'));
+    });
+    lg.append(S('path', { d: 'M430 52 H470', class: 'h-lgflow' }), txt(478, 56, 'DÒNG CHẢY (TỐC ĐỘ THEO LƯU LƯỢNG)', 'h-lgt'));
+    add(lg);
+    // ---- đường ống (vẽ trước, thiết bị đè lên) ----
+    pipe('M0 100 H262 V150', 'sup');
+    pipe('M390 485 H452', 'suc'); pipe('M450 485 V260 H537', 'suc1'); pipe('M450 485 H537', 'suc2');
+    pipe('M605 240 H760', 'dis1'); pipe('M605 465 H760 V240', 'dis2'); pipe('M760 240 V160 H1150', 'main');
+    pipe('M855 160 V188'); pipe('M950 160 V190'); pipe('M962 205 H990 V256', 'psv'); pipe('M372 530 V600 H452', 'drain');
+    add(S('path', { d: 'M1148 146 L1172 160 L1148 174 Z', class: 'h-arrow' }), S('path', { d: 'M452 590 L470 600 L452 610 Z', class: 'h-arrow' }), S('path', { d: 'M980 254 L990 270 L1000 254 Z', class: 'h-arrow' }));
+    // ---- cấp nước vào: ống thành phố -> FT-100 -> FV-01 -> bể ----
+    add(txt(8, 130, 'ỐNG CẤP THÀNH PHỐ', 'h-lbl'), txt(8, 146, 'DN100', 'h-sm'));
+    add(instHit('FT-100', { x: 58, y: 26, width: 160, height: 90 }, S('rect', { x: 66, y: 90, width: 28, height: 20, rx: 3, class: 'h-meter' }), bubble('FT-100', 80, 48, 90), this._disp('qin', 102, 37, 66, 'm³/h')));
+    add(drawer('FV-01', S('g', {}, S('rect', { class: 'h-selr', x: 182, y: 84, width: 36, height: 52 }), bowtie(200, 100, 'h-hv'), txt(200, 130, 'FV-01', 'h-tag', 'middle'))));
+    // ---- bể chứa T-01 ----
+    const tank = S('g', { class: 'h-tankg' }, S('rect', { class: 'h-selr', x: TK.x - 6, y: TK.y0 - 6, width: TK.w + 12, height: TK.y1 - TK.y0 + 12 }),
+      S('rect', { x: TK.x, y: TK.y0, width: TK.w, height: TK.y1 - TK.y0, rx: 8, class: 'h-tank' }),
+      S('rect', { x: TK.x + 7, y: TK.y0 + 7, width: TK.w - 14, height: TK.y1 - TK.y0 - 14, rx: 3, class: 'h-tankin' }));
+    O.water = S('rect', { x: TK.x + 7, y: TK.y1 - 7, width: TK.w - 14, height: 0, class: 'h-water' });
+    O.wtop = S('line', { x1: TK.x + 7, x2: TK.x + TK.w - 7, y1: TK.y1, y2: TK.y1, class: 'h-wtop' });
+    tank.append(O.water, O.wtop, S('rect', { x: TK.x + 7, y: TK.y0 + 7, width: TK.w - 14, height: TK.y1 - TK.y0 - 14, class: 'h-glass' }));
+    const lv = this._lv(), sf = cfg.safety;
+    const marks = [[sf.level_high_m, 'H ' + num(sf.level_high_m, 1), 'warn'], [lv.conserve_m, 'tiết kiệm ' + num(lv.conserve_m, 1), 'warn'], [lv.stop_m, 'dừng ' + num(lv.stop_m, 1), 'alarm'], [sf.float_lsll_m, 'LSLL ' + num(sf.float_lsll_m, 2), 'alarm']];
+    for (const [L] of marks) tank.append(S('line', { x1: TK.x + 8, x2: TK.x + TK.w - 8, y1: lvY(L), y2: lvY(L), class: 'h-mk' }));
+    tank.append(txt(300, 290, 'MỨC BỂ', 'h-tcap', 'middle'), this._disp('lvp', 252, 298, 82, '%'), txt(300, 346, 'THỂ TÍCH', 'h-tcap', 'middle'), this._disp('vol', 252, 354, 82, 'm³'));
+    add(this._hit(tank, () => this._fpOpen('inst', 'LT-101'), 'Bể chứa T-01 – mở bảng mức nước LT-101'));
+    add(txt(TK.x - 4, 553, 'T-01 · BỂ CHỨA ' + num(cfg.tank.area_m2 * cfg.tank.overflow_m, 0) + ' m³', 'h-tag2'));
+    // thanh mức bên cạnh bể
+    O.bgf = S('rect', { x: 177, y: TK.y1, width: 14, height: 0, class: 'h-bgf ok' });
+    add(S('rect', { x: 175, y: TK.y0, width: 18, height: TK.y1 - TK.y0, rx: 2, class: 'h-bgt' }), O.bgf);
+    for (const [L, s, k] of marks) add(S('line', { x1: 166, x2: 196, y1: lvY(L), y2: lvY(L), class: 'h-bgm ' + k }), txt(162, lvY(L) + 4, s, 'h-sm', 'end'));
+    add(txt(162, TK.y0 + 10, num(TK.hMax, 1) + ' m', 'h-sm', 'end'), txt(162, TK.y1, '0', 'h-sm', 'end'));
+    add(instHit('LT-101', { x: 330, y: 84, width: 146, height: 48 }, bubble('LT-101', 352, 108, 150), this._disp('lt', 374, 97, 72, 'm')));
+    O.lsll = S('circle', { cx: 218, cy: 578, r: 7, class: 'h-lampc' });
+    add(drawer('LSLL-101', S('g', {}, S('rect', { class: 'h-selr', x: 206, y: 566, width: 150, height: 24 }), O.lsll, txt(231, 582, 'LSLL-101 · PHAO CẠN', 'h-sm'))));
+    O.vx = bowtie(372, 568, 'h-vx', true);
+    add(drawer('VX-01', S('g', {}, S('rect', { class: 'h-selr', x: 358, y: 552, width: 64, height: 32 }), O.vx, txt(386, 572, 'VX-01', 'h-tag'))), txt(474, 604, 'XẢ ĐÁY', 'h-sm'));
+    // ---- ống hút, van tay, cụm bơm + biến tần ----
+    add(txt(396, 512, 'ỐNG HÚT', 'h-sm'));
+    for (const [y, tag] of [[260, 'HV-01'], [485, 'HV-02']]) add(drawer('HV-01..04', S('g', {}, S('rect', { class: 'h-selr', x: 476, y: y - 30, width: 28, height: 44 }), bowtie(490, y, 'h-hv'), txt(490, y - 16, tag, 'h-sm', 'middle'))));
+    O.pumps = [this._pumpSym(0, 565, 260), this._pumpSym(1, 565, 485)].map((P) => { add(P.g, P.vfd); return P; });
+    for (const [y, a, b] of [[240, 'CV-01', 'HV-03'], [465, 'CV-02', 'HV-04']]) {
+      add(drawer('CV-01/02', S('g', {}, S('rect', { class: 'h-selr', x: 636, y: y - 32, width: 28, height: 46 }), bowtie(650, y, 'h-hv'), S('path', { d: `M650 ${y} L662 ${y - 9} L662 ${y + 9} Z`, class: 'h-cvf' }), txt(650, y - 16, a, 'h-sm', 'middle'))),
+        drawer('HV-01..04', S('g', {}, S('rect', { class: 'h-selr', x: 691, y: y - 32, width: 28, height: 46 }), bowtie(705, y, 'h-hv'), txt(705, y - 16, b, 'h-sm', 'middle'))));
     }
-    this._trend(d);
-    this._updateSide(d, g, force);
+    // ---- ống đẩy: PT-101, HT-01, PT-102, PSV-01, FT-101, MV-02 ----
+    add(instHit('PT-101', { x: 756, y: 52, width: 108, height: 84 }, bubble('PT-101', 800, 104, 153), this._disp('p1', 760, 58, 70, 'bar')));
+    add(instHit('PT-102', { x: 866, y: 52, width: 108, height: 84 }, bubble('PT-102', 910, 104, 153), this._disp('p2', 870, 58, 70, 'bar')));
+    add(drawer('HT-01', S('g', {}, S('rect', { class: 'h-selr', x: 830, y: 182, width: 50, height: 124 }), S('rect', { x: 839, y: 186, width: 32, height: 96, rx: 16, class: 'h-vessel' }),
+      S('line', { x1: 839, x2: 871, y1: 238, y2: 238, class: 'h-mk' }), txt(855, 300, 'HT-01', 'h-tag', 'middle'))));
+    O.psv = S('path', { d: 'M938 190 L962 190 L950 205 Z M950 205 L962 193 L962 217 Z', class: 'h-psv' });
+    add(drawer('PSV-01', S('g', {}, S('rect', { class: 'h-selr', x: 880, y: 184, width: 88, height: 70 }), O.psv, S('path', { d: 'M950 205 V219 l-5 3 l10 4 l-10 4 l10 4 l-5 3 M944 238 H956', class: 'h-spring' }),
+      txt(934, 212, 'PSV-01', 'h-tag', 'end'), this._disp('psv', 884, 224, 56))));
+    add(instHit('FT-101', { x: 991, y: 52, width: 120, height: 84 }, S('rect', { x: 1019, y: 149, width: 32, height: 22, rx: 3, class: 'h-meter' }), S('circle', { cx: 1035, cy: 160, r: 6, class: 'h-coil' }),
+      bubble('FT-101', 1035, 104, 149), this._disp('q', 995, 58, 70, 'm³/h')));
+    O.mv = bowtie(1105, 160, 'h-mv');
+    O.mvAct = S('rect', { x: 1093, y: 116, width: 24, height: 22, rx: 3, class: 'h-act' });
+    O.mvSel = S('rect', { class: 'h-selr', x: 1070, y: 96, width: 70, height: 114 });
+    add(this._hit(S('g', {}, O.mvSel, S('line', { x1: 1105, y1: 138, x2: 1105, y2: 152, class: 'h-stem' }), O.mvAct, txt(1105, 132, 'M', 'h-mtxt', 'middle'), O.mv,
+      txt(1105, 108, 'MV-02', 'h-tag', 'middle'), this._disp('mv', 1075, 182, 60)), () => this._fpOpen('valve', 'MV-02'), 'Van điện MV-02 – mở bảng điều khiển van'));
+    // ---- mạng lưới DMA-A + logger điểm bất lợi ----
+    const dma = S('g', {}, S('rect', { class: 'h-selr', x: 1166, y: 86, width: 112, height: 176 }), S('rect', { x: 1172, y: 92, width: 102, height: 164, rx: 4, class: 'h-blk' }),
+      txt(1223, 112, 'MẠNG LƯỚI', 'h-btitle d', 'middle'), txt(1223, 128, 'DMA-A', 'h-btitle d', 'middle'),
+      S('path', { d: 'M1190 152 l12 -10 l12 10 v12 h-24z M1214 152 l12 -10 l12 10 v12 h-24z M1238 152 l12 -10 l12 10 v12 h-24z', class: 'h-house' }),
+      txt(1223, 180, 'PL-301', 'h-tag', 'middle'), txt(1223, 194, 'ĐIỂM BẤT LỢI', 'h-xs', 'middle'), this._disp('pc', 1182, 202, 58, 'bar'), txt(1223, 244, '≥ ' + num(cfg.service.p_crit_min_bar, 1) + ' bar', 'h-sm', 'middle'));
+    add(this._hit(dma, () => this._fpOpen('inst', 'PL-301'), 'Mạng lưới DMA-A – áp lực điểm bất lợi PL-301'));
+    // ---- khối chất lượng nước ----
+    const qb = S('g', {}, S('rect', { x: 790, y: 318, width: 240, height: 327, rx: 4, class: 'h-blk' }), S('rect', { x: 790, y: 318, width: 240, height: 26, rx: 4, class: 'h-blkt' }),
+      txt(800, 336, 'CHẤT LƯỢNG NƯỚC SAU BỂ', 'h-btitle'));
+    O.q = {};
+    [['cl', 'AIT-201', 'Clo dư'], ['ntu', 'AIT-202', 'Độ đục'], ['ph', 'AIT-203', 'pH']].forEach(([k, tag, name], i) => {
+      const y = 352 + i * 97, L = this._lim(tag);
+      const lamp = S('rect', { x: 944, y: y + 30, width: 78, height: 22, rx: 3, class: 'h-qlamp' }), lt = txt(983, y + 45, 'ĐẠT', 'h-qlt', 'middle');
+      const row = S('g', {}, S('rect', { class: 'h-selr', x: 794, y: y - 2, width: 232, height: 92 }), txt(800, y + 16, `${name} · ${tag}`, 'h-tag2'),
+        this._disp('q_' + k, 800, y + 30, 82, INST[tag].u), lamp, lt, txt(800, y + 76, 'QCVN 01-1:2018: ' + L.qc, 'h-sm'));
+      if (i < 2) row.append(S('line', { x1: 798, x2: 1022, y1: y + 92, y2: y + 92, class: 'h-sep' }));
+      qb.append(this._hit(row, () => this._fpOpen('inst', tag), `${tag} ${name} – mở bảng thiết bị đo`));
+      O.q[k] = { lamp, lt };
+    });
+    add(qb);
+    // ---- khối điều khiển trạm ----
+    const cb = S('g', {}, S('rect', { x: 1045, y: 268, width: 231, height: 377, rx: 4, class: 'h-blk' }), S('rect', { x: 1045, y: 268, width: 231, height: 26, rx: 4, class: 'h-blkt' }),
+      txt(1055, 286, 'ĐIỀU KHIỂN TRẠM', 'h-btitle'));
+    const row = (y, label) => cb.append(txt(1055, y, label, 'h-sm'));
+    row(318, 'Chế độ điều khiển'); O.ctl = txt(1266, 336, '', 'h-cval', 'end');
+    row(360, 'Chế độ gateway'); O.mode = txt(1266, 378, '', 'h-cval', 'end');
+    row(402, 'Kịch bản'); O.scr = txt(1266, 402, '', 'h-cval2', 'end');
+    cb.append(O.ctl, O.mode, O.scr, S('line', { x1: 1053, x2: 1268, y1: 414, y2: 414, class: 'h-sep' }));
+    row(436, 'P đặt'); cb.append(this._disp('pset', 1150, 422, 80, 'bar'));
+    row(466, 'P thực PT-101'); cb.append(this._disp('preal', 1150, 452, 80, 'bar'));
+    O.pbarSet = S('path', { d: '', class: 'h-pbset' }); O.pbarVal = S('rect', { x: 1055, y: 486, width: 0, height: 8, class: 'h-pbval' });
+    cb.append(S('rect', { x: 1055, y: 486, width: 210, height: 8, rx: 2, class: 'h-pbtrk' }), S('rect', { x: 1055 + 210 * (cfg.service.p_out_max_bar / 6), y: 486, width: 210 * (1 - cfg.service.p_out_max_bar / 6), height: 8, class: 'h-pbhi' }),
+      O.pbarVal, O.pbarSet, txt(1055, 508, '0', 'h-xs'), txt(1265, 508, '6 bar', 'h-xs', 'end'));
+    row(534, 'Công suất'); cb.append(this._disp('kw', 1150, 520, 80, 'kW'));
+    row(564, 'Điện năng'); cb.append(this._disp('kwh', 1150, 550, 80, 'kWh'));
+    const btn = S('g', { class: 'h-svgbtn' }, S('rect', { x: 1057, y: 590, width: 207, height: 42, rx: 4 }), txt(1160, 616, 'CHẾ ĐỘ TRẠM ▸', 'h-svgbtnt', 'middle'));
+    cb.append(this._hit(btn, () => this._fpOpen('station', 'ST'), 'Mở bảng chế độ trạm: tự động / tay, đặt lại dừng an toàn, luân phiên bơm'));
+    add(cb);
+    this.pid = svg;
+    this.pidWrap = h('div', { class: 'h-pidwrap' }, svg);
+    host.append(this.pidWrap);
+  }
+  _pumpSym(i, cx, cy) {
+    const tag = PUMP_TAG[i];
+    const P = { cx, cy };
+    P.vol = S('circle', { cx, cy, r: 28, class: 'h-vol stop' });
+    P.noz = S('rect', { x: cx + 12, y: cy - 28, width: 30, height: 16, rx: 1, class: 'h-vol stop' });
+    P.imp = S('g', { class: 'h-imp', style: `transform-origin:${cx}px ${cy}px` },
+      ...[0, 120, 240].map((r) => S('path', { d: `M${cx} ${cy} q 9 -5 17 -2 q -7 6 -17 2 z`, transform: `rotate(${r} ${cx} ${cy})` })), S('circle', { cx, cy, r: 4.5, class: 'h-hub' }));
+    P.q = S('text', { x: cx, y: cy + 6, class: 'h-pq', 'text-anchor': 'middle', text: '?' });
+    P.bA = S('rect', { x: cx - 74, y: cy - 88, width: 44, height: 16, rx: 3, class: 'h-badge' }); P.bAt = S('text', { x: cx - 52, y: cy - 76, class: 'h-badget', 'text-anchor': 'middle' });
+    P.bL = S('rect', { x: cx - 74, y: cy - 68, width: 44, height: 16, rx: 3, class: 'h-badge' }); P.bLt = S('text', { x: cx - 52, y: cy - 56, class: 'h-badget', 'text-anchor': 'middle' });
+    const motor = S('g', {}, S('rect', { x: cx - 8, y: cy - 94, width: 16, height: 8, rx: 1, class: 'h-motor' }), S('rect', { x: cx - 22, y: cy - 87, width: 44, height: 41, rx: 5, class: 'h-motor' }),
+      ...[0, 1, 2, 3, 4].map((k) => S('line', { x1: cx - 15 + k * 7.5, x2: cx - 15 + k * 7.5, y1: cy - 82, y2: cy - 51, class: 'h-fin' })),
+      S('path', { d: `M${cx - 12} ${cy - 46} L${cx + 12} ${cy - 46} L${cx + 7} ${cy - 27} L${cx - 7} ${cy - 27} Z`, class: 'h-lant' }));
+    P.sel = S('rect', { class: 'h-selr', x: cx - 80, y: cy - 100, width: 128, height: 168 });
+    P.g = S('g', {}, P.sel, motor, P.noz, P.vol, S('circle', { cx, cy, r: 28, class: 'h-shine' }), P.imp, P.q,
+      S('path', { d: `M${cx - 30} ${cy + 39} L${cx + 30} ${cy + 39} L${cx + 22} ${cy + 27} L${cx - 22} ${cy + 27} Z`, class: 'h-base' }),
+      S('text', { x: cx, y: cy + 58, class: 'h-ptag', 'text-anchor': 'middle', text: tag }), P.bA, P.bAt, P.bL, P.bLt);
+    this._hit(P.g, () => this._fpOpen('pump', i), `${tag} – mở bảng điều khiển bơm`);
+    // khối dữ liệu biến tần
+    const x0 = cx + 40, y0 = cy - 2;
+    P.vst = S('text', { x: x0 + 132, y: y0 + 15, class: 'h-vst', 'text-anchor': 'end' });
+    P.fbar = S('rect', { x: x0 + 8, y: y0 + 95, width: 0, height: 5, class: 'h-fbar' });
+    P.vbox = S('rect', { x: x0, y: y0, width: 140, height: 106, rx: 4, class: 'h-vfd' });
+    P.vsel = S('rect', { class: 'h-selr', x: x0 - 4, y: y0 - 4, width: 148, height: 114 });
+    P.vfd = S('g', {}, P.vsel, P.vbox, S('rect', { x: x0, y: y0, width: 140, height: 20, rx: 4, class: 'h-vfdt' }),
+      S('text', { x: x0 + 8, y: y0 + 15, class: 'h-btitle', text: 'VFD-0' + (i + 1) }), P.vst,
+      ...[['Hz', 'f', 24], ['A', 'a', 47], ['kW', 'kw', 70]].map(([u, k, dy]) => S('g', {}, S('text', { x: x0 + 8, y: y0 + dy + 16, class: 'h-vl', text: { f: 'Tần số', a: 'Dòng', kw: 'Công suất' }[k] }),
+        this._disp(`v${i}_${k}`, x0 + 60, y0 + dy, 52), S('text', { x: x0 + 116, y: y0 + dy + 16, class: 'h-du', text: u }))),
+      S('rect', { x: x0 + 8, y: y0 + 95, width: 124, height: 5, rx: 1, class: 'h-ftrk' }), P.fbar);
+    this._hit(P.vfd, () => this._fpOpen('pump', i), `VFD-0${i + 1} – mở bảng điều khiển ${tag}`);
+    return P;
+  }
+  _flow(id, on, q = 10) {
+    for (const f of this.PF[id] || []) {
+      setC(f, 'h-pf' + (on ? ' on' : ''));
+      if (on) { const v = 18 + Math.round(clamp(q, 0, 40) / 4) * 8; setA(f, 'style', `animation-duration:${(24 / v).toFixed(2)}s`); }
+    }
+  }
+  _updOverview(d) {
+    const a = this.app, c = this.ctx, O = this.O, cfg = a.cfg, local = !c.remote, hw = d.installed;
+    const absent = (tag) => Boolean(hw && !hw.has(tag));
+    const known = !c.dead;
+    // giá trị đo
+    this._sv('qin', d.q_in, 1, { absent: absent('FT-100') });
+    const lvl = d.level, L = this._lim('LT-101');
+    const lst = this._sv('lt', lvl, 2, { lim: L.st });
+    this._sv('lvp', isNum(lvl) ? (lvl / cfg.tank.overflow_m) * 100 : lvl, 1, { lim: () => lst });
+    this._sv('vol', isNum(lvl) ? lvl * cfg.tank.area_m2 : lvl, 0);
+    const pl = this._lim('PT-101');
+    this._sv('p1', d.p1, 2, { lim: pl.st }); this._sv('p2', d.p2, 2, { absent: absent('PT-102'), lim: pl.st });
+    this._sv('q', d.q, 1, { lim: this._lim('FT-101').st }); this._sv('pc', d.p_crit, 2, { lim: this._lim('PL-301').st });
+    this._sv('psv', d.psv === undefined ? undefined : isNum(d.psv) ? (d.psv > 0.05 ? 'XẢ ' + num(d.psv, 1) : 'ĐÓNG') : d.psv, 1, { st: d.psv > 0.05 ? 'alarm' : 'ok' });
+    const mvAbsent = cfg.hardware['MV-02'] === false, vv = d.valve;
+    this._sv('mv', isNum(vv) ? (vv > 0.99 ? 'MỞ' : vv < 0.01 ? 'ĐÓNG' : num(vv * 100, 0) + ' %') : vv, 0, { absent: mvAbsent, st: isNum(vv) && vv < 0.99 ? (vv < 0.01 ? 'alarm' : 'warn') : 'ok' });
+    // bể
+    const showL = known && isNum(lvl) ? lvl : 0;
+    const wy = known ? lvY(showL) : TK.y0 + 7;
+    setA(O.water, 'y', wy.toFixed(1)); setA(O.water, 'height', Math.max(0, TK.y1 - 7 - wy).toFixed(1));
+    setA(O.wtop, 'y1', lvY(showL).toFixed(1)); setA(O.wtop, 'y2', lvY(showL).toFixed(1));
+    setA(O.bgf, 'y', lvY(showL).toFixed(1)); setA(O.bgf, 'height', (TK.y1 - lvY(showL)).toFixed(1));
+    setC(O.bgf, 'h-bgf ' + (known && isNum(lvl) ? lst : 'unk'));
+    setC(O.water, 'h-water' + (known ? '' : ' unk'));
+    setC(O.lsll, 'h-lampc' + (local && known && a.st.sensors.lsll ? ' alarm' : local && known ? ' ok' : ''));
+    const drain = local && known && a.st.plant.drain_open;
+    setC(O.vx, 'h-vx' + (drain ? ' open' : ''));
+    // bơm
+    const any = d.pumps.some((p) => p.running);
+    d.pumps.forEach((p, i) => {
+      const P = O.pumps[i];
+      const st = !known ? 'unk' : p.fault ? 'fault' : p.running ? 'run' : 'stop';
+      setC(P.vol, 'h-vol ' + st); setC(P.noz, 'h-vol ' + st);
+      const spin = known && p.running && isNum(p.f) && p.f > 1;
+      setC(P.imp, 'h-imp' + (spin ? ' spin' : ''));
+      if (spin) setA(P.imp, 'style', `transform-origin:${P.cx}px ${P.cy}px;animation-duration:${(30 / Math.max(10, Math.round(p.f))).toFixed(2)}s`);
+      setC(P.q, 'h-pq' + (known ? '' : ' on'));
+      const man = d.ctl !== 'auto';
+      setC(P.bA, 'h-badge ' + (!known ? 'off' : man ? 'man' : 'auto')); setT(P.bAt, !known ? '–' : man ? 'MAN' : 'AUTO');
+      setC(P.bL, 'h-badge ' + (!known || !man ? 'off' : d.ctl === 'local' ? 'loc' : 'rem')); setT(P.bLt, !known || !man ? '–' : d.ctl === 'local' ? 'LOC' : 'REM');
+      setT(P.vst, !known ? '####' : p.fault ? 'LỖI' : p.running ? 'CHẠY' : 'DỪNG');
+      setC(P.vst, 'h-vst ' + st);
+      setC(P.vbox, 'h-vfd' + (p.fault && known ? ' fault' : ''));
+      this._sv(`v${i}_f`, p.f, 1); this._sv(`v${i}_a`, p.amps, 1); this._sv(`v${i}_kw`, p.kw, 2);
+      setA(P.fbar, 'width', (known && isNum(p.f) ? clamp(p.f / 50, 0, 1) * 124 : 0).toFixed(1));
+      const open = this.fps.some((f) => f.id === 'pump:' + i);
+      setC(P.sel, 'h-selr' + (open ? ' on' : '')); setC(P.vsel, 'h-selr' + (open ? ' on' : ''));
+      this._flow('suc' + (i + 1), known && p.running, d.q); this._flow('dis' + (i + 1), known && p.running, d.q);
+    });
+    this._flow('suc', known && any, d.q);
+    this._flow('sup', known && isNum(d.q_in) && d.q_in > 0.3, d.q_in);
+    this._flow('main', known && isNum(d.q) && d.q > 0.3, d.q);
+    this._flow('psv', known && isNum(d.psv) && d.psv > 0.05, d.psv * 4);
+    this._flow('drain', drain, 30);
+    // van
+    setC(O.psv, 'h-psv' + (known && d.psv > 0.05 ? ' relief' : ''));
+    const mst = !known || mvAbsent || !isNum(vv) ? 'unk' : vv > 0.99 ? 'open' : vv < 0.01 ? 'closed' : 'moving';
+    setC(O.mv, 'h-mv ' + mst); setC(O.mvAct, 'h-act ' + mst);
+    setC(O.mvSel, 'h-selr' + (this.fps.some((f) => f.id === 'valve:MV-02') ? ' on' : ''));
+    // chất lượng
+    for (const [k, tag] of [['cl', 'AIT-201'], ['ntu', 'AIT-202'], ['ph', 'AIT-203']]) {
+      const st = this._sv('q_' + k, d[k], 2, { absent: absent(tag), lim: this._lim(tag).st });
+      const Q = O.q[k], ok = st === 'ok' || st === 'warn', bad = st === 'alarm';
+      setC(Q.lamp, 'h-qlamp ' + (bad ? 'bad' : ok ? 'ok' : 'unk')); setT(Q.lt, bad ? 'KHÔNG ĐẠT' : ok ? 'ĐẠT' : st === 'na' ? 'N/A' : '####');
+      setC(Q.lt, 'h-qlt' + (bad ? ' bad' : ok ? ' ok' : ''));
+    }
+    // điều khiển trạm
+    setT(O.ctl, this._ctlText(d)); setC(O.ctl, 'h-cval ' + (d.dead ? 'alarm' : d.ctl === 'auto' ? 'ok' : 'warn'));
+    setT(O.mode, MODE_NAME[d.mode] || d.mode); setC(O.mode, 'h-cval ' + ({ a: 'ok', b: 'warn', c: 'info', d: 'alarm', x: 'alarm' }[d.mode] || ''));
+    const sc = this._script();
+    setT(O.scr, c.dead ? '####' : `v${sc.v} · ${sc.s}`);
+    this._sv('pset', d.p_set, 2); this._sv('preal', d.p1, 2, { lim: pl.st });
+    this._sv('kw', d.kw, 2); this._sv('kwh', d.kwh, 1);
+    const X = (v) => 1055 + clamp(v / 6, 0, 1) * 210;
+    setA(O.pbarVal, 'width', (known && isNum(d.p1) ? X(d.p1) - 1055 : 0).toFixed(1));
+    setC(O.pbarVal, 'h-pbval ' + (known && isNum(d.p1) ? pl.st(d.p1) : ''));
+    setA(O.pbarSet, 'd', known && isNum(d.p_set) ? `M${X(d.p_set).toFixed(1)} 484 l-6 -9 h12 z M${X(d.p_set).toFixed(1)} 484 v12` : '');
+    this.pid.classList.toggle('stale', c.stale);
   }
 
-  _trend(d) {
-    const a = this.app, T = this.R.trend, t1 = d.t, t0 = t1 - 7200;
-    const X = (t) => T.x + ((t - t0) / 7200) * T.w, Y = (v) => T.y + T.h - (Math.max(0, Math.min(5, v)) / 5) * T.h;
-    const pts = (ts, vs) => { const o = []; for (let i = 0; i < ts.length; i++) if (ts[i] >= t0 && vs[i] !== null && vs[i] !== undefined && !Number.isNaN(vs[i])) o.push(X(ts[i]).toFixed(1) + ',' + Y(vs[i]).toFixed(1)); return o.join(' '); };
+  // ================= màn 02: bơm – biến tần =================
+  _gauge(min, max, step, minor, unit, bands = []) {
+    const cx = 110, cy = 108, r = 84, a0 = 135, a1 = 405;
+    const ang = (v) => a0 + (a1 - a0) * clamp((v - min) / (max - min), 0, 1);
+    const pt = (a, rr) => [cx + rr * Math.cos((a * Math.PI) / 180), cy + rr * Math.sin((a * Math.PI) / 180)];
+    const arc = (v0, v1, rr) => { const [x0, y0] = pt(ang(v0), rr), [x1, y1] = pt(ang(v1), rr); return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${rr} ${rr} 0 ${ang(v1) - ang(v0) > 180 ? 1 : 0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`; };
+    const svg = S('svg', { viewBox: '0 0 220 196', class: 'h-gauge', 'aria-hidden': 'true' }, S('circle', { cx, cy, r: r + 16, class: 'h-g-face' }), S('path', { d: arc(min, max, r), class: 'h-g-trk' }));
+    for (const [v0, v1, cls] of bands) svg.append(S('path', { d: arc(v0, v1, r + 9), class: 'h-g-band ' + cls }));
+    for (let v = min; v <= max + 1e-9; v += minor) {
+      const major = Math.abs((v - min) / step - Math.round((v - min) / step)) < 1e-6, [x0, y0] = pt(ang(v), r - 8), [x1, y1] = pt(ang(v), r - (major ? 19 : 13));
+      svg.append(S('line', { x1: x0.toFixed(1), y1: y0.toFixed(1), x2: x1.toFixed(1), y2: y1.toFixed(1), class: major ? 'h-g-tk' : 'h-g-tk2' }));
+      if (major) { const [lx, ly] = pt(ang(v), r - 31); svg.append(S('text', { x: lx.toFixed(1), y: (ly + 4).toFixed(1), class: 'h-g-lbl', 'text-anchor': 'middle', text: String(Math.round(v * 10) / 10).replace('.', ',') })); }
+    }
+    const val = S('path', { d: '', class: 'h-g-val' }), sp = S('path', { d: '', class: 'h-g-sp' });
+    const t = S('text', { x: cx, y: cy + 12, class: 'h-g-txt', 'text-anchor': 'middle' });
+    svg.append(val, sp, t, S('text', { x: cx, y: cy + 34, class: 'h-g-unit', 'text-anchor': 'middle', text: unit }));
+    return {
+      svg,
+      set: (v, nd, spv, o) => {
+        const [txt, st] = this._fv(v, nd, o);
+        setT(t, txt); setC(t, 'h-g-txt ' + st + (this.ctx.stale ? ' stale' : ''));
+        const ok = isNum(v) && !this.ctx.dead && st !== 'na';
+        setA(val, 'd', ok && v > min ? arc(min, Math.min(max, v), r) : ''); setC(val, 'h-g-val ' + st);
+        if (isNum(spv) && !this.ctx.dead) {
+          const P = [pt(ang(spv), r + 4), pt(ang(spv) - 4, r + 17), pt(ang(spv) + 4, r + 17)].map(([x, y]) => x.toFixed(1) + ' ' + y.toFixed(1));
+          setA(sp, 'd', `M${P[0]} L${P[1]} L${P[2]} Z`);
+        } else setA(sp, 'd', '');
+      },
+    };
+  }
+  _pnl(title, ...kids) { const t = h('span', {}, title); const el = h('section', { class: 'h-pnl' }, h('div', { class: 'h-pnl-t' }, t), h('div', { class: 'h-pnl-b' }, ...kids)); el._title = t; return el; }
+  _ro(label, D) { return h('div', { class: 'h-ro' }, h('small', {}, label), D.el); }
+  _buildPumps(host) {
+    this.PP = [0, 1].map((i) => {
+      const P = { g: this._gauge(0, 50, 10, 2.5, 'Hz', [[25, 50, 'ok']]) };
+      P.lamps = { run: this._lamp('CHẠY'), stop: this._lamp('DỪNG'), flt: this._lamp('LỖI'), mode: this._lamp('TỰ ĐỘNG'), src: this._lamp('TẠI CHỖ/TỪ XA') };
+      P.R = { fs: this._hd('Hz'), a: this._hd('A'), kw: this._hd('kW'), rh: this._hd('h'), sh: this._hd(''), st: this._hd('') };
+      P.chip = h('span', { class: 'h-chip' });
+      const pnl = this._pnl(`${PUMP_TAG[i]} · BƠM SỐ ${i + 1} · VFD-0${i + 1}`,
+        h('div', { class: 'h-pp-top' }, h('div', { class: 'h-pp-g' }, P.g.svg, h('small', { class: 'h-cap c' }, 'TẦN SỐ · ▲ = ĐẶT')), h('div', { class: 'h-lampcol' }, ...Object.values(P.lamps).map((L) => L.el))),
+        h('div', { class: 'h-rogrid' }, this._ro('Tần số đặt', P.R.fs), this._ro('Dòng điện', P.R.a), this._ro('Công suất', P.R.kw), this._ro('Giờ chạy', P.R.rh),
+          this._ro('Khởi động / 1 giờ', P.R.sh), this._ro('Tổng số lần khởi động', P.R.st)),
+        h('button', { class: 'h-btn wide', onclick: () => this._fpOpen('pump', i) }, `BẢNG ĐIỀU KHIỂN ${PUMP_TAG[i]} ▸`));
+      pnl.querySelector('.h-pnl-t').append(P.chip);
+      P.el = pnl;
+      return P;
+    });
+    const Q = this.PQ = { g: this._gauge(0, 6, 1, 0.25, 'bar', [[0, 1.4, 'warn'], [4, 6, 'alarm']]) };
+    Q.R = { pset: this._hd('bar'), err: this._hd('bar'), pc: this._hd('bar'), q: this._hd('m³/h'), kw: this._hd('kW'), kwh: this._hd('kWh') };
+    Q.ctl = h('b', { class: 'h-bigtxt' });
+    const qp = this._pnl('ÁP LỰC ĐẦU RA · PT-101',
+      h('div', { class: 'h-pp-top' }, h('div', { class: 'h-pp-g' }, Q.g.svg, h('small', { class: 'h-cap c' }, 'ÁP THỰC · ▲ = P_set')), h('div', { class: 'h-lampcol' }, h('small', { class: 'h-cap' }, 'Điều khiển'), Q.ctl)),
+      h('div', { class: 'h-rogrid' }, this._ro('Áp đặt P_set', Q.R.pset), this._ro('Sai lệch P – P_set', Q.R.err), this._ro('Áp điểm bất lợi', Q.R.pc),
+        this._ro('Lưu lượng ra', Q.R.q), this._ro('Công suất trạm', Q.R.kw), this._ro('Điện năng', Q.R.kwh)),
+      h('button', { class: 'h-btn wide', onclick: () => this._fpOpen('station', 'ST') }, 'CHẾ ĐỘ TRẠM ▸'));
+    host.append(h('div', { class: 'h-grid3' }, this.PP[0].el, this.PP[1].el, qp));
+  }
+  _pumpLamps(Ls, d, i) {
+    const p = d.pumps[i], c = this.ctx, k = !c.dead, man = d.ctl !== 'auto';
+    this._setLamp(Ls.run, k && p.running ? 'g' : ''); this._setLamp(Ls.stop, k && !p.running ? 'w' : ''); this._setLamp(Ls.flt, k && p.fault ? 'r blink' : '');
+    this._setLamp(Ls.mode, !k ? '' : man ? 'a' : 'g', !k ? 'TỰ ĐỘNG/TAY' : man ? 'TAY' : 'TỰ ĐỘNG');
+    this._setLamp(Ls.src, !k || !man ? '' : d.ctl === 'local' ? 'a' : 'c', !k || !man ? 'TẠI CHỖ/TỪ XA' : d.ctl === 'local' ? 'TẠI CHỖ' : 'TỪ XA');
+  }
+  _updPumps(d) {
+    const max = this.app.cfg.safety.max_starts_per_h;
+    d.pumps.forEach((p, i) => {
+      const P = this.PP[i], k = !this.ctx.dead, fs = this._fset(d, i);
+      P.g.set(p.f, 1, fs);
+      this._pumpLamps(P.lamps, d, i);
+      setT(P.chip, !k ? '####' : p.fault ? 'LỖI' : p.running ? 'ĐANG CHẠY' : 'DỪNG'); setC(P.chip, 'h-chip ' + (!k ? 'unk' : p.fault ? 'r' : p.running ? 'g' : 'w'));
+      this._hv(P.R.fs, fs, 1); this._hv(P.R.a, p.amps, 1); this._hv(P.R.kw, p.kw, 2); this._hv(P.R.rh, p.run_h, 1);
+      this._hv(P.R.sh, isNum(p.starts_h) ? `${p.starts_h} / ${max}` : p.starts_h, 0, { st: p.starts_h >= max ? 'alarm' : p.starts_h >= max - 1 ? 'warn' : 'ok' });
+      this._hv(P.R.st, isNum(p.starts) ? String(p.starts) : p.starts, 0);
+    });
+    const Q = this.PQ, pl = this._lim('PT-101');
+    Q.g.set(d.p1, 2, d.p_set, { lim: pl.st });
+    this._hv(Q.R.pset, d.p_set, 2); this._hv(Q.R.err, isNum(d.p1) && isNum(d.p_set) ? d.p1 - d.p_set : undefined, 2);
+    this._hv(Q.R.pc, d.p_crit, 2, { lim: this._lim('PL-301').st }); this._hv(Q.R.q, d.q, 1); this._hv(Q.R.kw, d.kw, 2); this._hv(Q.R.kwh, d.kwh, 1);
+    setT(Q.ctl, this._ctlText(d)); setC(Q.ctl, 'h-bigtxt ' + (d.dead ? 'alarm' : d.ctl === 'auto' ? 'ok' : 'warn'));
+  }
+
+  // ================= màn 03: chất lượng nước =================
+  _buildQuality(host) {
+    this.QA = [['cl', 'AIT-201', 'CLO DƯ TỰ DO'], ['ntu', 'AIT-202', 'ĐỘ ĐỤC'], ['ph', 'AIT-203', 'pH']].map(([k, tag, name]) => {
+      const A = { k, tag, v: this._hd(INST[tag].u, true), lamp: this._lamp('ĐẠT'), lim: h('p', { class: 'h-qlim' }), warn: h('p', { class: 'h-qlim m' }) };
+      A.bar = h('div', { class: 'h-qbar' }, A.zone = h('i', { class: 'h-qz' }), A.ptr = h('b', { class: 'h-qptr' }));
+      A.svg = S('svg', { viewBox: '0 0 300 96', class: 'h-spark', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+      A.trendNote = h('small', { class: 'h-cap' }, 'XU HƯỚNG 6 GIỜ');
+      A.el = this._pnl(`${tag} · ${name}`, h('div', { class: 'h-qa-top' }, A.v.el, A.lamp.el), A.lim, A.warn, A.bar, A.trendNote, h('div', { class: 'h-sparkw' }, A.svg, h('div', { class: 'h-spk-ax' }), A.sl = h('span', { class: 'h-spl' })),
+        h('button', { class: 'h-btn wide', onclick: () => this._fpOpen('inst', tag) }, 'CHI TIẾT THIẾT BỊ ĐO ▸'));
+      return A;
+    });
+    const Z = this.QS = { lamp: this._lamp('DỪNG AN TOÀN'), vlamp: this._lamp('VAN MV-02'), txt: h('p', { class: 'h-qs-t' }), note: h('p', { class: 'h-qlim m' }) };
+    Z.reset = h('button', { class: 'h-btn warn',
+      onclick: () => this._askScreen('Xác nhận ĐẶT LẠI DỪNG AN TOÀN? Trạm chỉ chạy lại khi chất lượng nước đã đạt liên tục.', () => this._sendScr('reset_safe_stop', {})) }, 'ĐẶT LẠI DỪNG AN TOÀN');
+    Z.cf = h('div', { class: 'h-cf', hidden: true });
+    Z.res = h('p', { class: 'h-res' });
+    const sp = this._pnl('DỪNG AN TOÀN THEO CHẤT LƯỢNG NƯỚC', h('div', { class: 'h-lamprow' }, Z.lamp.el, Z.vlamp.el), Z.txt, Z.note, h('div', { class: 'h-brow h-narrowrow' }, Z.reset), Z.cf, Z.res);
+    host.append(h('div', { class: 'h-grid3' }, ...this.QA.map((A) => A.el)), h('div', { class: 'h-qsafe' }, sp));
+  }
+  _series(key, t0, t1, n = 160) {
+    // trả về [[t...],[v...]] trong cửa sổ, lấy thưa còn khoảng n điểm
+    const a = this.app, ts = [], vs = [];
+    if (this.where === 'local') {
+      const H = a.st.hist.data, T = H.t, V = H[key];
+      if (!V) return null;
+      let lo = 0, hi = T.length; while (lo < hi) { const m = (lo + hi) >> 1; if (T[m] < t0) lo = m + 1; else hi = m; }
+      const step = Math.max(1, Math.floor((T.length - lo) / n));
+      for (let i = lo; i < T.length; i += step) { ts.push(T[i]); vs.push(V[i]); }
+      return [ts, vs];
+    }
+    const pen = PENS.find((p) => p.k === key) || {}, sk = pen.sk || Object.values(INST).find((x) => x.hk === key && x.sk)?.sk;
+    if (!sk) return null;
+    const S0 = a.server.stations[a.st.sid], m0 = Math.floor(t0 / 60), m1 = Math.floor(t1 / 60), step = Math.max(1, Math.floor((m1 - m0) / n));
+    for (let m = m0; m <= m1; m += step) { const r = S0.series.get(m); ts.push(m * 60 + 30); vs.push(r ? r[sk] : NaN); }
+    return [ts, vs];
+  }
+  _spark(svg, key, t0, t1, lo, hi, lines) {
+    const W = 300, H = 96, ser = this._series(key, t0, t1);
+    const X = (t) => ((t - t0) / (t1 - t0)) * W, Y = (v) => H - 4 - (clamp((v - lo) / (hi - lo), -0.02, 1.02)) * (H - 8);
+    const kids = [];
+    for (const [v, cls] of lines) kids.push(S('line', { x1: 0, x2: W, y1: Y(v).toFixed(1), y2: Y(v).toFixed(1), class: 'h-spk-l ' + cls }));
+    if (ser) {
+      let d = '', pen = false;
+      for (let i = 0; i < ser[0].length; i++) { const v = ser[1][i]; if (!isNum(v)) { pen = false; continue; } d += (pen ? 'L' : 'M') + X(ser[0][i]).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; }
+      kids.push(S('path', { d, class: 'h-spk' }));
+    }
+    svg.replaceChildren(S('rect', { x: 0, y: 0, width: W, height: H, class: 'h-spk-bg' }), ...kids);
+    const ax = svg.parentNode?.querySelector('.h-spk-ax'), hrs = Math.round((t1 - t0) / 3600);
+    if (ax) ax.replaceChildren(...lines.map(([v, cls]) => h('span', { class: 'lv ' + cls, style: `top:${((Y(v) / H) * 100).toFixed(1)}%` }, num(v, v < 10 ? 1 : 0))),
+      h('span', { class: 'tl' }, `−${hrs} giờ`), h('span', { class: 'tr' }, 'hiện tại'));
+    return Boolean(ser);
+  }
+  _updQuality(d, force) {
+    const now = performance.now(), redraw = force || now - (this._qT || 0) > 1500;
+    if (redraw) this._qT = now;
+    for (const A of this.QA) {
+      const L = this._lim(A.tag), absent = this._absent(A.tag), v = d[A.k];
+      const st = this._hv(A.v, v, 2, { absent, lim: L.st });
+      const bad = st === 'alarm', ok = st === 'ok' || st === 'warn';
+      this._setLamp(A.lamp, bad ? 'r blink' : ok ? 'g' : '', bad ? 'KHÔNG ĐẠT' : ok ? 'ĐẠT QCVN' : st === 'na' ? 'N/A' : '####');
+      setT(A.lim, 'QCVN 01-1:2018/BYT: ' + L.qc); setT(A.warn, L.wt);
+      const [lo, hi] = L.scale, pos = (x) => (clamp((x - lo) / (hi - lo), 0, 1) * 100).toFixed(1) + '%';
+      const z = L.lines.filter((x) => x[1] === 'alarm').map((x) => x[0]);
+      const zl = A.k === 'ntu' ? lo : z[0], zh = A.k === 'ntu' ? z[0] : z[1];
+      setA(A.zone, 'style', `left:${pos(zl)};width:calc(${pos(zh)} - ${pos(zl)})`);
+      setA(A.ptr, 'style', `left:${isNum(v) && !absent && !this.ctx.dead ? pos(v) : '-20px'}`); setC(A.ptr, 'h-qptr ' + st);
+      if (redraw) {
+        const has = !absent && !this.ctx.dead && this._spark(A.svg, INST[A.tag].hk, d.t - 6 * 3600, Math.max(d.t, 600), lo, hi, L.lines.map(([x, c]) => [x, c]));
+        if (!has) { A.svg.replaceChildren(S('rect', { x: 0, y: 0, width: 300, height: 96, class: 'h-spk-bg' })); A.svg.parentNode.querySelector('.h-spk-ax').replaceChildren(); }
+        setT(A.sl, absent ? 'Không lắp thiết bị' : this.ctx.dead ? '####' : has ? `${String(lo).replace('.', ',')} – ${String(hi).replace('.', ',')} ${INST[A.tag].u}` : 'Trung tâm không nhận xu hướng chất lượng – chỉ giá trị tức thời');
+      }
+    }
+    const Z = this.QS, a = this.app, local = this.where === 'local', c = this.ctx;
+    let ss = false, reason = '', known = !c.dead;
+    if (local && known) { const sf = a.st.gw.safety; ss = sf.safe_stop; reason = sf.safe_reason; }
+    else if (!local) { const al = d.alarms.find((x) => x.code === 'SAFE_STOP'); ss = Boolean(al); reason = al ? (al.msg.match(/:\s*(.+?) không đạt/)?.[1] ?? '') : ''; }
+    this._setLamp(Z.lamp, !known ? '' : ss ? 'r blink' : 'g', !known ? 'DỪNG AN TOÀN: ####' : ss ? 'ĐANG DỪNG AN TOÀN' : 'KHÔNG DỪNG AN TOÀN');
+    const vv = d.valve;
+    this._setLamp(Z.vlamp, !known || !isNum(vv) ? '' : vv > 0.99 ? 'g' : vv < 0.01 ? 'r' : 'a', !known ? 'MV-02: ####' : !isNum(vv) ? 'MV-02: N/A' : vv > 0.99 ? 'MV-02 MỞ' : vv < 0.01 ? 'MV-02 ĐÓNG' : 'MV-02 ĐANG CHẠY');
+    const why = reason ? (reason === 'pH' ? reason : reason[0].toLowerCase() + reason.slice(1)) : 'chất lượng nước';
+    setT(Z.txt, !known ? 'HMI-01 mất kết nối với mini PC – không biết trạng thái dừng an toàn.'
+      : ss ? `Trạm dừng an toàn do ${why} không đạt QCVN: bơm dừng, van MV-02 đóng để không cấp nước không đạt ra mạng.`
+      : 'Chất lượng nước trong giới hạn – trạm cấp nước bình thường.');
+    const s = a.cfg.safety;
+    const mn = (x) => num(x / 60, 0);
+    setT(Z.note, `Khi vượt ngưỡng QCVN liên tục (clo ${mn(s.cl_delay_s)} phút, độ đục ${mn(s.ntu_delay_s)} phút, pH ${mn(s.ph_delay_s)} phút) trạm tự dừng an toàn. `
+      + `Chạy lại cần lệnh ĐẶT LẠI sau khi chất lượng đạt liên tục ${mn(s.quality_reset_hold_s)} phút (độ đục < ${num(s.ntu_reset_max, 1)} NTU).`);
+    setD(Z.reset, c.dead || (local && !ss));
+    setA(Z.reset, 'title', local && !ss ? 'Trạm không ở trạng thái dừng an toàn' : 'Gửi lệnh đặt lại dừng an toàn');
+    this._resLine(Z.res, ['reset_safe_stop']);
+  }
+
+  // ================= màn 04: xu hướng =================
+  _buildTrend(host) {
+    const T = this.TR;
+    T.rbtn = [[3600, '1 giờ'], [8 * 3600, '8 giờ'], [86400, '24 giờ']].map(([v, s]) => h('button', { class: 'h-btn sm', onclick: () => { T.range = v; T.last = 0; this.update(true); } }, s));
+    T.note = h('span', { class: 'h-tnote' });
+    T.cv = h('canvas', { class: 'h-tcv', 'aria-label': 'Biểu đồ xu hướng vận hành' });
+    T.cv.addEventListener('pointermove', (e) => { const r = T.cv.getBoundingClientRect(); T.hx = e.clientX - r.left; this._drawTrend(); });
+    T.cv.addEventListener('pointerleave', () => { T.hx = null; this._drawTrend(); });
+    T.rows = PENS.map((p, i) => {
+      const cb = h('input', { type: 'checkbox', checked: true, 'aria-label': 'Hiện ' + p.name, onchange: () => { if (cb.checked) T.hide.delete(i); else T.hide.add(i); this._drawTrend(); } });
+      const sw = h('i', { class: 'h-tsw' }), v = h('b'), tr = h('tr', { onclick: (e) => { if (e.target !== cb) { T.sel = i; this._drawTrend(); } } },
+        h('td', {}, cb), h('td', {}, sw), h('td', { class: 'n' }, p.name), h('td', { class: 'v' }, v), h('td', {}, p.u), h('td', { class: 'r' }, `${p.lo} – ${p.hi}`));
+      return { tr, sw, v, cb };
+    });
+    T.leg = h('table', { class: 'h-tleg' }, h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Bút'), h('th', {}, 'Tên tín hiệu'), h('th', {}, 'Giá trị'), h('th', {}, 'Đơn vị'), h('th', {}, 'Dải'))), h('tbody', {}, ...T.rows.map((r) => r.tr)));
+    T.wrap = h('div', { class: 'h-tplot' }, T.cv);
+    host.append(h('div', { class: 'h-tbar' }, h('small', { class: 'h-cap' }, 'KHOẢNG THỜI GIAN'), h('div', { class: 'h-seg' }, ...T.rbtn), T.note),
+      h('div', { class: 'h-tbody' }, T.wrap, h('div', { class: 'h-tlegw' }, T.leg, h('p', { class: 'h-qlim m' }, 'Nhấp một dòng để chọn thang trục tung; rê chuột trên biểu đồ để đọc giá trị theo thời gian.'))));
+  }
+  _trendData() {
+    const a = this.app, T = this.TR, t1 = Math.max(a.net.t, 600), t0 = t1 - T.range;
     if (this.where === 'local') {
       const H = a.st.hist.data;
-      let i0 = H.t.length; while (i0 > 0 && H.t[i0 - 1] >= t0) i0--;
-      const sl = (k) => H[k].slice(i0);
-      const ts = H.t.slice(i0);
-      this.R.trP.setAttribute('points', pts(ts, sl('p_out'))); this.R.trS.setAttribute('points', pts(ts, sl('p_set'))); this.R.trC.setAttribute('points', pts(ts, sl('p_crit')));
-      this.R.trLegend.textContent = '— đầu ra  - - áp đặt  — điểm bất lợi';
-    } else {
-      const st = a.server.stations[a.st.sid], ts = [], vs = [];
-      for (let m = Math.floor(t0 / 60); m <= Math.floor(t1 / 60); m++) { const r = st.series.get(m); if (r) { ts.push(m * 60 + 30); vs.push(r.p); } }
-      this.R.trP.setAttribute('points', pts(ts, vs)); this.R.trS.setAttribute('points', ''); this.R.trC.setAttribute('points', '');
-      this.R.trLegend.textContent = '— áp đầu ra máy chủ đã nhận (theo phút)';
+      let lo = 0, hi = H.t.length; while (lo < hi) { const m = (lo + hi) >> 1; if (H.t[m] < t0) lo = m + 1; else hi = m; }
+      return { t0, t1, i0: lo, ts: H.t, cols: PENS.map((p) => H[p.k]), late: null };
+    }
+    const S0 = a.server.stations[a.st.sid], ts = [], cols = PENS.map(() => []), late = [];
+    for (let m = Math.floor(t0 / 60); m <= Math.floor(a.net.t / 60); m++) {
+      const r = S0.series.get(m); ts.push(m * 60 + 30); late.push(Boolean(r && r.late));
+      PENS.forEach((p, i) => cols[i].push(r && p.sk ? r[p.sk] : NaN));
+    }
+    return { t0, t1, i0: 0, ts, cols, late };
+  }
+  _drawTrend() {
+    const T = this.TR, cv = T.cv, W = T.wrap.clientWidth, H = T.wrap.clientHeight;
+    if (!W || !H || !this.visible || this.scr !== 'trend') return;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
+    const ctx = cv.getContext('2d'), cs = getComputedStyle(this.root), css = (k) => cs.getPropertyValue(k).trim();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const D = this._trendData(), cols = PEN_COL[this.skin], remote = this.where === 'remote';
+    const pl = 52, pr = 14, pt = 12, pb = 26, w = W - pl - pr, hgt = H - pt - pb;
+    ctx.fillStyle = css('--h-tbg'); ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = css('--h-tplot'); ctx.fillRect(pl, pt, w, hgt);
+    const X = (t) => pl + ((t - D.t0) / (D.t1 - D.t0)) * w;
+    // lưới
+    ctx.strokeStyle = css('--h-tgrid'); ctx.lineWidth = 1; ctx.font = `11px ${css('--h-f')}`; ctx.fillStyle = css('--h-ink2');
+    for (let k = 0; k <= 10; k++) { const y = Math.round(pt + (hgt * k) / 10) + 0.5; ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(pl + w, y); ctx.stroke(); }
+    const step = T.range <= 3600 ? 600 : T.range <= 8 * 3600 ? 3600 : 3 * 3600;
+    ctx.textAlign = 'center';
+    for (let t = Math.ceil(D.t0 / step) * step; t <= D.t1; t += step) {
+      const x = Math.round(X(t)) + 0.5; ctx.beginPath(); ctx.moveTo(x, pt); ctx.lineTo(x, pt + hgt); ctx.stroke();
+      if (t >= 0) ctx.fillText(t % 86400 === 0 ? `N${Math.floor(t / 86400) + 1} 00:00` : fmtHM(t), x, pt + hgt + 16);
+    }
+    // trục tung theo bút đang chọn
+    const sp = PENS[T.sel];
+    ctx.textAlign = 'right';
+    for (let k = 0; k <= 5; k++) { const v = sp.lo + ((sp.hi - sp.lo) * k) / 5; ctx.fillText(num(v, sp.hi - sp.lo <= 10 ? 1 : 0), pl - 8, pt + hgt - (hgt * k) / 5 + 4); }
+    ctx.fillStyle = cols[T.sel]; ctx.fillRect(4, pt, 4, hgt);
+    // vạch giới hạn áp lực
+    const s = this.app.cfg.service, Yp = (v, p) => pt + hgt - clamp((v - p.lo) / (p.hi - p.lo), 0, 1) * hgt;
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = css('--h-alarm');
+    for (const v of [s.p_crit_min_bar, s.p_out_max_bar]) { const y = Math.round(Yp(v, PENS[0])) + 0.5; ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(pl + w, y); ctx.stroke(); }
+    ctx.setLineDash([]);
+    ctx.fillStyle = css('--h-ink2'); ctx.textAlign = 'left';
+    ctx.fillText(`${num(s.p_out_max_bar, 1)} bar`, pl + 4, Yp(s.p_out_max_bar, PENS[0]) - 4); ctx.fillText(`${num(s.p_crit_min_bar, 1)} bar`, pl + 4, Yp(s.p_crit_min_bar, PENS[0]) - 4);
+    // các bút: gom theo cột điểm ảnh (min/max) để không mất đỉnh
+    ctx.save(); ctx.beginPath(); ctx.rect(pl, pt, w, hgt); ctx.clip();
+    const n = D.ts.length;
+    PENS.forEach((p, k) => {
+      if (T.hide.has(k)) return;
+      const V = D.cols[k]; if (!V) return;
+      ctx.strokeStyle = cols[k]; ctx.lineWidth = k === T.sel ? 2.2 : 1.6; ctx.setLineDash(p.dash || []);
+      ctx.beginPath();
+      let pen = false, cx = -1, mn = 0, mx = 0;
+      const flush = () => { if (cx < 0) return; const y1 = Yp(mn, p), y2 = Yp(mx, p); if (!pen) { ctx.moveTo(cx, y1); pen = true; } else ctx.lineTo(cx, y1); if (y2 !== y1) ctx.lineTo(cx, y2); };
+      for (let i = D.i0; i < n; i++) {
+        const v = V[i];
+        if (!isNum(v)) { flush(); cx = -1; pen = false; continue; }
+        const x = Math.round(X(D.ts[i]));
+        if (x !== cx) { flush(); cx = x; mn = mx = v; } else { if (v < mn) mn = v; if (v > mx) mx = v; }
+      }
+      flush(); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    if (D.late && D.late.some(Boolean)) {
+      ctx.fillStyle = css('--h-latebg');
+      for (let i = 0; i < n; i++) if (D.late[i]) ctx.fillRect(X(D.ts[i]) - 1, pt, Math.max(2, w / Math.max(1, n)), hgt);
+    }
+    ctx.restore();
+    // thước đọc
+    let iAt = -1;
+    if (T.hx !== null && T.hx >= pl && T.hx <= pl + w) {
+      ctx.strokeStyle = css('--h-ink'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(Math.round(T.hx) + 0.5, pt); ctx.lineTo(Math.round(T.hx) + 0.5, pt + hgt); ctx.stroke();
+      const tAt = D.t0 + ((T.hx - pl) / w) * (D.t1 - D.t0);
+      let lo = D.i0, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (D.ts[m] < tAt) lo = m + 1; else hi = m; }
+      iAt = lo < n ? lo : -1;
+      if (iAt >= 0) { ctx.fillStyle = css('--h-ink'); ctx.textAlign = T.hx > pl + w - 80 ? 'right' : 'left'; ctx.fillText(fmtHM(D.ts[iAt]), T.hx + (T.hx > pl + w - 80 ? -6 : 6), pt + 14); }
+    }
+    ctx.strokeStyle = css('--h-tframe'); ctx.lineWidth = 1; ctx.strokeRect(pl + 0.5, pt + 0.5, w - 1, hgt - 1);
+    // chú giải
+    T.rows.forEach((r, k) => {
+      r.sw.style.background = cols[k]; r.sw.className = 'h-tsw' + (PENS[k].dash ? ' dash' : '');
+      r.tr.className = (k === T.sel ? 'sel' : '') + (T.hide.has(k) ? ' off' : '');
+      const V = D.cols[k];
+      let i = iAt >= 0 ? iAt : n - 1;
+      if (iAt < 0 && V) { const stop = Math.max(D.i0, n - 200); while (i > stop && !isNum(V[i])) i--; }
+      const v = V && i >= 0 ? V[i] : undefined;
+      const na = remote && !PENS[k].sk;
+      setT(r.v, na ? 'N/A' : this.ctx.dead && iAt < 0 ? '####' : isNum(v) ? num(v, PENS[k].nd) : '–');
+    });
+  }
+  _updTrend(d, force) {
+    const T = this.TR, now = performance.now();
+    if (!force && now - T.last < 700) return;
+    T.last = now;
+    T.rbtn.forEach((b, i) => b.classList.toggle('on', [3600, 8 * 3600, 86400][i] === T.range));
+    setT(T.note, this.where === 'remote'
+      ? 'TRUNG TÂM: chuỗi theo phút máy chủ đã nhận qua MQTT (áp, lưu lượng, mức, công suất). Áp đặt và áp điểm bất lợi không gửi về trung tâm; dải tô nền = dữ liệu phát lại sau đồng bộ.'
+      : 'TẠI TRẠM: lịch sử gateway, mẫu 10 s.');
+    this._drawTrend();
+  }
+
+  // ================= màn 05: báo động =================
+  _buildAlarms(host) {
+    this.AL = { sum: h('span', { class: 'h-alsum' }), all: h('button', { class: 'h-btn warn', onclick: () => this._ackAll() }, 'XÁC NHẬN TẤT CẢ'),
+      body: h('tbody'), hist: h('tbody'), note: h('p', { class: 'h-qlim m' }) };
+    const head = (...c) => h('thead', {}, h('tr', {}, ...c.map((x) => h('th', {}, x))));
+    host.append(h('div', { class: 'h-scroll' },
+      this._pnl('BÁO ĐỘNG ĐANG HOẠT ĐỘNG', h('div', { class: 'h-tbar' }, this.AL.sum, h('span', { class: 'h-sbsp' }), this.AL.all),
+        h('div', { class: 'h-tblw' }, h('table', { class: 'h-tbl h-altbl' }, head('Thời gian', 'Mã', 'Mô tả', 'Mức', 'Trạng thái', ''), this.AL.body)), this.AL.note),
+      this._pnl('LỊCH SỬ BÁO ĐỘNG · 50 SỰ KIỆN GẦN NHẤT', h('div', { class: 'h-tblw' }, h('table', { class: 'h-tbl' }, head('Thời gian', 'Sự kiện', 'Mã', 'Mô tả', 'Mức'), this.AL.hist)))));
+  }
+  _sorted(list) { return [...list].sort((x, y) => (SEV_ORDER[x.sev] - SEV_ORDER[y.sev]) || (Number(x.acked) - Number(y.acked)) || (y.t - x.t)); }
+  _ackable(x) { return !x.acked && !x.sys && x.code !== 'STATION_OFFLINE'; }
+  /** Báo động hiển thị: khi mini PC ngừng, HMI-01 chỉ còn báo động hệ thống "mất kết nối" (báo động của gateway không đọc được). */
+  _alarms(d) {
+    if (!d.dead) return d.alarms;
+    const gd = this.app.st.gw_dead;
+    return [{ code: 'COMM_MPC-01', sev: 'critical', t: gd.t0, acked: false, sys: true, msg: 'HMI-01 mất kết nối với mini PC MPC-01 (edge gateway GW-01) – không đọc được dữ liệu và báo động của trạm' }];
+  }
+  _ack(code) { if (ackAlarm(this.app, this.where, code)) this.update(true); }
+  _ackAll() {
+    const list = this._alarms(this._d).filter((x) => this._ackable(x));
+    for (const x of list) if (!ackAlarm(this.app, this.where, x.code)) break;
+    this.update(true);
+  }
+  _updAlarms(d, force) {
+    const a = this.app, al = this._sorted(this._alarms(d)), un = al.filter((x) => this._ackable(x)).length;
+    setT(this.AL.sum, `Đang hoạt động: ${al.length} · Chưa xác nhận: ${un}`);
+    setD(this.AL.all, !un || d.dead);
+    const hist = this.where === 'local' ? a.st.gw.alarms.history : a.server.alarm_history.filter((x) => x.station === a.st.sid);
+    if (this._changed('al', al.map((x) => x.code + x.acked + x.t).join(',') + this.where + d.dead, force)) {
+      this.AL.body.replaceChildren(...(al.length ? al.map((x) => h('tr', { class: 'sev-' + x.sev + (x.acked ? ' acked' : ' unack') },
+        h('td', { class: 'mono' }, tShort(x.t)), h('td', { class: 'mono b' }, x.code), h('td', { class: 'msg' }, x.msg || '–'), h('td', {}, h('span', { class: 'h-sev ' + x.sev }, SEV_TXT[x.sev] || x.sev)),
+        h('td', {}, x.sys || x.code === 'STATION_OFFLINE' ? 'tự xóa khi có kết nối' : x.acked ? 'ĐÃ XÁC NHẬN' : 'CHƯA XÁC NHẬN'),
+        h('td', {}, this._ackable(x) ? h('button', { class: 'h-btn sm', disabled: d.dead, onclick: () => this._ack(x.code) }, 'XÁC NHẬN') : ''))) : [h('tr', {}, h('td', { colspan: 6, class: 'empty' }, 'Không có báo động đang hoạt động.'))]));
+      setT(this.AL.note, this.where === 'local' ? 'Tại trạm: xác nhận ghi ngay vào gateway. Báo động sự kiện (ví dụ lệnh bị từ chối) tự xóa khi xác nhận.'
+        : 'Trung tâm: xác nhận gửi lệnh ack_alarm qua máy chủ; mất kết nối thì lệnh xếp hàng.');
+    }
+    if (this._changed('alh', hist.length + this.where, force)) {
+      const rows = hist.slice(-50).reverse();
+      this.AL.hist.replaceChildren(...(rows.length ? rows.map((x) => h('tr', { class: x.action === 'raise' ? 'sev-' + x.sev : 'clr' },
+        h('td', { class: 'mono' }, tShort(x.t)), h('td', {}, x.action === 'raise' ? 'XUẤT HIỆN' : 'HẾT'), h('td', { class: 'mono b' }, x.code), h('td', { class: 'msg' }, x.msg || '–'),
+        h('td', {}, h('span', { class: 'h-sev ' + x.sev }, SEV_TXT[x.sev] || x.sev)))) : [h('tr', {}, h('td', { colspan: 5, class: 'empty' }, 'Chưa có sự kiện báo động.'))]));
     }
   }
 
-  _updateSide(d, g, force) {
-    const a = this.app, F = this.F, local = this.where === 'local', t = d.t;
-    const fbx = a.st.gw_dead;
-    F.ctlName.textContent = d.dead ? (fbx.enabled && !fbx.inhibit ? 'PID BIẾN TẦN (dự phòng)' : 'KHÔNG CÓ ĐIỀU KHIỂN') : CTL_NAME[d.ctl];
-    F.ctlName.className = 'hmi-ctlname ' + (d.ctl === 'auto' ? 'auto' : 'man');
-    if (d.dead) F.ctlDetail.textContent = `Mini PC ngừng: ${fbx.note()}${fbx.restarted ? ' (mini PC đã khởi động lại, đang theo dõi trước khi tiếp quản)' : ''}; không thể ra lệnh qua HMI cho tới khi mini PC tiếp quản.`;
-    else if (d.ctl === 'auto') F.ctlDetail.textContent = `Kịch bản v${g.script.version} (${g.ctrl.strategy_used === 'custom' ? 'của học viên' : g.script.strategy}) điều khiển bơm; lớp an toàn luôn ưu tiên.`;
-    else if (d.ctl === 'remote' && local === false && g.manual) F.ctlDetail.textContent = `Quyền điều khiển từ xa còn ${Math.max(0, (g.manual.until - t) / 60).toFixed(0)} phút (mỗi lệnh gia hạn); mất kết nối → trạm tự trở về TỰ ĐỘNG.`;
-    else if (d.ctl === 'remote') F.ctlDetail.textContent = 'Trung tâm đang điều khiển tay; quyền có thời hạn và tự hủy khi mất kết nối.';
-    else F.ctlDetail.textContent = 'Kỹ thuật viên tại trạm giữ quyền; lệnh từ trung tâm bị từ chối cho tới khi trả về TỰ ĐỘNG.';
-    let auth = '';
-    if (!local && d.ctl === 'local') auth = 'Quyền đang ở TẠI CHỖ – mọi lệnh điều khiển từ trung tâm sẽ bị trạm từ chối.';
-    else if (local && d.ctl === 'remote') auth = 'Trung tâm đang điều khiển tay – thao tác trên HMI sẽ giành quyền (tại chỗ được ưu tiên).';
-    else if (!local && d.stale) auth = 'Mất kết nối: lệnh sẽ xếp hàng ở máy chủ và hết hạn sau 1 phút nếu trạm chưa nhận.';
-    F.auth.hidden = !auth; F.auth.textContent = auth;
-    F.btnManual.disabled = d.dead || (d.ctl !== 'auto' && d.ctl === (local ? 'local' : 'remote'));
-    F.btnAuto.disabled = d.dead || d.ctl === 'auto';
-    F.eqSeg.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === this.sel));
-    const manualHere = d.ctl !== 'auto';
-    const isPump = this.sel < 2;
-    F.pumpCtl.hidden = !isPump; F.valveCtl.hidden = isPump;
-    const rows = [];
-    if (isPump) {
-      const p = d.pumps[this.sel];
-      F.eqChip.className = 'chip ' + (p.fault ? 'critical' : p.running ? 'good' : 'off'); F.eqChip.textContent = p.fault ? 'lỗi' : p.running ? 'đang chạy' : 'dừng';
-      rows.push(['Tần số thực', fmt(p.f, 1, 'Hz')], ['Tần số đặt (TAY)', p.f_set !== null && p.f_set !== undefined ? fmt(p.f_set, 1, 'Hz') : '–'],
-        ['Công suất / dòng', p.kw !== undefined ? `${fmt(p.kw, 2, 'kW')} · ${fmt(p.amps, 1, 'A')}` : 'không gửi'],
-        ['Khởi động trong 1 giờ', p.starts_h !== undefined ? `${p.starts_h} / ${a.cfg.safety.max_starts_per_h}` : '–'], ['Giờ chạy', p.run_h !== undefined ? fmt(p.run_h, 1, 'h') : '–']);
-      if (!this._editing && p.f_set !== null && p.f_set !== undefined) F.range.value = p.f_set;
-      F.rangeVal.textContent = fmt(+F.range.value, 1, 'Hz');
-      for (const b of [F.btnStart, F.btnStop, F.btnSpeed, F.range]) b.disabled = !manualHere || d.dead;
+  // ================= màn 06: nhật ký =================
+  _buildLog(host) {
+    this.LG = { cmd: h('tbody'), ev: h('tbody'), note: h('p', { class: 'h-qlim m' }) };
+    const head = (...c) => h('thead', {}, h('tr', {}, ...c.map((x) => h('th', {}, x))));
+    host.append(h('div', { class: 'h-scroll' },
+      this._pnl('NHẬT KÝ LỆNH ĐIỀU KHIỂN', this.LG.note, h('div', { class: 'h-tblw' }, h('table', { class: 'h-tbl' }, head('Thời gian', 'Mã lệnh', 'Loại lệnh', 'Kết quả', 'Ghi chú'), this.LG.cmd))),
+      this._pnl('NHẬT KÝ SỰ KIỆN · 40 DÒNG GẦN NHẤT', h('div', { class: 'h-tblw' }, h('table', { class: 'h-tbl' }, head('Thời gian', 'Mức', 'Nội dung'), this.LG.ev)))));
+  }
+  _updLog(d, force) {
+    const a = this.app, local = this.where === 'local';
+    const cmds = commandLog(a, this.where, 30);
+    if (this._changed('lc', cmds.map((c) => c.id + c.status).join(',') + this.where, force)) {
+      this.LG.cmd.replaceChildren(...(cmds.length ? cmds.map((c) => { const [cls, txt] = CMD_STATUS[c.status] || ['off', c.status]; return h('tr', {},
+        h('td', { class: 'mono' }, tShort(c.t)), h('td', { class: 'mono b' }, c.id), h('td', { class: 'mono' }, c.type || '–'), h('td', {}, h('span', { class: 'h-st ' + cls }, txt.toUpperCase())), h('td', { class: 'msg' }, c.reason || '')); })
+        : [h('tr', {}, h('td', { colspan: 5, class: 'empty' }, 'Chưa có lệnh.'))]));
+      setT(this.LG.note, local ? 'Lệnh từ HMI-01 (mã L…) đi thẳng vào gateway, không hết hạn. Lệnh từ trung tâm (mã C…) cũng được ghi lại khi trạm thực hiện.'
+        : 'Lệnh từ trung tâm (mã C…) đi qua máy chủ: “đã gửi” → trạm xác nhận “đã thực hiện / từ chối / hết hạn”. Mất kết nối: lệnh xếp hàng và hết hạn sau 60 s.');
+    }
+    const logs = local ? a.st.gw.logs : a.server.logs.filter((x) => x.station === a.st.sid);
+    if (this._changed('le', logs.length + this.where, force)) {
+      const rows = logs.slice(-40).reverse(), LV = { info: 'THÔNG TIN', warning: 'CẢNH BÁO', alarm: 'BÁO ĐỘNG', safety: 'AN TOÀN', critical: 'KHẨN' };
+      this.LG.ev.replaceChildren(...(rows.length ? rows.map((x) => h('tr', { class: 'lv-' + x.level }, h('td', { class: 'mono' }, tShort(x.t)),
+        h('td', {}, h('span', { class: 'h-sev ' + ({ safety: 'alarm' }[x.level] || x.level) }, LV[x.level] || x.level)), h('td', { class: 'msg' }, x.text)))
+        : [h('tr', {}, h('td', { colspan: 3, class: 'empty' }, 'Chưa có sự kiện.'))]));
+    }
+  }
+
+  // ================= màn 07: thông số =================
+  _buildParams(host) { this.PRM = h('div', { class: 'h-grid3 h-prm' }); host.append(h('div', { class: 'h-scroll' }, this.PRM)); }
+  _updParams(d, force) {
+    const a = this.app, c = a.cfg, s = c.safety, q = c.quality_limits, sv = c.service, local = this.where === 'local';
+    const P = (local ? a.st.gw.script.params : c.script.params), sc = this._script(), f1 = (v) => num(v, 1), f2 = (v) => num(v, 2);
+    const key = [sc.v, isNum(d.p_set) ? d.p_set.toFixed(2) : '-', this.where, d.dead].join('|');
+    if (!this._changed('prm', key, force)) return;
+    const tbl = (title, rows) => this._pnl(title, h('table', { class: 'h-tbl h-kv' }, h('tbody', {}, ...rows.map(([k, v, u]) => h('tr', {}, h('td', {}, k), h('td', { class: /[a-zà-ỹ]{2}/i.test(v) ? 'num t' : 'num' }, v), h('td', { class: 'u' }, u || ''))))));
+    this.PRM.replaceChildren(
+      tbl('ÁP LỰC', [['Áp đặt hiện tại P_set', d.dead ? '####' : isNum(d.p_set) ? f2(d.p_set) : 'N/A', 'bar'], ['Dải áp đặt của kịch bản', `${f1(P.pressure.p_set_min_bar)} – ${f1(P.pressure.p_set_max_bar)}`, 'bar'],
+        ['Mục tiêu áp điểm bất lợi', f1(P.pressure.p_crit_target_bar), 'bar'], ['Áp điểm bất lợi tối thiểu (dịch vụ)', f1(sv.p_crit_min_bar), 'bar'], ['Áp đầu ra tối đa (dịch vụ)', f1(sv.p_out_max_bar), 'bar'],
+        ['Cắt bơm do áp rất cao PSHH', `${f1(s.p_highhigh_bar)} (trễ ${num(s.p_hh_delay_s, 0)} s)`, 'bar'], ['Cảnh báo áp thấp / rất thấp', `${f1(s.p_low_bar)} / ${f1(s.p_lowlow_bar)}`, 'bar']]),
+      tbl('MỨC BỂ T-01', [['Mức cao (cảnh báo)', f1(s.level_high_m), 'm'], ['Bắt đầu tiết kiệm nước', f1(P.level.conserve_m), 'm'], ['Dừng bơm / chạy lại', `${f1(P.level.stop_m)} / ${f1(P.level.restart_m)}`, 'm'],
+        ['Mức rất thấp (lớp an toàn)', f1(s.level_ll_m), 'm'], ['Phao cạn LSLL-101 (mạch cứng)', f2(s.float_lsll_m), 'm'], ['Diện tích / chiều cao bể', `${num(c.tank.area_m2, 0)} m² · ${f1(c.tank.height_m)}`, 'm']]),
+      tbl('CHẤT LƯỢNG NƯỚC (QCVN 01-1:2018/BYT)', [['Clo dư', `${f1(q.cl_min)} – ${f1(q.cl_max)}`, 'mg/L'], ['Clo dư – ngưỡng cảnh báo', `${f1(s.cl_warn_low)} – ${f1(s.cl_warn_high)}`, 'mg/L'],
+        ['Độ đục tối đa / cảnh báo', `${f1(q.ntu_max)} / ${f1(s.ntu_warn)}`, 'NTU'],
+        ['pH', `${f1(q.ph_min)} – ${f1(q.ph_max)}`, ''], ['pH – ngưỡng cảnh báo', `${f1(s.ph_warn_low)} – ${f1(s.ph_warn_high)}`, ''], ['Đặt lại dừng an toàn sau', num(s.quality_reset_hold_s / 60, 0), 'phút']]),
+      tbl('BƠM VÀ BIẾN TẦN', [['Dải tần số', `${num(c.pump_model.f_min_hz, 0)} – ${num(c.pump_model.f_max_hz, 0)}`, 'Hz'], ['Số lần khởi động tối đa', String(s.max_starts_per_h), 'lần/giờ'],
+        ['Thời gian dừng tối thiểu', num(s.min_off_s, 0), 's'],
+        ['Ghép bơm 2 khi f ≥', f1(P.staging.f_on_hz), 'Hz'], ['Tách bơm 2 khi f ≤', f1(P.staging.f_off_hz), 'Hz'], ['Luân phiên bơm chính sau', num(P.alternation.runtime_h, 0), 'giờ chạy']]),
+      tbl('ĐIỀU KHIỂN TAY', [['Quyền TAY từ xa (tự gia hạn mỗi lệnh)', num(c.gateway.manual_lease_s / 60, 0), 'phút'], ['Hạn của một lệnh từ xa', num(c.gateway.manual_cmd_ttl_s, 0), 's'],
+        ['Ưu tiên quyền', 'tại chỗ > từ xa', ''], ['Mất kết nối khi đang TAY từ xa', 'về TỰ ĐỘNG', ''], ['Lớp an toàn', 'luôn ưu tiên', '']]),
+      tbl('KỊCH BẢN VÀ DỰ PHÒNG', [['Kịch bản đang chạy', d.dead ? '####' : `v${sc.v}`, ''], ['Chiến lược', d.dead ? '####' : sc.s, ''], ['Biên áp khi mất kết nối', '+' + f1(P.offline.margin_bar), 'bar'],
+        ['PID nội biến tần khi mini PC treo', c.hardware.VFD_PID_fallback ? f1(c.fallback.p_set_bar) : 'không lắp', c.hardware.VFD_PID_fallback ? 'bar' : ''], ['Rơ-le watchdog nhả sau', num(c.fallback.watchdog_s, 0), 's'],
+        ['Nguồn thông số', local ? 'gateway GW-01' : 'cấu hình máy chủ', '']]));
+  }
+
+  // ================= faceplate =================
+  _fpOpen(kind, arg) {
+    const id = kind + ':' + arg;
+    let fp = this.fps.find((f) => f.id === id);
+    if (fp) { this._fpFront(fp); return fp; }
+    fp = this['_fp_' + kind](arg);
+    fp.id = id;
+    const x = h('button', { class: 'h-fp-x', 'aria-label': 'Đóng bảng ' + fp.title, title: 'Đóng', onclick: () => this._fpClose(fp) }, '×');
+    fp.bar = h('div', { class: 'h-fp-t' }, h('i', { class: 'h-fp-ic' }), h('b', {}, fp.title), x);
+    fp.cf = h('div', { class: 'h-cf', hidden: true });
+    fp.el = h('section', { class: 'h-fp', role: 'dialog', tabindex: '-1', 'aria-label': fp.title, style: `width:${fp.w}px` }, fp.bar, h('div', { class: 'h-fp-b' }, fp.body, fp.cf));
+    fp.el.addEventListener('pointerdown', () => this._fpFront(fp));
+    this.root.append(fp.el);
+    this.fps.push(fp);
+    while (this.fps.length > (this.narrow ? 1 : 2)) this._fpClose(this.fps[0]);
+    this._fpPlace(fp); this._drag(fp); this._fpFront(fp);
+    fp.update(this._d || stationData(this.app, this.where), true);
+    this._fpClamp(fp);
+    fp.el.focus({ preventScroll: true });
+    if (this.scr === 'ov') this._updOverview(this._d);
+    return fp;
+  }
+  _fpClose(fp) {
+    const had = fp.el.contains(document.activeElement);
+    this._cancel(fp); fp.el.remove(); this.fps = this.fps.filter((f) => f !== fp);
+    if (had && this.fps.length) this.fps[this.fps.length - 1].el.focus({ preventScroll: true });
+    if (this.visible && this.scr === 'ov' && this._d) this._updOverview(this._d);
+  }
+  _fpFront(fp) { fp.el.style.zIndex = String(++this._z); }
+  // bảng đầu tiên đặt sát mép trái nếu thiết bị vừa nhấp nằm ngoài vùng đó (không che thiết bị), ngược lại sát mép phải;
+  // bảng thứ hai đặt ở mép đối diện, khung hẹp thì xếp chồng lệch
+  _fpPlace(fp) {
+    const R = this.root.getBoundingClientRect(), A = this.area.getBoundingClientRect(), w = Math.min(fp.w, R.width - 16);
+    const others = this.fps.filter((f) => f !== fp), ax = (this._ax ?? R.right) - R.left;
+    this._ax = null;
+    let left = ax > w + 24 ? 12 : R.width - w - 12, top = A.top - R.top + 8;
+    if (others.length) {
+      const o = others[0].el, ol = o.offsetLeft, onLeft = ol + o.offsetWidth / 2 < R.width / 2;
+      left = onLeft ? R.width - w - 12 : 12;
+      if (left < ol + o.offsetWidth + 6 && left + w > ol - 6) { left = ol + 28; top = o.offsetTop + 28; } else top = o.offsetTop;
+    }
+    fp.el.style.left = clamp(left, 8, Math.max(8, R.width - w - 8)) + 'px'; fp.el.style.top = Math.max(0, top) + 'px';
+  }
+  _fpClamp(fp) {
+    if (this.narrow) return;
+    const W = this.root.clientWidth, H = this.root.clientHeight, el = fp.el;
+    el.style.maxHeight = Math.max(200, H - 16) + 'px';
+    el.style.left = clamp(el.offsetLeft, 4, Math.max(4, W - el.offsetWidth - 4)) + 'px';
+    el.style.top = clamp(el.offsetTop, 4, Math.max(4, H - Math.min(el.offsetHeight, H - 8) - 4)) + 'px';
+  }
+  _drag(fp) {
+    let sx = 0, sy = 0, ox = 0, oy = 0, on = false;
+    fp.bar.addEventListener('pointerdown', (e) => {
+      if (this.narrow || e.target.closest('button')) return;
+      on = true; sx = e.clientX; sy = e.clientY; ox = fp.el.offsetLeft; oy = fp.el.offsetTop; fp.bar.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    fp.bar.addEventListener('pointermove', (e) => {
+      if (!on) return;
+      const W = this.root.clientWidth, H = this.root.clientHeight;
+      fp.el.style.left = clamp(ox + e.clientX - sx, 0, W - fp.el.offsetWidth) + 'px'; fp.el.style.top = clamp(oy + e.clientY - sy, 0, H - 36) + 'px';
+    });
+    const end = (e) => { if (on) { on = false; try { fp.bar.releasePointerCapture(e.pointerId); } catch (err) { /* bỏ qua */ } } };
+    fp.bar.addEventListener('pointerup', end); fp.bar.addEventListener('pointercancel', end);
+  }
+  /** Xác nhận hai bước như HMI thật: hiện câu hỏi, chỉ thực hiện khi bấm THỰC HIỆN. */
+  _ask(fp, text, fn) {
+    this._cancel(fp);
+    const ok = h('button', { class: 'h-btn go', onclick: () => { this._cancel(fp); fn(); fp.el?.focus({ preventScroll: true }); } }, 'THỰC HIỆN');
+    fp.cf.replaceChildren(h('p', {}, h('b', { class: 'h-cf-ic' }, '?'), text), h('div', { class: 'h-brow' }, ok, h('button', { class: 'h-btn', onclick: () => this._cancel(fp) }, 'HỦY')));
+    fp.cf.hidden = false; fp.cfT = setTimeout(() => this._cancel(fp), 15000);
+    ok.focus({ preventScroll: true });
+    fp.cf.scrollIntoView?.({ block: 'nearest' });
+  }
+  _cancel(fp) { clearTimeout(fp.cfT); if (fp.cf) { fp.cf.hidden = true; fp.cf.replaceChildren(); } }
+  _askScreen(text, fn) { this._ask(this.QS, text, fn); }
+  _send(fp, type, args) { fp.last = sendCommand(this.app, this.where, type, args); }
+  _sendScr(type, args) { this.QS.last = sendCommand(this.app, this.where, type, args); }
+  /** Dòng kết quả lệnh cuối (lọc theo loại lệnh). */
+  _resLine(el, types) {
+    const c = commandLog(this.app, this.where, 20).find((x) => !types || types.includes(x.type));
+    if (!c) { setT(el, 'Lệnh cuối: chưa có'); setC(el, 'h-res'); return; }
+    const [cls, txt] = CMD_STATUS[c.status] || ['off', c.status];
+    setT(el, `Lệnh cuối ${tShort(c.t)} · ${c.id} ${c.type}: ${txt}${c.reason ? ' – ' + c.reason : ''}`); setC(el, 'h-res ' + cls);
+  }
+  /** Lý do không ra lệnh được / cảnh báo quyền – chung cho các faceplate. */
+  _authNote(d) {
+    const local = this.where === 'local';
+    if (d.dead) return ['bad', 'HMI-01 mất kết nối với mini PC MPC-01 – không gửi được lệnh. ' + this.app.st.gw_dead.note() + '.'];
+    if (d.ctl === 'auto') return ['info', 'Trạm đang TỰ ĐỘNG theo kịch bản – nhấn TAY để điều khiển bơm và van bằng tay.'];
+    if (!local && d.ctl === 'local') return ['warn', 'Quyền đang ở TẠI CHỖ – mọi lệnh từ trung tâm sẽ bị trạm từ chối (tại chỗ ưu tiên).'];
+    if (local && d.ctl === 'remote') return ['warn', 'Trung tâm đang điều khiển tay – thao tác tại HMI-01 sẽ giành quyền (tại chỗ ưu tiên).'];
+    if (!local && d.stale) return ['warn', 'Mất kết nối: lệnh xếp hàng ở máy chủ và hết hạn sau 60 s nếu trạm chưa nhận.'];
+    if (!local) return ['info', 'Điều khiển TAY từ xa: mỗi lệnh có hạn 60 s, quyền tự hủy khi mất kết nối. Lớp an toàn vẫn ưu tiên.'];
+    return ['info', 'Điều khiển TAY tại chỗ – lệnh vẫn qua lớp an toàn: liên động, giới hạn áp cao, số lần khởi động.'];
+  }
+  _modeBtns(fp) {
+    const bA = h('button', { class: 'h-btn', onclick: () => this._ask(fp, 'Xác nhận chuyển trạm về TỰ ĐỘNG theo kịch bản?', () => this._send(fp, 'set_mode', { mode: 'auto' })) }, 'TỰ ĐỘNG');
+    const bM = h('button', { class: 'h-btn', onclick: () => this._ask(fp, `Xác nhận chuyển trạm sang TAY (${this.where === 'local' ? 'tại chỗ' : 'từ xa, quyền có hạn'})?`, () => this._send(fp, 'set_mode', { mode: 'manual' })) }, 'TAY');
+    return { bA, bM, el: h('div', { class: 'h-brow' }, bA, bM) };
+  }
+  _syncModeBtns(M, d) {
+    const man = d.ctl !== 'auto';
+    setD(M.bA, d.dead || !man); setD(M.bM, d.dead || (man && d.ctl === this.where));
+    setC(M.bA, 'h-btn' + (!d.dead && !man ? ' sel' : '')); setC(M.bM, 'h-btn' + (!d.dead && man ? ' sel man' : ''));
+  }
+  _fp_pump(i) {
+    const tag = PUMP_TAG[i], fp = { title: `${tag} · BƠM TĂNG ÁP SỐ ${i + 1}`, w: 384 };
+    const Ls = { run: this._lamp('CHẠY'), stop: this._lamp('DỪNG'), flt: this._lamp('LỖI'), mode: this._lamp('TỰ ĐỘNG'), src: this._lamp('TẠI CHỖ/TỪ XA') };
+    const R = { f: this._hd('Hz', true), fs: this._hd('Hz', true), a: this._hd('A'), kw: this._hd('kW'), rh: this._hd('h'), sh: this._hd('') };
+    const M = this._modeBtns(fp);
+    const fval = () => clamp(Number(String(inp.value).replace(',', '.')) || 40, 25, 50);
+    const bRun = h('button', { class: 'h-btn go', onclick: () => this._ask(fp, `Xác nhận CHẠY ${tag} ở ${num(fval(), 1)} Hz?`, () => this._send(fp, 'pump_start', { pump: i, f_hz: fval() })) }, '▶ CHẠY');
+    const bStop = h('button', { class: 'h-btn stop', onclick: () => this._ask(fp, `Xác nhận DỪNG ${tag}?`, () => this._send(fp, 'pump_stop', { pump: i })) }, '■ DỪNG');
+    const inp = h('input', { type: 'number', min: 25, max: 50, step: 0.5, value: 40, class: 'h-inp', 'aria-label': `Tần số đặt ${tag} (Hz)`,
+      oninput: () => { fp.edit = true; rng.value = fval(); }, onkeydown: (e) => { if (e.key === 'Enter') bW.click(); } });
+    const rng = h('input', { type: 'range', min: 25, max: 50, step: 0.5, value: 40, class: 'h-rng', 'aria-label': `Thanh trượt tần số ${tag}`, oninput: () => { fp.edit = true; inp.value = rng.value; } });
+    const bW = h('button', { class: 'h-btn', onclick: () => { fp.edit = false; this._send(fp, 'pump_speed', { pump: i, f_hz: fval() }); } }, 'GHI');
+    const why = h('p', { class: 'h-why' }), perm = h('ul', { class: 'h-perm' }), res = h('p', { class: 'h-res' });
+    fp.body = h('div', {}, h('div', { class: 'h-lamprow' }, ...Object.values(Ls).map((L) => L.el)),
+      h('div', { class: 'h-rogrid c3' }, this._ro('Tần số thực', R.f), this._ro('Tần số đặt', R.fs), this._ro('Dòng điện', R.a), this._ro('Công suất', R.kw), this._ro('Giờ chạy', R.rh), this._ro('Khởi động / 1 giờ', R.sh)),
+      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Chế độ trạm'), M.el),
+      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Lệnh bơm'), h('div', { class: 'h-brow' }, bRun, bStop)),
+      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Tần số đặt (25–50 Hz)'), h('div', { class: 'h-srow' }, inp, h('span', { class: 'h-hu' }, 'Hz'), rng, bW)),
+      why, h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Điều kiện cho phép chạy & liên động'), perm), res);
+    fp.update = (d, force) => {
+      const p = d.pumps[i], man = d.ctl !== 'auto', max = this.app.cfg.safety.max_starts_per_h, local = this.where === 'local';
+      this._pumpLamps(Ls, d, i);
+      const fs = this._fset(d, i);
+      this._hv(R.f, p.f, 1); this._hv(R.fs, fs, 1); this._hv(R.a, p.amps, 1); this._hv(R.kw, p.kw, 2); this._hv(R.rh, p.run_h, 1);
+      this._hv(R.sh, isNum(p.starts_h) ? `${p.starts_h} / ${max}` : p.starts_h, 0, { st: p.starts_h >= max ? 'alarm' : p.starts_h >= max - 1 ? 'warn' : 'ok' });
+      this._syncModeBtns(M, d);
+      const off = d.dead || !man;
+      setD(bRun, off || (p.fault && !d.dead)); setD(bStop, off); setD(bW, off); setD(inp, off); setD(rng, off);
+      setC(bRun, 'h-btn go' + (!d.dead && p.running ? ' act' : '')); setC(bStop, 'h-btn stop' + (!d.dead && !p.running ? ' act' : ''));
+      if (!fp.edit && document.activeElement !== inp && document.activeElement !== rng) { const v = isNum(p.f_set) ? p.f_set : isNum(fs) && fs >= 25 ? fs : 40; const s = String(Math.round(v * 2) / 2); if (inp.value !== s) { inp.value = s; rng.value = s; } }
+      let [cls, txt] = this._authNote(d);
+      if (!d.dead && man && p.fault) [cls, txt] = ['bad', `Biến tần ${tag} báo lỗi – không chạy được cho tới khi sửa xong.`];
+      setT(why, txt); setC(why, 'h-why ' + cls);
+      const list = local && !d.dead ? permissives(this.app, i) : [];
+      if (this._changed('perm' + i, list.map((x) => +x[0]).join('') + this.where + d.dead, force)) {
+        perm.replaceChildren(...(list.length ? list.map(([ok, t]) => h('li', { class: ok ? 'ok' : 'no' }, h('i', {}, ok ? '✓' : '✗'), t))
+          : [h('li', { class: 'na' }, d.dead ? 'Mini PC ngừng – chỉ còn liên động cứng: phao LSLL-101, van an toàn PSV-01, bảo vệ của biến tần.'
+            : 'Trung tâm chỉ thấy báo động gửi lên – chi tiết liên động chỉ xem được tại HMI-01 ở trạm.')]));
+      }
+      this._resLine(res, ['pump_start', 'pump_stop', 'pump_speed', 'set_mode']);
+    };
+    return fp;
+  }
+  _fp_valve() {
+    const fp = { title: 'MV-02 · VAN ĐIỆN ĐẦU RA', w: 340 };
+    const Ls = { open: this._lamp('MỞ'), closed: this._lamp('ĐÓNG'), mov: this._lamp('ĐANG CHẠY') };
+    const R = { pos: this._hd('%', true), cmd: this._hd(''), trv: this._hd('s') };
+    const M = this._modeBtns(fp);
+    const bO = h('button', { class: 'h-btn go', onclick: () => this._ask(fp, 'Xác nhận MỞ van MV-02?', () => this._send(fp, 'valve', { open: true })) }, 'MỞ VAN');
+    const bC = h('button', { class: 'h-btn stop', onclick: () => this._ask(fp, 'Xác nhận ĐÓNG van MV-02? Bơm sẽ bị cấm chạy khi van không mở hết.', () => this._send(fp, 'valve', { open: false })) }, 'ĐÓNG VAN');
+    const why = h('p', { class: 'h-why' }), res = h('p', { class: 'h-res' }), absent = h('p', { class: 'h-why bad', hidden: true }, 'Trạm không lắp van điện MV-02 (cấu hình thiết bị).');
+    fp.body = h('div', {}, absent, h('div', { class: 'h-lamprow' }, ...Object.values(Ls).map((L) => L.el)),
+      h('div', { class: 'h-rogrid c3' }, this._ro('Độ mở', R.pos), this._ro('Lệnh tay', R.cmd), this._ro('Hành trình', R.trv)),
+      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Chế độ trạm'), M.el), h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Lệnh van'), h('div', { class: 'h-brow' }, bO, bC)), why,
+      h('p', { class: 'h-why info' }, 'Liên động: van MV-02 không mở hết → cấm chạy bơm (mở van trước, chạy bơm sau). Dừng an toàn do chất lượng nước tự đóng van.'),
+      h('div', { class: 'h-fsec' }, h('button', { class: 'h-btn ghost wide', onclick: () => this.app.openDrawer('MV-02') }, 'THÔNG SỐ THIẾT BỊ ▸')), res);
+    fp.update = (d) => {
+      const a = this.app, k = !d.dead, v = d.valve, no = a.cfg.hardware['MV-02'] === false, man = d.ctl !== 'auto';
+      setH(absent, !no);
+      this._setLamp(Ls.open, k && isNum(v) && v > 0.99 ? 'g' : ''); this._setLamp(Ls.closed, k && isNum(v) && v < 0.01 ? 'r' : ''); this._setLamp(Ls.mov, k && isNum(v) && v >= 0.01 && v <= 0.99 ? 'a blink' : '');
+      this._hv(R.pos, isNum(v) ? v * 100 : v, 0, { absent: no });
+      const g = a.st.gw;
+      this._hv(R.cmd, this.where === 'local' && k ? (g.manual ? (g.manual.valve ? 'MỞ' : 'ĐÓNG') : 'TỰ ĐỘNG') : undefined, 0);
+      this._hv(R.trv, a.cfg.outlet_valve.travel_s, 0, { live: true });
+      this._syncModeBtns(M, d);
+      setD(bO, d.dead || !man || no); setD(bC, d.dead || !man || no);
+      const [cls, txt] = this._authNote(d); setT(why, txt); setC(why, 'h-why ' + cls);
+      this._resLine(res, ['valve', 'set_mode']);
+    };
+    return fp;
+  }
+  _fp_inst(tag) {
+    const I = INST[tag], comp = this.app.components.find((c) => c.tag === tag), sp = this.app.cfg.sensors[tag];
+    const fp = { title: `${tag} · ${(I.lbl || comp?.name || '').toUpperCase()}`, w: 360 };
+    const V = this._hd(I.u, true), Q = this._lamp('TỐT'), lim = h('td'), src = h('td'), sl = h('span', { class: 'h-spl' });
+    const svg = S('svg', { viewBox: '0 0 300 96', class: 'h-spark', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+    fp.body = h('div', {}, h('div', { class: 'h-qa-top' }, V.el, Q.el),
+      h('table', { class: 'h-tbl h-kv' }, h('tbody', {}, h('tr', {}, h('td', {}, 'Thiết bị'), h('td', {}, comp?.name || tag)),
+        h('tr', {}, h('td', {}, 'Dải đo'), h('td', {}, sp ? `${num(sp.lo, sp.hi <= 14 ? 1 : 0)} – ${num(sp.hi, sp.hi <= 14 ? 1 : 0)} ${I.u}` : comp?.range || '–')),
+        h('tr', {}, h('td', {}, 'Ngưỡng'), lim), h('tr', {}, h('td', {}, 'Nguồn dữ liệu'), src))),
+      h('small', { class: 'h-cap' }, 'XU HƯỚNG 2 GIỜ'), h('div', { class: 'h-sparkw' }, svg, h('div', { class: 'h-spk-ax' }), sl),
+      h('div', { class: 'h-fsec' }, h('button', { class: 'h-btn ghost wide', onclick: () => this.app.openDrawer(tag) }, 'THÔNG SỐ THIẾT BỊ ▸')));
+    fp.update = (d, force) => {
+      const a = this.app, absent = this._absent(tag), v = d[I.k], L = this._lim(tag), local = this.where === 'local';
+      const st = this._hv(V, v, I.nd, { absent, lim: L.st });
+      const faults = local && !d.dead ? [...a.st.gw.alarms.active.keys()].filter((c) => c.endsWith(tag) && /SENSOR|STUCK|RANGE/.test(c)) : [];
+      const q = d.dead ? ['r', 'MẤT KẾT NỐI'] : absent ? ['', 'KHÔNG LẮP'] : st === 'na' ? ['', 'KHÔNG GỬI VỀ'] : faults.length || st === 'bad' ? ['r blink', 'LỖI TÍN HIỆU'] : this.ctx.stale ? ['a', 'DỮ LIỆU CŨ'] : ['g', 'TỐT'];
+      this._setLamp(Q, q[0], 'CHẤT LƯỢNG: ' + q[1]);
+      setT(lim, L.txt);
+      setT(src, local ? (tag === 'PL-301' ? 'logger NB-IoT tại điểm bất lợi (mô phỏng)' : 'gateway GW-01 – đọc trực tiếp') : 'máy chủ – bản tin MQTT 10 s');
+      const now = performance.now();
+      if (force || now - (fp.spT || 0) > 1500) {
+        fp.spT = now;
+        const lo = L.scale ? L.scale[0] : 0, hi = L.scale ? L.scale[1] : sp ? Math.min(sp.hi, { bar: 6, 'm³/h': 50, m: 5 }[I.u] ?? sp.hi) : 6;
+        const has = !absent && !d.dead && this._spark(svg, I.hk, d.t - 7200, Math.max(d.t, 600), lo, hi, L.lines);
+        if (!has) { svg.replaceChildren(S('rect', { x: 0, y: 0, width: 300, height: 96, class: 'h-spk-bg' })); svg.parentNode.querySelector('.h-spk-ax').replaceChildren(); }
+        setT(sl, absent ? 'Không lắp' : d.dead ? '####' : has ? `${num(lo, 1)} – ${num(hi, 1)} ${I.u}` : 'Trung tâm không nhận xu hướng tín hiệu này');
+      }
+    };
+    return fp;
+  }
+  _fp_station() {
+    const fp = { title: 'ST-01 · CHẾ ĐỘ TRẠM', w: 380 };
+    const Ls = { auto: this._lamp('TỰ ĐỘNG'), loc: this._lamp('TAY · TẠI CHỖ'), rem: this._lamp('TAY · TỪ XA'), ss: this._lamp('DỪNG AN TOÀN') };
+    const R = { mode: this._hd(''), scr: this._hd(''), lease: this._hd(''), pset: this._hd('bar') };
+    const M = this._modeBtns(fp);
+    const bReset = h('button', { class: 'h-btn warn', onclick: () => this._ask(fp, 'Xác nhận ĐẶT LẠI DỪNG AN TOÀN?', () => this._send(fp, 'reset_safe_stop', {})) }, 'ĐẶT LẠI DỪNG AN TOÀN');
+    const bRot = h('button', { class: 'h-btn', onclick: () => this._ask(fp, 'Xác nhận LUÂN PHIÊN BƠM chính (đổi P-01 ↔ P-02)?', () => this._send(fp, 'rotate_pumps', {})) }, 'LUÂN PHIÊN BƠM');
+    const why = h('p', { class: 'h-why' }), res = h('p', { class: 'h-res' });
+    fp.body = h('div', {}, h('div', { class: 'h-lamprow' }, ...Object.values(Ls).map((L) => L.el)),
+      h('div', { class: 'h-rogrid' }, this._ro('Chế độ gateway', R.mode), this._ro('Kịch bản', R.scr), this._ro('Quyền TAY từ xa còn', R.lease), this._ro('Áp đặt P_set', R.pset)),
+      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Chế độ điều khiển'), M.el), h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Lệnh trạm'), h('div', { class: 'h-brow' }, bReset, bRot)), why,
+      h('ul', { class: 'h-rules' }, h('li', {}, 'Tại chỗ (HMI-01) ưu tiên hơn từ xa: khi trạm đang TAY tại chỗ, lệnh từ trung tâm bị từ chối.'),
+        h('li', {}, `Lệnh từ xa hết hạn sau ${num(this.app.cfg.gateway.manual_cmd_ttl_s, 0)} s; quyền TAY từ xa ${num(this.app.cfg.gateway.manual_lease_s / 60, 0)} phút, mỗi lệnh gia hạn, tự về TỰ ĐỘNG khi mất kết nối.`),
+        h('li', {}, 'Ở chế độ TAY bơm chỉ chạy khi có lệnh. Lớp an toàn (van MV-02 mở hết, mức bể, dừng an toàn chất lượng, cắt áp rất cao, 6 lần khởi động/giờ, giới hạn tần số gần 4,0 bar) luôn ưu tiên.'),
+        h('li', {}, 'Mini PC ngừng: HMI-01 mất kết nối, không ra lệnh tại chỗ được; biến tần tự chạy PID nội (nếu có lắp).')), res);
+    fp.update = (d) => {
+      const a = this.app, k = !d.dead, local = this.where === 'local';
+      this._setLamp(Ls.auto, k && d.ctl === 'auto' ? 'g' : ''); this._setLamp(Ls.loc, k && d.ctl === 'local' ? 'a' : ''); this._setLamp(Ls.rem, k && d.ctl === 'remote' ? 'c' : '');
+      const ss = local ? k && (a.st.gw.safety.safe_stop || a.st.gw.safety.lockout) : d.alarms.some((x) => x.code === 'SAFE_STOP');
+      this._setLamp(Ls.ss, ss ? 'r blink' : '');
+      this._hv(R.mode, MODE_NAME[d.mode] || d.mode, 0, { live: true, st: { a: 'ok', b: 'warn', c: 'ok', d: 'alarm', x: 'alarm' }[d.mode] });
+      const sc = this._script(); this._hv(R.scr, `v${sc.v} · ${sc.s}`, 0);
+      const ls = local && k && a.st.gw.manual && a.st.gw.manual.until !== null ? Math.max(0, a.st.gw.manual.until - d.t) : d.lease_s;
+      this._hv(R.lease, isNum(ls) ? `${Math.floor(ls / 60)}:${String(Math.floor(ls % 60)).padStart(2, '0')}` : d.ctl === 'remote' ? undefined : '–', 0, { st: isNum(ls) && ls < 300 ? 'warn' : 'ok' });
+      this._hv(R.pset, d.p_set, 2);
+      this._syncModeBtns(M, d);
+      setD(bReset, d.dead); setD(bRot, d.dead || d.ctl !== 'auto');
+      const [cls, txt] = this._authNote(d); setT(why, d.ctl === 'auto' && !d.dead ? 'Trạm TỰ ĐỘNG: kịch bản điều khiển bơm; lớp an toàn luôn ưu tiên. Luân phiên bơm chỉ dùng ở TỰ ĐỘNG.' : txt); setC(why, 'h-why ' + cls);
+      this._resLine(res, ['set_mode', 'reset_safe_stop', 'rotate_pumps']);
+    };
+    return fp;
+  }
+
+  // ================= cập nhật =================
+  update(force = false) {
+    if (!this.visible || !this.app.st) return;
+    const d = stationData(this.app, this.where);
+    this._d = d;
+    this.ctx = { d, remote: this.where === 'remote', dead: Boolean(d.dead), stale: Boolean(d.stale) && !d.dead };
+    const R = this.root;
+    R.classList.toggle('h-remote', this.ctx.remote); R.classList.toggle('h-dead-on', this.ctx.dead); R.classList.toggle('h-stale', this.ctx.stale);
+    this._updHeader(d); this._updAlarmBar(d); this._updState(d);
+    ({ ov: this._updOverview, pump: this._updPumps, qual: this._updQuality, trend: this._updTrend, alarm: this._updAlarms, log: this._updLog, par: this._updParams })[this.scr].call(this, d, force);
+    this._updStatus(d);
+    for (const fp of this.fps) fp.update(d, force);
+  }
+  _updHeader(d) {
+    const a = this.app, H = this.H, local = this.where === 'local', c = this.ctx;
+    const clk = fmtClock(d.t, a.cfg.sim.start_dow), m = clk.match(/^(.*) (\d\d:\d\d:\d\d)$/);
+    setT(H.date, m ? m[1] : ''); setT(H.time, m ? m[2] : clk);
+    setT(H.uPos, POS[this.where].name); setT(H.uRole, POS[this.where].role);
+    const man = !c.dead && d.ctl !== 'auto';
+    setH(H.man, !man); setT(H.man, d.ctl === 'local' ? 'TAY · TẠI CHỖ' : 'TAY · TỪ XA');
+    const led = (k, st, tip) => { setC(H.leds[k].i, 'h-ledi ' + st); setA(H.leds[k].s, 'title', tip); };
+    const S0 = a.server.stations[a.st.sid];
+    if (local) {
+      const g = a.st.gw;
+      led('gw', c.dead ? 'r' : g.observe_until !== null ? 'y' : 'g', c.dead ? 'GW-01 (mini PC MPC-01): NGỪNG – mất kết nối' : 'GW-01 (mini PC MPC-01): đang chạy');
+      led('lte', c.dead ? 'x' : a.st.link.up ? 'g' : 'r', c.dead ? '4G (RT-01): không biết – mini PC ngừng' : a.st.link.up ? '4G (RT-01): có sóng' : '4G (RT-01): MẤT KẾT NỐI');
+      led('srv', c.dead ? 'x' : { online: 'g', resync: 'y', offline: 'r' }[d.comms] || 'x', c.dead ? 'Máy chủ: không biết' : 'Máy chủ: ' + ({ online: 'trực tuyến', resync: 'đang đồng bộ', offline: 'mất kết nối' }[d.comms] || d.comms));
     } else {
-      F.eqChip.className = 'chip ' + (d.valve === undefined ? 'off' : d.valve > 0.99 ? 'good' : 'warning');
-      F.eqChip.textContent = d.valve === undefined ? 'không rõ' : d.valve > 0.99 ? 'mở' : d.valve < 0.01 ? 'đóng' : 'đang chạy';
-      rows.push(['Độ mở', d.valve === undefined ? 'không gửi' : fmt(d.valve * 100, 0, '%')], ['Lệnh TAY', g.manual ? (g.manual.valve ? 'mở' : 'đóng') : 'theo lớp an toàn'],
-        ['Thời gian hành trình', '20 s']);
-      for (const b of [F.btnOpen, F.btnClose]) b.disabled = !manualHere || d.dead;
+      led('gw', S0.online ? 'g' : 'x', S0.online ? 'GW-01: gửi bản tin đều' : 'GW-01: không biết – mất bản tin');
+      led('lte', S0.online ? 'g' : 'r', S0.online ? '4G trạm ST-01: trực tuyến' : '4G trạm ST-01: MẤT KẾT NỐI (LWT)');
+      led('srv', 'g', 'Máy chủ SRV-01: đang chạy');
     }
-    F.eqRows.replaceChildren(...rows.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num wrap' }, v))));
-    F.lockNote.textContent = d.dead ? '' : manualHere ? 'Lệnh tay vẫn đi qua lớp an toàn: liên động, giới hạn áp cao, số lần khởi động.' : 'Ở chế độ TỰ ĐỘNG – chuyển sang TAY để chạy/dừng bơm, đặt tần số, đóng/mở van.';
-    // điều kiện cho phép
-    const perm = [];
-    if (local && !d.dead) perm.push(...permissives(a, Math.min(this.sel, 1)));
-    const pk = perm.map((x) => +x[0]).join('') + this.where + d.dead;
-    if (force || pk !== this._permKey) {
-      this._permKey = pk;
-      F.perm.replaceChildren(...(perm.length ? perm.map(([ok, txt]) => h('li', { class: ok ? 'ok' : 'no' }, h('span', { 'aria-hidden': 'true' }, ok ? '✓' : '✗'), ' ', txt))
-        : [h('li', { class: 'na' }, d.dead ? 'Mini PC ngừng – chỉ còn liên động cứng (phao LSLL, van an toàn PSV-01, bảo vệ biến tần).' : 'Trung tâm chỉ thấy báo động gửi lên; chi tiết liên động xem tại HMI trạm.')]));
+    const al = this._alarms(d), un = al.filter((x) => this._ackable(x) || x.sys).length;
+    setT(H.almN, String(al.length));
+    setC(H.alm, 'h-almcnt' + (un ? ' un' : al.length ? ' ack' : ''));
+    setA(H.alm, 'title', `${al.length} báo động đang hoạt động, ${un} chưa xác nhận – mở danh sách báo động`);
+    setH(this.navBadge, !al.length); setT(this.navBadge, String(al.length)); setC(this.navBadge, un ? 'un' : '');
+    if (!H.menu.hidden) this._syncMenu();
+  }
+  _updAlarmBar(d) {
+    const A = this.AB, al = this._sorted(this._alarms(d)), top = al[0] || null;
+    this._top = top;
+    if (!top) {
+      setC(A.el, 'h-ab none'); setT(A.sev, 'OK'); setT(A.time, ''); setT(A.code, ''); setT(A.msg, 'Không có báo động'); setT(A.more, ''); setH(A.ack, true);
+      return;
     }
-    F.btnReset.disabled = d.dead; F.btnRotate.disabled = d.dead || d.ctl !== 'auto';
-    // nhật ký lệnh
-    const items = commandLog(a, this.where, local ? 6 : 7).map((c) => [c.t, c.id, c.type, c.status, c.reason]);
-    const ck = items.map((x) => x[1] + x[3]).join(',');
-    if (force || ck !== this._cmdKey) {
-      this._cmdKey = ck;
-      const cls = { ok: 'good', queued: 'info', rejected: 'critical', expired: 'warning', expired_server: 'warning', duplicate: 'off' };
-      const name = { ok: 'đã thực hiện', queued: 'đã gửi', rejected: 'từ chối', expired: 'hết hạn', expired_server: 'hết hạn ở máy chủ', duplicate: 'trùng' };
-      F.cmdLog.replaceChildren(...(items.length ? items.map(([tt, id, type, st, why]) => h('div', { class: 'hmi-cmd' },
-        h('span', { class: 'mono' }, tShort(tt)), h('span', { class: 'chip ' + (cls[st] || 'off') }, name[st] || st),
-        h('div', {}, h('b', {}, `${id} ${type}`), why ? h('div', { class: 'note' }, why) : ''))) : [h('p', { class: 'note' }, 'Chưa có lệnh.')]));
-    }
+    const un = this._ackable(top), hot = top.sev === 'critical' || top.sev === 'alarm';
+    setC(A.el, 'h-ab ' + (hot ? 'hot' : top.sev === 'warning' ? 'warn' : 'info') + (un || top.sys ? ' un' : ' acked'));
+    setT(A.sev, SEV_TXT[top.sev] || SEV_LABEL[top.sev] || top.sev); setT(A.time, tShort(top.t)); setT(A.code, top.code); setT(A.msg, top.msg || '');
+    setT(A.more, al.length > 1 ? `+${al.length - 1}` : ''); setH(A.ack, !un); setD(A.ack, d.dead);
+  }
+  _updState(d) {
+    const c = this.ctx, a = this.app, gd = a.st.gw_dead;
+    const showDead = c.dead && this._deadHide !== gd;
+    setH(this.deadBox, !showDead);
+    if (c.dead) {
+      const min = Math.max(0, (d.t - gd.t0) / 60);
+      const msg = `Mini PC (edge gateway GW-01) ngừng từ ${tShort(gd.t0)} (${num(min, 0)} phút). HMI-01 không còn dữ liệu – mọi giá trị hiển thị ####, lệnh từ màn hình không thực hiện được.`;
+      const fb = `Dự phòng tại trạm: ${gd.note()}.` + (gd.restarted ? ' Mini PC đã khởi động lại – đang theo dõi trước khi tiếp quản.' : '');
+      if (showDead && this.deadMsg._k !== msg + fb) {
+        this.deadMsg._k = msg + fb;
+        this.deadMsg.replaceChildren(h('p', {}, msg), h('p', { class: 'fb' }, fb), h('p', {}, 'Liên động cứng vẫn hoạt động: phao LSLL-101, van an toàn PSV-01, bảo vệ của biến tần.'));
+      }
+      this._stateBar('bad', `MẤT KẾT NỐI MPC-01 – DỮ LIỆU KHÔNG HỢP LỆ (####) · ${gd.note()}`, showDead ? null : ['CHI TIẾT', () => { this._deadHide = null; this.update(true); }]);
+    } else if (c.stale) {
+      this._stateBar('warn', `MẤT KẾT NỐI – DỮ LIỆU CŨ (bản tin cuối ${isNum(d.age) ? num(d.age / 60, 0) + ' phút' : '–'} trước) · lệnh từ trung tâm xếp hàng ở máy chủ, hết hạn sau 60 s`);
+    } else this._stateBar(null);
+  }
+  _stateBar(cls, text, btn = null) {
+    const el = this.stateBar;
+    if (!cls) { setH(el, true); return; }
+    setH(el, false); setC(el, 'h-statebar ' + cls);
+    const k = text + (btn ? btn[0] : '');
+    if (el._k !== k) { el._k = k; el.replaceChildren(h('span', { class: 'h-sbar-ic' }, '!'), h('span', { class: 'h-sbar-t' }, text), btn ? h('button', { class: 'h-btn sm', onclick: btn[1] }, btn[0]) : ''); }
+  }
+  _updStatus(d) {
+    const B = this.SB, c = this.ctx, a = this.app;
+    setT(B.ctl, this._ctlText(d)); setC(B.ctl, d.dead ? 'alarm' : d.ctl === 'auto' ? 'ok' : 'warn');
+    setT(B.mode, MODE_NAME[d.mode] || d.mode); setC(B.mode, { a: 'ok', b: 'warn', c: 'info', d: 'alarm', x: 'alarm' }[d.mode] || '');
+    const sc = this._script(); setT(B.scr, c.dead ? '####' : `v${sc.v} · ${sc.s}`);
+    setT(B.pset, c.dead ? '####' : isNum(d.p_set) ? num(d.p_set, 2) + ' bar' : 'N/A');
+    setT(B.kwh, c.dead ? '####' : isNum(d.kwh) ? num(d.kwh, 1) + ' kWh' : 'N/A');
+    setT(B.src, this.where === 'local' ? (c.dead ? 'HMI-01 · mất kết nối GW-01' : 'HMI-01 · dữ liệu trực tiếp GW-01 (Modbus TCP)') : `SCADA · máy chủ SRV-01 (MQTT 10 s)${a.server.stations[a.st.sid].online ? '' : ' · trạm mất kết nối'}`);
   }
 }

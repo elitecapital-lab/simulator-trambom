@@ -70,7 +70,7 @@ Quy tắc:
 - **An toàn vẫn đứng trên lệnh tay.** Liên động (van MV-02 phải mở hết), giới hạn tần số khi áp > 4,0 bar, cắt áp rất cao, chống chạy khô, dừng an toàn chất lượng, giới hạn 6 lần khởi động/giờ vẫn áp dụng. Bị cắt an toàn khi đang chạy tay thì bơm không tự chạy lại.
 - **Báo trạng thái quyền.** Bản ghi đo xa mang trường `ctl` = `auto` / `remote` / `local`; báo động `MANUAL_MODE` (cảnh báo) bật suốt thời gian chạy tay. Lệnh tại chỗ được gửi lên dạng sự kiện nhật ký để trung tâm biết ai đã thao tác.
 
-Xem kịch bản S12 và chế độ **Màn hình HMI** của bản web. Màn hình này có hai vị trí: *Tại trạm · HMI-01* đọc trực tiếp gateway; *Trung tâm · SCADA* chỉ thấy dữ liệu máy chủ đã nhận.
+Xem kịch bản S12 và **màn hình HMI** của bản web (nút **HMI** trên thanh trên cùng). Màn hình này có hai vị trí: *Tại trạm · HMI-01* đọc trực tiếp gateway; *Trung tâm · SCADA* chỉ thấy dữ liệu máy chủ đã nhận. Trong cảnh 3D, bảng điều khiển nổi của bơm/van mặc định ra lệnh *tại trạm* (người đứng trong trạm); có thể chọn *Từ trung tâm* để thử đường lệnh qua MQTT.
 
 ## 2. Phát hiện mất mạng
 

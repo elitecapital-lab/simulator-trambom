@@ -3,18 +3,20 @@
 Mô phỏng tương tác hệ thống điều khiển tự động cho một trạm bơm tăng áp nhỏ **không người trực** phục vụ khu dân cư,
 dành cho sinh viên các học phần Tự động hóa, Hệ thống nhúng/IoT và Kỹ thuật cấp thoát nước.
 
-- **Bản web 3D** (Three.js, chạy trong trình duyệt) gồm:
+- **Bản web 3D toàn màn hình** (Three.js, chạy trong trình duyệt) gồm:
   - mô hình trạm bơm: bể chứa, 2 bơm biến tần, đường ống, van, đồng hồ áp lực, cảm biến lưu lượng, mức nước, chất lượng nước (clo dư, độ đục, pH), bình tích áp;
   - **tủ động lực hiện trạng CP-01** và **tủ mới CP-02** (mini PC chạy edge gateway, I/O từ xa, router 4G, UPS, màn HMI);
-  - biểu đồ theo thời gian và bảng so sánh trực tiếp với phương án lịch cố định;
+  - **thẻ chỉ số trực tiếp** (áp đầu ra, áp điểm bất lợi, lưu lượng, mức bể, công suất, chất lượng nước, quyền điều khiển) nổi trên cảnh 3D;
+  - **thanh chức năng** bên phải: Biểu đồ, So sánh với lịch cố định, Báo động, Giám sát, Thiết bị, Sự cố, Kịch bản, Trung tâm, Nhật ký, Bài học, Điều khiển TAY, Camera, Hiển thị;
+  - **điều khiển ngay trong 3D**: bấm vào bơm hoặc van MV-02 để mở bảng điều khiển gắn với thiết bị (chạy/dừng, đặt tần số, đóng/mở van, liên động, lệnh cuối); ở chế độ TAY có nút chạy/dừng trên từng bơm và viền báo chế độ TAY;
   - tiêm sự cố, trình soạn kịch bản cho học viên, bảng điều khiển trung tâm cho 4 trạm.
 - **Phân biệt rõ ba nhóm thiết bị:**
   - *hiện trạng nhà máy*: bơm, biến tần, bể, van, phao, tủ động lực;
   - *giải pháp đưa vào*: mini PC tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ, I/O, cảm biến, 4G, UPS, rơ-le watchdog;
   - *khuyến nghị*: nên có để vận hành trơn tru.
 
-  Bộ lọc màu trên khung 3D, tab **Thiết bị** và tùy chọn "không lắp" cho thấy bằng số liệu mỗi thiết bị đáng giá bao nhiêu. Xem [07](docs/07-hien-trang-va-giai-phap.md).
-- **Chế độ Màn hình HMI** (2D, phong cách ISA-101) có hai vị trí vận hành:
+  Nút **Hiển thị** (lọc màu theo nhóm trong cảnh 3D), mục **Thiết bị** và tùy chọn "không lắp" cho thấy bằng số liệu mỗi thiết bị đáng giá bao nhiêu. Xem [07](docs/07-hien-trang-va-giai-phap.md).
+- **Màn hình HMI kiểu SCADA nhà máy** (giống các màn WinCC / InTouch đang dùng ở nhà máy nước): thanh tiêu đề có đèn truyền thông và bộ đếm báo động, dòng báo động có nút xác nhận, 7 màn hình (Tổng quan P&ID, Bơm – biến tần, Chất lượng nước, Xu hướng, Báo động, Nhật ký, Thông số), bảng điều khiển bật lên (faceplate) với bước xác nhận lệnh, hai giao diện Tối/Sáng. Có hai vị trí vận hành:
   - *Tại trạm · HMI-01*: dữ liệu trực tiếp từ gateway, lệnh đi thẳng;
   - *Trung tâm · SCADA*: chỉ thấy dữ liệu máy chủ nhận qua MQTT, lệnh có thời hạn.
 
@@ -47,7 +49,18 @@ Lệnh này chạy máy chủ web tĩnh tại `http://127.0.0.1:8000/web/` và m
 `web/vendor/` nên chạy được khi không có Internet (phông chữ sẽ dùng phông hệ thống).
 
 Mở thẳng một kịch bản: `http://127.0.0.1:8000/web/#S4-advanced`. Mở thẳng màn hình HMI: `#S12-basic-hmi`. Nút
-**Mô phỏng 3D / Màn hình HMI** trên thanh trên cùng chuyển qua lại hai giao diện.
+**3D | HMI** trên thanh trên cùng chuyển qua lại hai giao diện.
+
+Cách dùng giao diện:
+
+| Muốn | Thao tác |
+|---|---|
+| Chạy, tạm dừng, tua nhanh, đổi kịch bản | Thanh trên cùng (màn hình hẹp: nút ☰) |
+| Xem biểu đồ, so sánh với lịch cố định | Nút **Biểu đồ** / **So sánh** trên thanh chức năng (tấm trượt từ dưới lên, cỡ S/M/L); bấm một thẻ chỉ số để mở đúng biểu đồ đó |
+| Điều khiển bơm, van trong 3D | Bấm vào bơm/van (hoặc nút **Điều khiển TAY**) → bảng điều khiển nổi; ở TỰ ĐỘNG các nút lệnh bị khóa cho tới khi chuyển TAY |
+| Xem thông số một thiết bị bất kỳ | Bấm vào thiết bị trong 3D hoặc trong mục **Thiết bị** |
+| Đổi góc nhìn, nhãn, lọc nhóm thiết bị | Nút **Camera**, **Hiển thị** |
+| Đóng cửa sổ đang mở | Phím **Esc** (đóng lần lượt từ cửa sổ mở sau cùng) |
 
 Triển khai cho cả lớp: bật GitHub Pages (hoặc chép cả kho lên một máy chủ web tĩnh bất kỳ) rồi mở đường dẫn `…/web/`.
 Không cần máy chủ ứng dụng: toàn bộ mô phỏng chạy trong trình duyệt của học viên.

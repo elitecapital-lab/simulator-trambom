@@ -348,7 +348,7 @@
       "spec": "x86 hoặc ARM công nghiệp 4 nhân, RAM 4–8 GB, SSD/eMMC công nghiệp pSLC 64–128 GB có bảo vệ mất nguồn, 2 LAN, 2 RS-485 cách ly, watchdog phần cứng, TPM 2.0, RTC có pin, 9–36 VDC, −20…60 °C (nên chọn −40…70 °C), 10–15 W.",
       "if_missing": "Không có bộ điều khiển tại chỗ: trạm quay về vận hành lịch cố định (phương án so sánh) – mất toàn bộ chế độ (a)–(d).",
       "fallback": "Watchdog 3 tầng (dịch vụ → phần cứng → WDR-01). Mini PC treo > 5 s: biến tần chạy PID nội. Khởi động lại: hủy phiên điều khiển tay cũ, nạp kịch bản/bộ đệm từ SSD, theo dõi 60 s rồi mới tiếp quản không xung, đồng bộ lại (chế độ c).",
-      "sim": "S11: mini PC treo 17:00–23:00. Tab Sự cố → \"Mini PC treo\".",
+      "sim": "S11: mini PC treo 17:00–23:00. Mục Sự cố trên thanh chức năng → \"Mini PC treo\".",
       "params": [
         ["Chu kỳ điều khiển", "1", "s"],
         ["Bộ đệm lưu-và-chuyển", "4.320 bản ghi + nén", "–"],
@@ -446,7 +446,7 @@
       "spec": "LTE Cat 4, 2 SIM tự chuyển, ăng-ten ngoài có chống sét, 24 VDC.",
       "if_missing": "Không có liên lạc với trung tâm: trạm chỉ tự vận hành (chế độ b), dữ liệu nằm trong bộ đệm.",
       "fallback": "Chuyển SIM thứ hai; mất hẳn → chế độ (b), SMS cho báo động khẩn.",
-      "sim": "S2, S3, S9; tắt tùy chọn SMS ở tab Thiết bị.",
+      "sim": "S2, S3, S9; tắt tùy chọn SMS ở mục Thiết bị.",
       "params": [
         ["Độ trễ điển hình", "0,4", "s"],
         ["Giao thức", "MQTT 3.1.1/5 trên TLS 1.2", "–"]
@@ -618,7 +618,7 @@
       "interface": "AI 4–20 mA → ISO-102 → IO-01 AI2 + VFD-02 AI2; điểm trích áp riêng.",
       "if_missing": "Mức cơ bản: PT-101 kẹt/trôi không bị phát hiện – S5: áp > 4,0 bar suốt 119 phút, đỉnh 4,56 bar. Mức nâng cao chỉ còn phát hiện được kẹt CỨNG (giá trị không đổi tuyệt đối 30 s) – cảm biến kẹt nhưng còn dao động nhiễu, hoặc ống trích bị tắc, sẽ không bị phát hiện; biểu quyết 2/3 với mô hình bơm cần cả PT-101 và PT-102.",
       "fallback": "Mất cả hai cảm biến áp → chạy 40 Hz an toàn (NO_PRESSURE).",
-      "sim": "S5 có/không PT-102 (tab Thiết bị).",
+      "sim": "S5 có/không PT-102 (mục Thiết bị).",
       "params": [
         ["Dải đo", "0–10", "bar"],
         ["Sai số", "±0,25 % FS", "–"],
@@ -870,12 +870,12 @@
       "priority": "nen_co",
       "group": "Điện – điều khiển",
       "name": "Màn hình cảm ứng HMI tại chỗ",
-      "desc": "Hiển thị web HMI do GW-01 phục vụ (xem chế độ \"Màn hình HMI\" của bản mô phỏng). Đăng nhập PIN theo vai trò, ghi nhật ký thao tác. Quyền tại chỗ ưu tiên hơn lệnh từ trung tâm.",
+      "desc": "Hiển thị web HMI do GW-01 phục vụ (xem màn hình HMI của bản mô phỏng). Đăng nhập PIN theo vai trò, ghi nhật ký thao tác. Quyền tại chỗ ưu tiên hơn lệnh từ trung tâm.",
       "role": "Màn cảm ứng tại chỗ trên cửa CP-02 để kỹ thuật viên vận hành, xem báo động, điều khiển tay.",
       "interface": "Ethernet qua SW-01, trình duyệt kiosk mở web HMI của MPC-01.",
       "spec": "7–10 inch, mặt trước IP65, ≥ 400 nit, 24 VDC.",
       "if_missing": "Kỹ thuật viên dùng laptop/máy tính bảng nối mạng OT của tủ; hoặc chỉ thao tác trên bàn phím biến tần (không qua lớp an toàn phần mềm).",
-      "sim": "S12; chế độ \"Màn hình HMI\" → \"Tại trạm · HMI-01\".",
+      "sim": "S12; màn hình HMI (nút HMI trên thanh trên cùng) → \"Tại trạm · HMI-01\".",
       "params": [],
       "range": "",
       "live": []

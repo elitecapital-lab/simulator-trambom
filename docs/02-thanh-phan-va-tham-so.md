@@ -375,7 +375,7 @@ Máy tính công nghiệp gắn DIN trong tủ CP-02. Chạy Linux LTS phân vù
 | Thông số điển hình | x86 hoặc ARM công nghiệp 4 nhân, RAM 4–8 GB, SSD/eMMC công nghiệp pSLC 64–128 GB có bảo vệ mất nguồn, 2 LAN, 2 RS-485 cách ly, watchdog phần cứng, TPM 2.0, RTC có pin, 9–36 VDC, −20…60 °C (nên chọn −40…70 °C), 10–15 W. |
 | Nếu không có | Không có bộ điều khiển tại chỗ: trạm quay về vận hành lịch cố định (phương án so sánh) – mất toàn bộ chế độ (a)–(d). |
 | Khi hỏng / dự phòng | Watchdog 3 tầng (dịch vụ → phần cứng → WDR-01). Mini PC treo > 5 s: biến tần chạy PID nội. Khởi động lại: hủy phiên điều khiển tay cũ, nạp kịch bản/bộ đệm từ SSD, theo dõi 60 s rồi mới tiếp quản không xung, đồng bộ lại (chế độ c). |
-| Thử trong mô phỏng | S11: mini PC treo 17:00–23:00. Tab Sự cố → "Mini PC treo". |
+| Thử trong mô phỏng | S11: mini PC treo 17:00–23:00. Mục Sự cố trên thanh chức năng → "Mini PC treo". |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -470,7 +470,7 @@ MQTT/TLS tới máy chủ điều hành qua APN riêng/VPN, chỉ kết nối ra
 | Thông số điển hình | LTE Cat 4, 2 SIM tự chuyển, ăng-ten ngoài có chống sét, 24 VDC. |
 | Nếu không có | Không có liên lạc với trung tâm: trạm chỉ tự vận hành (chế độ b), dữ liệu nằm trong bộ đệm. |
 | Khi hỏng / dự phòng | Chuyển SIM thứ hai; mất hẳn → chế độ (b), SMS cho báo động khẩn. |
-| Thử trong mô phỏng | S2, S3, S9; tắt tùy chọn SMS ở tab Thiết bị. |
+| Thử trong mô phỏng | S2, S3, S9; tắt tùy chọn SMS ở mục Thiết bị. |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -624,7 +624,7 @@ Cảm biến độc lập thứ hai cho lớp an toàn (cắt áp rất cao) và
 | Giao tiếp với mini PC | AI 4–20 mA → ISO-102 → IO-01 AI2 + VFD-02 AI2; điểm trích áp riêng. |
 | Nếu không có | Mức cơ bản: PT-101 kẹt/trôi không bị phát hiện – S5: áp > 4,0 bar suốt 119 phút, đỉnh 4,56 bar. Mức nâng cao chỉ còn phát hiện được kẹt CỨNG (giá trị không đổi tuyệt đối 30 s) – cảm biến kẹt nhưng còn dao động nhiễu, hoặc ống trích bị tắc, sẽ không bị phát hiện; biểu quyết 2/3 với mô hình bơm cần cả PT-101 và PT-102. |
 | Khi hỏng / dự phòng | Mất cả hai cảm biến áp → chạy 40 Hz an toàn (NO_PRESSURE). |
-| Thử trong mô phỏng | S5 có/không PT-102 (tab Thiết bị). |
+| Thử trong mô phỏng | S5 có/không PT-102 (mục Thiết bị). |
 
 | Tham số | Giá trị | Đơn vị |
 |---|---:|---|
@@ -865,7 +865,7 @@ Van bướm điện cách ly trạm khỏi mạng lưới khi dừng an toàn do
 
 *Khuyến nghị bổ sung · bổ sung mới · nên có · nhóm điện – điều khiển*
 
-Hiển thị web HMI do GW-01 phục vụ (xem chế độ "Màn hình HMI" của bản mô phỏng). Đăng nhập PIN theo vai trò, ghi nhật ký thao tác. Quyền tại chỗ ưu tiên hơn lệnh từ trung tâm.
+Hiển thị web HMI do GW-01 phục vụ (xem màn hình HMI của bản mô phỏng). Đăng nhập PIN theo vai trò, ghi nhật ký thao tác. Quyền tại chỗ ưu tiên hơn lệnh từ trung tâm.
 
 | Mục | Nội dung |
 |---|---|
@@ -873,7 +873,7 @@ Hiển thị web HMI do GW-01 phục vụ (xem chế độ "Màn hình HMI" củ
 | Giao tiếp với mini PC | Ethernet qua SW-01, trình duyệt kiosk mở web HMI của MPC-01. |
 | Thông số điển hình | 7–10 inch, mặt trước IP65, ≥ 400 nit, 24 VDC. |
 | Nếu không có | Kỹ thuật viên dùng laptop/máy tính bảng nối mạng OT của tủ; hoặc chỉ thao tác trên bàn phím biến tần (không qua lớp an toàn phần mềm). |
-| Thử trong mô phỏng | S12; chế độ "Màn hình HMI" → "Tại trạm · HMI-01". |
+| Thử trong mô phỏng | S12; màn hình HMI (nút HMI trên thanh trên cùng) → "Tại trạm · HMI-01". |
 
 #### PL-301 · Logger áp lực điểm bất lợi (NB-IoT/LTE-M)
 

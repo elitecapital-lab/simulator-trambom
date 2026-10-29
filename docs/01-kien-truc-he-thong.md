@@ -61,7 +61,7 @@ flowchart TB
 | 2 · Edge gateway | Ra mọi quyết định điều khiển tại chỗ, chu kỳ 1 s. Không phụ thuộc máy chủ | `trambom/gateway.py`, `control.py`, `safety.py`, `comms.py` |
 | 3 · Truyền thông | MQTT trên 4G; phát hiện mất mạng bằng nhịp tim; SMS cho báo động nghiêm trọng khi mất IP | `trambom/link.py` (độ trễ, mất gói, đứt kết nối) |
 | 4 · Máy chủ điều hành | Nhận dữ liệu (chống trùng theo seq), cảnh báo tập trung, phát hành kịch bản, gửi lệnh có thời hạn, hợp nhất khi đồng bộ | `trambom/server.py` |
-| 5 · Tích hợp mạng lưới | Tổng hợp nhiều trạm, tổng điện năng, tỷ lệ thất thoát, bảng điều khiển trung tâm | `trambom/network.py`, tab **Trung tâm** của bản web |
+| 5 · Tích hợp mạng lưới | Tổng hợp nhiều trạm, tổng điện năng, tỷ lệ thất thoát, bảng điều khiển trung tâm | `trambom/network.py`, mục **Trung tâm** của bản web |
 
 Bản web 3D (`web/js/sim/*.js`) là bản chuyển đổi một-một của lõi Python, dùng cùng `config/*.json` và cùng bộ sinh số
 ngẫu nhiên; kiểm thử `tests/test_parity_js.py` bảo đảm hai bản cho cùng KPI.

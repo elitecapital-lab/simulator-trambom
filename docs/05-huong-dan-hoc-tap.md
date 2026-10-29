@@ -30,9 +30,9 @@ Câu hỏi khởi động (5 phút): *Ở lưu lượng 30 m³/h, áp đầu ra 
 | 2 | S2, S3, S3b | Mất mạng, đồng bộ, xung đột tham số, kịch bản lỗi; đọc nhật ký gateway và máy chủ | Biểu đồ trình tự (sequence) của một phiên đồng bộ, nhận xét từng quyết định hợp nhất |
 | 3 | S4, S5, S6, S7, S8 | Sự cố chất lượng nước, cảm biến kẹt, mất nước nguồn, hỏng bơm, vỡ ống | Bảng “sự cố – phát hiện – phản ứng – thời gian” cho hai phương án |
 | 4 | S9 + bài phân hóa | Tình huống tổng hợp DOK 3; hoàn thiện kịch bản của nhóm | Báo cáo + bảo vệ thiết kế |
-| Mở rộng | S11, S12, tab Thiết bị, Màn hình HMI | Phân loại thiết bị hiện trạng / giải pháp / khuyến nghị. Thử "không lắp" từng thiết bị. Mini PC treo và dự phòng PID biến tần. Vận hành tay tại chỗ và từ trung tâm: quyền, thời hạn, liên động | Danh mục thiết bị tối thiểu cho ngân sách cho trước, có số liệu mô phỏng chứng minh ([07](07-hien-trang-va-giai-phap.md), mục 11) |
+| Mở rộng | S11, S12, mục Thiết bị, màn hình HMI, điều khiển TAY trong 3D | Phân loại thiết bị hiện trạng / giải pháp / khuyến nghị. Thử "không lắp" từng thiết bị. Mini PC treo và dự phòng PID biến tần. Vận hành tay tại chỗ và từ trung tâm: quyền, thời hạn, liên động | Danh mục thiết bị tối thiểu cho ngân sách cho trước, có số liệu mô phỏng chứng minh ([07](07-hien-trang-va-giai-phap.md), mục 11) |
 
-Câu hỏi phân tích của từng kịch bản nằm trong `config/scenarios.json` và tab **Bài học** trên web.
+Câu hỏi phân tích của từng kịch bản nằm trong `config/scenarios.json` và mục **Bài học** trên thanh chức năng của bản web.
 
 ## 4. Phân hóa
 
@@ -41,7 +41,7 @@ Câu hỏi phân tích của từng kịch bản nằm trong `config/scenarios.j
 - Python: sửa các khối `TODO` trong `student/kich_ban_nguong.py`, chạy
   `python -m trambom run S1 --script student/kich_ban_nguong.py` và tự chấm
   `python -m trambom check-student student/kich_ban_nguong.py`.
-- Web: tab **Kịch bản → Mẫu bài tập**, sửa hàm `dieuKhien`, bấm **Nạp vào gateway**, so sánh KPI trực tiếp.
+- Web: mục **Kịch bản** (thanh chức năng) **→ Mẫu bài tập**, sửa hàm `dieuKhien`, bấm **Nạp vào gateway**, so sánh KPI trực tiếp.
 - Tiêu chí đạt (bộ chấm tự động, 9 tiêu chí): áp đạt dải ≥ 98 %; tiết kiệm ≥ 20 % điện so với lịch cố định; không vượt
   4,0 bar; ≤ 12 lần khởi động/ngày; dừng bơm khi mức < 0,6 m; không chạy khô; vẫn cấp nước khi bơm chính hỏng; luân phiên bơm.
 - Bài mở rộng nhỏ: thêm quy tắc cảnh báo rò rỉ ban đêm đơn giản (lưu lượng 02:00–04:00 > ngưỡng cố định) và thử với S8.

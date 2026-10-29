@@ -8,7 +8,7 @@ Tài liệu này tách bạch ba nhóm thiết bị của trạm bơm tăng áp 
 | **Giải pháp** | Thiết bị **đưa vào** để tiếp nhận, xử lý và điều khiển tín hiệu tại chỗ. Đây là tập tối thiểu để có đủ 4 chế độ (a)–(d), lớp an toàn ưu tiên cao nhất, khả năng tự vận hành khi mất mạng và dự phòng khi chính mini PC hỏng. | Mini PC công nghiệp MPC-01 chạy edge gateway GW-01, I/O từ xa IO-01, cảm biến áp/lưu lượng/mức/clo/độ đục, bơm mẫu, router 4G, UPS, rơ-le watchdog, chốt dừng an toàn, mạch liên động có nguồn riêng, tủ CP-02 | tím |
 | **Khuyến nghị** | **Nên có** để hệ thống vận hành trơn tru nhất. Thiếu vẫn chạy được, nhưng rủi ro hoặc thiệt hại lớn hơn. | Van điện đầu ra MV-02, máy đo pH, màn HMI tại chỗ, logger áp điểm bất lợi, công tắc áp cao cơ khí, phao báo ngập, khóa LOTO… | xanh ngọc |
 
-Trong bản mô phỏng 3D, nút **Hiện trạng / Giải pháp / Khuyến nghị** trên khung hình tô màu đúng nhóm và làm mờ các nhóm còn lại. Tab **Thiết bị** liệt kê đủ 64 hạng mục. Mỗi hạng mục có vai trò, cách đấu nối với mini PC, hậu quả nếu không có và dự phòng khi hỏng. Danh mục gốc ở `config/components.json`. Phần [2](02-thanh-phan-va-tham-so.md) và bảng ở mục 8 được sinh tự động từ tệp này.
+Trong bản mô phỏng 3D, nút **Hiển thị** trên thanh chức năng có bộ lọc **Hiện trạng / Giải pháp / Khuyến nghị**: tô màu đúng nhóm và làm mờ các nhóm còn lại. Mục **Thiết bị** liệt kê đủ 64 hạng mục. Mỗi hạng mục có vai trò, cách đấu nối với mini PC, hậu quả nếu không có và dự phòng khi hỏng. Danh mục gốc ở `config/components.json`. Phần [2](02-thanh-phan-va-tham-so.md) và bảng ở mục 8 được sinh tự động từ tệp này.
 
 ## 1. Tiêu chí phân loại
 
@@ -24,7 +24,7 @@ Một thiết bị được xếp vào **giải pháp** khi không có nó thì 
 
 Một thiết bị được xếp vào **khuyến nghị** khi nó làm hệ thống **tin cậy hơn, an toàn hơn hoặc dễ vận hành hơn**, nhưng các yêu cầu trên vẫn đạt khi thiếu nó.
 
-Mỗi hạng mục khuyến nghị phải có lý do cụ thể: kết quả mô phỏng "nếu không lắp" (mục 9), hoặc rủi ro nêu ở mục "Nếu không có" của từng thiết bị (tài liệu [02](02-thanh-phan-va-tham-so.md), tab Thiết bị). Cảm tính không đủ.
+Mỗi hạng mục khuyến nghị phải có lý do cụ thể: kết quả mô phỏng "nếu không lắp" (mục 9), hoặc rủi ro nêu ở mục "Nếu không có" của từng thiết bị (tài liệu [02](02-thanh-phan-va-tham-so.md), mục Thiết bị). Cảm tính không đủ.
 
 Ba góc nhìn chuyên môn được dùng để lập danh mục: tự động hóa OT, cấp nước, IoT/hệ thống nhúng. Một vòng phản biện đối chiếu danh mục với mã nguồn mô phỏng. Ba góc nhìn không hoàn toàn thống nhất ở ranh giới hai nhóm sau:
 
@@ -109,7 +109,7 @@ Nguyên tắc bố trí:
 3. **Mạch an toàn cứng không đi qua mini PC và không lấy nguồn của tủ mới.** Phao LSLL-101, dừng khẩn, K-SS, công tắc áp cao PSHH-101 (nếu có) và "van MV-02 đóng hẳn" nằm trong chuỗi IL-01, đấu kiểu thường đóng (đứt dây thì dừng). Chuỗi này dùng bộ nguồn 24 VDC riêng PSU-IL trong CP-01.
 4. **Không để hai nguồn lệnh chạy song song.** Bộ hẹn giờ lịch cố định hiện có (TMR-01) được tháo khỏi mạch FWD, hoặc giữ làm chế độ "LỊCH" riêng dưới công tắc SA.
 
-Trong cảnh 3D, CP-01 đứng sát tường sau (bên trong là MCCB, VFD-01/02, WDR-01, EM-101 và công tắc SA trên cửa). CP-02 treo ở tường bên (bên trong là MPC-01, IO-01, RT-01, UPS-01; màn HMI-01 trên cửa). Nút "Tủ điều khiển" đưa camera tới vị trí này.
+Trong cảnh 3D, CP-01 đứng sát tường sau (bên trong là MCCB, VFD-01/02, WDR-01, EM-101 và công tắc SA trên cửa). CP-02 treo ở tường bên (bên trong là MPC-01, IO-01, RT-01, UPS-01; màn HMI-01 trên cửa). Nút **Camera → Tủ điều khiển** đưa camera tới vị trí này.
 
 ## 3. Thiết bị hiện trạng: giữ gì, cấu hình lại gì, thay gì
 
@@ -153,7 +153,7 @@ Máy chủ trung tâm chỉ giúp trạm chạy tốt hơn (phát hành kịch b
 | `meter` | Modbus RTU COM2: EM-101, bộ phân tích AIT, FT-101 (tổng m³), nhiệt ẩm tủ | 2–10 s |
 | `control` | Lõi GW-01: lọc, đối chiếu PT-101/102 + mô hình bơm, lớp an toàn, kịch bản, quản lý bơm, chế độ TAY | 1 s |
 | `comms` | MQTT/TLS 8883 (QoS 1, phiên bền, LWT), bộ đệm SQLite trên SSD, đồng bộ khi có mạng lại | 10 s |
-| `hmi` | Web HMI cục bộ (chế độ "Màn hình HMI" của mô phỏng), phân quyền, nhật ký thao tác | – |
+| `hmi` | Web HMI cục bộ (màn hình HMI của mô phỏng), phân quyền, nhật ký thao tác | – |
 | `sms` | Gửi SMS báo động khẩn qua API của RT-01 khi mất IP | theo sự kiện |
 
 **Thứ tự thời gian khi mini PC treo** (mô phỏng bằng `config/station.json` → `fallback`):
@@ -355,7 +355,7 @@ Giao thức của các lệnh `set_mode`, `pump_start`, `pump_stop`, `pump_speed
 
 ## 9. Giá trị của từng thiết bị: mô phỏng "có lắp / không lắp"
 
-Lệnh `python -m trambom options` chạy mỗi cặp hai lần. Hai lần dùng cùng kịch bản, cùng chuỗi nhiễu và chỉ khác `cfg["hardware"]`. Trong trình duyệt, tab **Thiết bị** có nút "So sánh trên Sx" làm việc tương tự bằng lõi JavaScript. Học viên tự thử bằng lệnh `python -m trambom run S5 --off PT-102`.
+Lệnh `python -m trambom options` chạy mỗi cặp hai lần. Hai lần dùng cùng kịch bản, cùng chuỗi nhiễu và chỉ khác `cfg["hardware"]`. Trong trình duyệt, mục **Thiết bị** có nút "So sánh trên Sx" làm việc tương tự bằng lõi JavaScript. Học viên tự thử bằng lệnh `python -m trambom run S5 --off PT-102`.
 
 <!-- WHATIF-START -->
 | Hạng mục (tắt đi để thử) | Kịch bản · mức | Chỉ số | Có lắp | Không lắp |

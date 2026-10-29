@@ -1,0 +1,253 @@
+{
+  "meta": {
+    "name": "Trạm bơm tăng áp ST-01 – Khu dân cư A",
+    "version": "1.0.0",
+    "note": "Tất cả áp lực là áp lực dư (bar g). Lưu lượng m3/h. Mức nước m tính từ đáy bể. File này được dùng chung cho mô phỏng Python và bản web 3D."
+  },
+  "sim": {"dt_s": 1.0, "seed": 20261029, "start_dow": 0, "history_period_s": 10},
+  "constants": {"rho": 1000.0, "g": 9.81},
+  "tank": {
+    "area_m2": 48.0,
+    "height_m": 4.2,
+    "overflow_m": 4.0,
+    "level_init_m": 3.2,
+    "z_suction_m": 0.3,
+    "vortex_level_m": 0.4,
+    "air_level_m": 0.15,
+    "drain_q_m3h": 120.0
+  },
+  "inlet": {
+    "q_max_m3h": 26.0,
+    "float_close_m": 3.8,
+    "float_band_m": 0.4,
+    "supply_factor_hourly": [1, 1, 1, 1, 1, 1, 0.8, 0.8, 0.9, 1, 1, 1, 1, 1, 1, 1, 1, 0.75, 0.75, 0.75, 0.75, 0.9, 1, 1]
+  },
+  "pump_model": {
+    "h0_m": 44.0,
+    "k_m_per_m3h2": 0.015,
+    "q_bep_m3h": 24.0,
+    "eta_max": 0.72,
+    "eta_motor_vfd": 0.88,
+    "f_rated_hz": 50.0,
+    "f_min_hz": 25.0,
+    "f_max_hz": 50.0,
+    "ramp_hz_s": 2.5,
+    "p_motor_kw": 5.5,
+    "standby_w": 25.0,
+    "voltage_v": 400.0,
+    "cos_phi": 0.85
+  },
+  "pumps": ["P-01", "P-02"],
+  "hydro_tank": {"volume_m3": 0.3, "precharge_bar": 1.7, "c_pipe_m3_per_bar": 0.005},
+  "relief_valve": {"set_bar": 6.0, "k_m3h_per_bar": 40.0},
+  "outlet_valve": {"travel_s": 20.0},
+  "network": {
+    "dz_crit_m": 4.0,
+    "r_bar_per_m3h2": 0.00111,
+    "p_full_bar": 1.0,
+    "p_zero_bar": 0.1,
+    "leak_c": 0.7,
+    "leak_n1": 1.18,
+    "rooftop_tau_h": 1.5,
+    "rooftop_refill_max_m3h": 15.0,
+    "rooftop_capacity_m3": 300.0,
+    "net_decay_s": 60.0
+  },
+  "demand": {
+    "mean_m3h": 16.0,
+    "weekday": [0.45, 0.35, 0.3, 0.3, 0.45, 0.95, 1.65, 1.75, 1.35, 1.1, 1.05, 1.25, 1.2, 0.95, 0.85, 0.9, 1.1, 1.55, 1.85, 1.75, 1.45, 1.15, 0.85, 0.6],
+    "weekend": [0.5, 0.38, 0.32, 0.3, 0.38, 0.65, 1.1, 1.55, 1.7, 1.5, 1.25, 1.3, 1.25, 1.05, 0.95, 1.0, 1.15, 1.5, 1.8, 1.8, 1.55, 1.25, 0.95, 0.68],
+    "weekend_scale": 1.06,
+    "day_sigma": 0.03,
+    "noise_sigma": 0.07,
+    "noise_tau_s": 300.0
+  },
+  "quality": {
+    "cl_in_mgl": 0.65,
+    "ntu_in": 0.3,
+    "ph_in": 7.2,
+    "cl_init_mgl": 0.56,
+    "ntu_init": 0.18,
+    "ph_init": 7.2,
+    "cl_decay_per_day": 0.4,
+    "ntu_settle_per_h": 0.2,
+    "ntu_floor": 0.1,
+    "entrain_level_m": 0.8,
+    "entrain_ntu_per_h": 6.0
+  },
+  "sensors": {
+    "PT-101": {"lo": 0.0, "hi": 10.0, "sd": 0.005, "tau_s": 0.2},
+    "PT-102": {"lo": 0.0, "hi": 10.0, "sd": 0.005, "tau_s": 0.2},
+    "FT-101": {"lo": 0.0, "hi": 80.0, "sd": 0.08, "tau_s": 1.0, "cutoff": 0.3},
+    "FT-100": {"lo": 0.0, "hi": 50.0, "sd": 0.1, "tau_s": 2.0, "cutoff": 0.3},
+    "LT-101": {"lo": 0.0, "hi": 5.0, "sd": 0.004, "tau_s": 2.0},
+    "AIT-201": {"lo": 0.0, "hi": 5.0, "sd": 0.01, "tau_s": 60.0},
+    "AIT-202": {"lo": 0.0, "hi": 100.0, "sd": 0.02, "tau_s": 20.0},
+    "AIT-203": {"lo": 0.0, "hi": 14.0, "sd": 0.02, "tau_s": 30.0}
+  },
+  "service": {"p_crit_min_bar": 1.4, "p_out_max_bar": 4.0, "delivering_min_m3h": 0.5},
+  "quality_limits": {"cl_min": 0.2, "cl_max": 1.0, "ntu_max": 2.0, "ph_min": 6.0, "ph_max": 8.5},
+  "safety": {
+    "p_high_bar": 4.0,
+    "p_highhigh_bar": 4.5,
+    "p_hh_delay_s": 3.0,
+    "p_limiter_down_hz_s": 0.5,
+    "p_limiter_up_hz_s": 0.05,
+    "p_trip_restart_s": 300.0,
+    "p_trip_max_per_h": 3,
+    "p_low_bar": 1.6,
+    "p_low_delay_s": 30.0,
+    "p_lowlow_bar": 1.2,
+    "burst_q_m3h": 40.0,
+    "burst_delay_s": 60.0,
+    "level_ll_m": 0.5,
+    "level_ll_restart_m": 1.0,
+    "float_lsll_m": 0.35,
+    "float_lsll_reset_m": 0.6,
+    "cl_warn_low": 0.3,
+    "cl_warn_high": 0.8,
+    "cl_trip_low": 0.2,
+    "cl_trip_high": 1.0,
+    "cl_delay_s": 120.0,
+    "ntu_warn": 1.0,
+    "ntu_trip": 2.0,
+    "ntu_delay_s": 60.0,
+    "ph_warn_low": 6.5,
+    "ph_warn_high": 8.0,
+    "ph_trip_low": 6.0,
+    "ph_trip_high": 8.5,
+    "ph_delay_s": 120.0,
+    "quality_reset_hold_s": 600.0,
+    "ntu_reset_max": 1.5,
+    "quality_sensor_fault_action": "alarm",
+    "max_starts_per_h": 6,
+    "min_off_s": 60.0,
+    "pt_deviation_bar": 0.3,
+    "pt_deviation_delay_s": 10.0,
+    "quality_auto_restart": false
+  },
+  "gateway": {
+    "heartbeat_s": 10.0,
+    "offline_after_s": 60.0,
+    "telemetry_s": 10.0,
+    "buffer_capacity": 4320,
+    "buffer_compact_at": 0.8,
+    "event_capacity": 2000,
+    "replay_rate_per_s": 20.0,
+    "retransmit_s": 30.0,
+    "clock_drift_ppm": 40.0,
+    "sms_fallback": true,
+    "script_watch_s": 600.0,
+    "script_rollback_err_frac": 0.2,
+    "script_rollback_err_bar": 0.3,
+    "msg_bytes": {"tel": 240, "hb": 64, "event": 180, "sync": 1200, "cmd": 160, "ack": 48}
+  },
+  "link": {"latency_s": 0.4, "loss_prob": 0.0},
+  "server": {"offline_after_s": 60.0, "cmd_resend_s": 30.0},
+  "script": {
+    "version": 3,
+    "author": "server",
+    "strategy": "threshold",
+    "params": {
+      "pressure": {
+        "p_crit_target_bar": 1.6,
+        "dz_bar": 0.39,
+        "r_est": 0.00111,
+        "p_set_min_bar": 1.9,
+        "p_set_max_bar": 3.6,
+        "kp_hz_per_bar": 8.0,
+        "ti_s": 12.0,
+        "filter_tau_s": 2.0
+      },
+      "staging": {"f_on_hz": 49.0, "err_on_bar": 0.1, "t_on_s": 20.0, "f_off_hz": 36.0, "t_off_s": 120.0},
+      "alternation": {"runtime_h": 24.0, "overlap_s": 15.0},
+      "level": {"stop_m": 0.6, "restart_m": 1.5, "conserve_m": 1.2, "conserve_delta_bar": -0.3, "p_set_conserve_min_bar": 1.7, "supply_lost_s": 600.0},
+      "sleep": {"enabled": true, "q_on_m3h": 1.5, "t_s": 120.0, "boost_bar": 0.2, "wake_delta_bar": 0.3},
+      "offline": {"margin_bar": 0.1, "long_after_h": 24.0, "long_margin_bar": 0.2, "override_ttl_s": 900.0},
+      "predictive": {
+        "lead_min": 2.0,
+        "k_sigma": 0.6,
+        "margin_min_bar": 0.08,
+        "margin_max_bar": 0.25,
+        "p_crit_req_bar": 1.4,
+        "prestage_q_m3h": 29.5,
+        "destage_guard_min": 15.0,
+        "learn_alpha": 0.2,
+        "fallback_err": 0.35,
+        "recover_err": 0.25,
+        "tte_warn_h": 6.0,
+        "tte_crit_h": 3.0,
+        "tte_delta1_bar": -0.15,
+        "tte_delta2_bar": -0.3,
+        "anomaly_k": 3.0,
+        "anomaly_min_m3h": 3.0,
+        "anomaly_t_min": 15.0
+      },
+      "features": {"pressure_voting": false, "anomaly_detection": false, "tte_conservation": false}
+    }
+  },
+  "levels": {
+    "basic": {
+      "strategy": "threshold",
+      "features": {"pressure_voting": false, "anomaly_detection": false, "tte_conservation": false}
+    },
+    "advanced": {
+      "strategy": "predictive",
+      "features": {"pressure_voting": true, "anomaly_detection": true, "tte_conservation": true}
+    }
+  },
+  "script_schema": {
+    "pressure.p_crit_target_bar": [1.3, 2.5],
+    "pressure.dz_bar": [0.0, 2.0],
+    "pressure.r_est": [0.0, 0.005],
+    "pressure.p_set_min_bar": [1.5, 3.0],
+    "pressure.p_set_max_bar": [2.5, 4.0],
+    "pressure.kp_hz_per_bar": [0.5, 60.0],
+    "pressure.ti_s": [1.0, 300.0],
+    "pressure.filter_tau_s": [0.0, 30.0],
+    "staging.f_on_hz": [40.0, 50.0],
+    "staging.f_off_hz": [25.0, 45.0],
+    "alternation.runtime_h": [1.0, 720.0],
+    "level.stop_m": [0.5, 2.0],
+    "level.restart_m": [0.7, 3.0],
+    "level.conserve_m": [0.6, 3.0],
+    "level.p_set_conserve_min_bar": [1.5, 3.0],
+    "offline.margin_bar": [0.0, 0.5],
+    "offline.override_ttl_s": [60.0, 86400.0],
+    "predictive.margin_min_bar": [0.0, 0.5],
+    "predictive.p_crit_req_bar": [1.2, 2.5]
+  },
+  "merge_policy": {
+    "service_max": [
+      "pressure.p_crit_target_bar",
+      "pressure.p_set_min_bar",
+      "level.p_set_conserve_min_bar",
+      "level.stop_m",
+      "level.restart_m",
+      "offline.margin_bar",
+      "predictive.p_crit_req_bar",
+      "predictive.margin_min_bar"
+    ],
+    "service_min": ["sleep.enabled"],
+    "note": "Tham số dịch vụ/an toàn: chọn giá trị bảo thủ (an toàn hơn). Tham số vận hành: máy chủ thắng, xung đột được ghi lại để điều độ viên xem xét."
+  },
+  "baseline": {
+    "name": "Lịch cố định (vận hành thủ công)",
+    "windows": [
+      {"start_h": 5.0, "end_h": 22.0, "pumps": 1},
+      {"start_h": 6.0, "end_h": 8.0, "pumps": 2},
+      {"start_h": 17.5, "end_h": 20.5, "pumps": 2}
+    ],
+    "freq_hz": 50.0,
+    "throttle_k": 0.008,
+    "float_protection": true,
+    "operator_rounds_h": [7.5, 16.5],
+    "alternate_daily": true
+  },
+  "stations": [
+    {"id": "ST-01", "name": "Trạm ST-01 · Khu dân cư A", "zone": "DMA-A", "demand_scale": 1.0, "dz_crit_m": 4.0, "seed_offset": 0, "x": 0.3, "y": 0.55},
+    {"id": "ST-02", "name": "Trạm ST-02 · Khu dân cư B", "zone": "DMA-B", "demand_scale": 0.75, "dz_crit_m": 7.0, "seed_offset": 101, "x": 0.62, "y": 0.28},
+    {"id": "ST-03", "name": "Trạm ST-03 · Khu tái định cư C", "zone": "DMA-C", "demand_scale": 1.25, "dz_crit_m": 2.0, "seed_offset": 202, "x": 0.78, "y": 0.7},
+    {"id": "ST-04", "name": "Trạm ST-04 · Khu nhà phố D", "zone": "DMA-D", "demand_scale": 0.55, "dz_crit_m": 5.0, "seed_offset": 303, "x": 0.42, "y": 0.84}
+  ]
+}

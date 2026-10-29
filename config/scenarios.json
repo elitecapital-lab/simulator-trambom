@@ -1,0 +1,260 @@
+{
+  "note": "Thời điểm sự kiện t_h tính bằng giờ kể từ lúc bắt đầu (Thứ Hai 00:00). until_h là thời điểm kết thúc nhiễu.",
+  "scenarios": [
+    {
+      "id": "S1",
+      "name": "S1 · Vận hành bình thường có kết nối",
+      "modes": ["a"],
+      "duration_h": 24,
+      "summary": "Một ngày làm việc điển hình. Gateway duy trì áp theo lưu lượng, máy chủ nhận dữ liệu liên tục.",
+      "questions": [
+        "Đường áp đặt P_set(Q) thay đổi thế nào giữa 03:00 và 18:30? Giải thích bằng tổn thất r·Q².",
+        "So sánh kWh và số phút ngoài dải áp giữa điều khiển thông minh và lịch cố định. Nguyên nhân chính của chênh lệch là gì?",
+        "Rò rỉ (m³) thay đổi ra sao khi áp lực trung bình giảm? Liên hệ mô hình FAVAD."
+      ],
+      "events": []
+    },
+    {
+      "id": "S2",
+      "name": "S2 · Mất mạng 8 giờ – gateway tự vận hành",
+      "modes": ["a", "b"],
+      "duration_h": 24,
+      "summary": "Kết nối 4G mất từ 08:00 đến 16:00. Gateway phát hiện mất mạng sau 60 s, cộng biên an toàn áp lực, lưu đệm dữ liệu.",
+      "questions": [
+        "Bao lâu sau khi mất mạng thì gateway chuyển sang chế độ tự vận hành? Vì sao không chuyển ngay lập tức?",
+        "Biên áp lực cộng thêm khi mất mạng tốn bao nhiêu kWh? Đánh giá đánh đổi an toàn – điện năng.",
+        "Bộ đệm đầy bao nhiêu phần trăm? Với dung lượng hiện tại, gateway chịu được mất mạng tối đa bao lâu trước khi phải nén dữ liệu?"
+      ],
+      "events": [
+        {"t_h": 8.0, "type": "link_down"},
+        {"t_h": 16.0, "type": "link_up"}
+      ]
+    },
+    {
+      "id": "S3",
+      "name": "S3 · Khôi phục kết nối, đồng bộ và xử lý xung đột",
+      "modes": ["a", "b", "c"],
+      "duration_h": 24,
+      "summary": "Mất mạng 06:00–14:00. Trong lúc đó: trung tâm gửi lệnh ghi đè (hết hạn), kỹ thuật viên sửa tham số tại HMI, trung tâm phát hành kịch bản v4. Khi có mạng lại: hợp nhất 3 chiều, phát lại dữ liệu đệm.",
+      "questions": [
+        "Liệt kê từng xung đột tham số và quy tắc đã dùng để giải quyết. Bạn có đồng ý với quyết định cho p_crit_target_bar không?",
+        "Vì sao lệnh ghi đè áp lực gửi lúc 06:30 bị hủy (không bao giờ tới trạm) nhưng lệnh luân phiên bơm lúc 11:00 vẫn được thực thi khi có mạng lại?",
+        "Vì sao không dùng quy tắc 'bản ghi mới nhất thắng' (last-writer-wins) theo nhãn thời gian cho tham số an toàn?"
+      ],
+      "events": [
+        {"t_h": 6.0, "type": "link_down"},
+        {
+          "t_h": 6.5,
+          "type": "server_command",
+          "cmd": {
+            "type": "set_override",
+            "args": {"p_set_bar": 2.8}
+          },
+          "ttl_s": 1800
+        },
+        {
+          "t_h": 9.0,
+          "type": "local_edit",
+          "patch": {"pressure.p_crit_target_bar": 1.7, "staging.t_on_s": 30.0, "alternation.runtime_h": 48.0},
+          "by": "KTV tại trạm (HMI)",
+          "reason": "Dân phản ánh yếu nước tầng 3"
+        },
+        {
+          "t_h": 10.0,
+          "type": "server_publish",
+          "patch": {"pressure.p_crit_target_bar": 1.55, "pressure.kp_hz_per_bar": 9.0, "alternation.runtime_h": 12.0},
+          "by": "Điều độ viên trung tâm",
+          "reason": "Tối ưu điện năng theo dữ liệu logger"
+        },
+        {
+          "t_h": 11.0,
+          "type": "server_command",
+          "cmd": {
+            "type": "rotate_pumps",
+            "args": {}
+          },
+          "ttl_s": 43200
+        },
+        {"t_h": 14.0, "type": "link_up"}
+      ]
+    },
+    {
+      "id": "S3B",
+      "name": "S3b · Kịch bản mới bị lỗi – tự động quay lui",
+      "modes": ["a", "c"],
+      "duration_h": 12,
+      "summary": "06:15 trung tâm phát hành kịch bản v4 với hệ số PI quá nhỏ (chưa kiểm thử). Gateway áp dụng có giám sát 10 phút; khi nhu cầu tăng buổi sáng, áp lực lệch xa điểm đặt và gateway tự quay lui phiên bản cũ.",
+      "questions": [
+        "Tiêu chí nào khiến gateway quay lui? Nếu kịch bản này được phát hành lúc 03:00 (nhu cầu ổn định) thì 10 phút giám sát có phát hiện được lỗi không? Hãy thử bằng cách sửa t_h.",
+        "Đề xuất quy trình kiểm thử kịch bản trước khi phát hành (mô phỏng, triển khai thử một trạm, cửa sổ giám sát theo giờ cao điểm)."
+      ],
+      "events": [
+        {
+          "t_h": 6.25,
+          "type": "server_publish",
+          "patch": {"pressure.kp_hz_per_bar": 0.5, "pressure.ti_s": 300.0},
+          "by": "Điều độ viên trung tâm",
+          "reason": "Giảm dao động tần số (chưa kiểm thử)"
+        }
+      ]
+    },
+    {
+      "id": "S4",
+      "name": "S4 · Sự cố độ đục – cảnh báo và dừng an toàn",
+      "modes": ["a", "d"],
+      "duration_h": 24,
+      "summary": "Nước nguồn bị đục 12 NTU từ 13:00 đến 16:00. Độ đục trong bể tăng dần; gateway cảnh báo ở 1 NTU, dừng an toàn khi > 2 NTU kéo dài 60 s, đóng van đầu ra. Trung tâm ra lệnh xả bể và đặt lại khi chất lượng đạt.",
+      "questions": [
+        "Bao nhiêu m³ nước không đạt QCVN đã cấp vào mạng trong mỗi phương án? Thời gian xác nhận 60 s ảnh hưởng thế nào?",
+        "Dừng cấp nước cũng là một rủi ro (mất áp, xâm nhập ngược). Lập luận vì sao ở đây vẫn ưu tiên dừng an toàn.",
+        "Vì sao lệnh đặt lại chỉ được chấp nhận khi chất lượng ổn định 10 phút?"
+      ],
+      "events": [
+        {"t_h": 13.0, "type": "inflow_quality", "param": "ntu", "value": 12.0, "until_h": 16.0},
+        {
+          "t_h": 17.5,
+          "type": "server_command",
+          "cmd": {
+            "type": "flush_tank",
+            "args": {"target_m": 1.4}
+          },
+          "ttl_s": 7200
+        },
+        {
+          "t_h": 20.0,
+          "type": "server_command",
+          "cmd": {
+            "type": "reset_safe_stop",
+            "args": {}
+          },
+          "ttl_s": 7200
+        }
+      ]
+    },
+    {
+      "id": "S5",
+      "name": "S5 · Cảm biến áp lực PT-101 bị kẹt – áp lực vượt ngưỡng",
+      "modes": ["a", "d"],
+      "duration_h": 12,
+      "summary": "09:00 PT-101 kẹt ở 2,1 bar. Vòng PI tăng tốc bơm, áp lực thực tăng. PT-102 độc lập kích hoạt bộ giới hạn áp cao; ở mức nâng cao, biểu quyết với mô hình bơm loại PT-101 tự động.",
+      "questions": [
+        "Với mức cơ bản và nâng cao, áp lực thực cao nhất là bao nhiêu và kéo dài bao lâu?",
+        "Vì sao chỉ có hai cảm biến thì không biết cái nào sai? Mô hình đường đặc tính bơm đóng vai trò 'cảm biến thứ ba' như thế nào?",
+        "Phân tích: nếu PT-102 cũng hỏng thì lớp bảo vệ nào còn lại?"
+      ],
+      "events": [
+        {"t_h": 9.0, "type": "sensor_fault", "tag": "PT-101", "mode": "stuck", "value": 2.1},
+        {
+          "t_h": 9.75,
+          "type": "server_command",
+          "cmd": {
+            "type": "select_pt",
+            "args": {"tag": "PT-102"}
+          },
+          "ttl_s": 3600
+        },
+        {"t_h": 11.0, "type": "sensor_repair", "tag": "PT-101"}
+      ]
+    },
+    {
+      "id": "S6",
+      "name": "S6 · Mất nước nguồn 10 giờ – mức bể thấp",
+      "modes": ["a", "d"],
+      "duration_h": 24,
+      "summary": "Ống cấp thành phố ngừng cấp 09:00–19:00. Bể cạn dần; gateway giảm áp tiết kiệm, dừng bơm khi mức < 0,6 m để chống chạy khô. Mức nâng cao dự báo thời gian cạn bể và giảm áp sớm.",
+      "questions": [
+        "Giảm áp sớm theo dự báo kéo dài thời gian cấp nước thêm bao lâu? Đổi lại là bao nhiêu phút áp thấp?",
+        "So sánh 'thiếu nước' (m³) giữa các phương án. Bồn mái của hộ dân đóng vai trò gì?",
+        "Nếu trung tâm biết trước lịch cắt nước, nên gửi gì xuống gateway?"
+      ],
+      "events": [
+        {"t_h": 9.0, "type": "supply", "factor": 0.0, "until_h": 19.0}
+      ]
+    },
+    {
+      "id": "S7",
+      "name": "S7 · Hỏng bơm P-01 giờ cao điểm – chuyển bơm dự phòng",
+      "modes": ["a", "d"],
+      "duration_h": 24,
+      "summary": "07:45 biến tần VFD-01 báo lỗi (ngay sau lượt kiểm tra 07:30 của công nhân). Gateway chuyển sang P-02 trong vài giây. Phương án lịch cố định chỉ phát hiện ở lượt kiểm tra 16:30.",
+      "questions": ["Thời gian phát hiện sự cố của hai phương án khác nhau bao nhiêu? Hậu quả với áp lực điểm bất lợi?", "Khi chỉ còn một bơm, gateway có nên hạ biên an toàn để tránh quá tải không? Lập luận."],
+      "events": [
+        {"t_h": 7.75, "type": "pump_fault", "pump": 0},
+        {"t_h": 15.0, "type": "pump_repair", "pump": 0}
+      ]
+    },
+    {
+      "id": "S8",
+      "name": "S8 · Vỡ ống ban đêm – phát hiện bất thường lưu lượng",
+      "modes": ["a", "d"],
+      "duration_h": 24,
+      "summary": "02:30 một ống nhánh bị vỡ (≈10 m³/h ở 2 bar). Mức nâng cao so sánh lưu lượng ban đêm với dự báo để cảnh báo rò rỉ; điều khiển theo ngưỡng chỉ thấy áp lực vẫn ổn.",
+      "questions": ["Sau bao lâu thì cảnh báo bất thường xuất hiện? Ngưỡng k·σ ảnh hưởng thế nào đến báo động giả?", "Áp lực thấp hơn giảm lượng nước mất qua chỗ vỡ bao nhiêu? (so sánh hai phương án)"],
+      "events": [
+        {"t_h": 2.5, "type": "burst", "q_m3h": 10.0, "until_h": 10.0}
+      ]
+    },
+    {
+      "id": "S9",
+      "name": "S9 · Tổng hợp DOK3: mất mạng dài + clo giảm + mất nguồn",
+      "modes": ["a", "b", "c", "d"],
+      "duration_h": 48,
+      "summary": "Mất mạng 20 giờ (20:00 ngày 1 – 16:00 ngày 2). Trong lúc mất mạng: clo nước nguồn giảm còn 0,05 mg/L, nguồn cấp gián đoạn 4 giờ, kỹ thuật viên chỉnh tham số tại chỗ, trung tâm phát hành kịch bản mới. Gateway phải tự quyết định.",
+      "questions": [
+        "Gateway đã tự quyết định những gì khi không có trung tâm? Quyết định nào bạn cho là chưa tối ưu?",
+        "Kịch bản đã lưu thiếu thông tin gì mà trung tâm có (lịch cắt nước, trạng thái trạm lân cận...)?",
+        "Đề xuất bổ sung một quy tắc cho kịch bản offline và kiểm chứng bằng mô phỏng."
+      ],
+      "events": [
+        {"t_h": 20.0, "type": "link_down"},
+        {"t_h": 22.0, "type": "inflow_quality", "param": "cl", "value": 0.05, "until_h": 36.0},
+        {
+          "t_h": 26.0,
+          "type": "local_edit",
+          "patch": {"level.conserve_m": 1.6},
+          "by": "KTV tại trạm (HMI)",
+          "reason": "Lo ngại cạn bể"
+        },
+        {
+          "t_h": 28.0,
+          "type": "server_publish",
+          "patch": {"level.conserve_m": 1.4, "pressure.p_crit_target_bar": 1.55},
+          "by": "Điều độ viên trung tâm",
+          "reason": "Kịch bản mùa khô"
+        },
+        {"t_h": 30.0, "type": "supply", "factor": 0.0, "until_h": 34.0},
+        {"t_h": 40.0, "type": "link_up"},
+        {
+          "t_h": 41.0,
+          "type": "server_command",
+          "cmd": {
+            "type": "reset_safe_stop",
+            "args": {}
+          },
+          "ttl_s": 7200
+        }
+      ]
+    },
+    {
+      "id": "S10",
+      "name": "S10 · Một tuần vận hành – so sánh điện năng",
+      "modes": ["a"],
+      "duration_h": 168,
+      "summary": "Bảy ngày (có cuối tuần). Dùng để so sánh kWh, kWh/m³, số lần khởi động bơm và để mô hình dự báo học mẫu sử dụng theo giờ và ngày.",
+      "questions": [
+        "Sai số dự báo (MAPE) thay đổi thế nào qua các ngày? Cuối tuần ảnh hưởng ra sao?",
+        "Tính thời gian hoàn vốn biến tần nếu giá điện bình quân 2.000 đ/kWh và chi phí đầu tư 2 biến tần + gateway là 60 triệu đồng."
+      ],
+      "events": []
+    },
+    {
+      "id": "S0",
+      "name": "S0 · Tự do (tự tạo sự cố bằng bảng điều khiển)",
+      "modes": ["a", "b", "c", "d"],
+      "duration_h": 168,
+      "summary": "Không có sự kiện định sẵn. Dùng tab Sự cố để ngắt mạng, gây sự cố chất lượng, hỏng bơm... và quan sát gateway xử lý.",
+      "questions": [],
+      "events": []
+    }
+  ]
+}

@@ -1,0 +1,306 @@
+{
+  "note": "Danh mục thành phần trạm bơm ST-01: tham số vật lý và dải làm việc. 'live' là khóa giá trị thời gian thực trong mô phỏng.",
+  "components": [
+    {
+      "tag": "T-01",
+      "group": "Thủy lực",
+      "name": "Bể chứa nước sạch (bể ngầm/bán ngầm)",
+      "desc": "Bể bê tông cốt thép nhận nước từ ống cấp thành phố qua van phao, là nguồn hút cho cụm bơm và là bộ đệm chất lượng nước (trộn đều).",
+      "params": [
+        ["Kích thước trong", "8 × 6 × 4,2", "m"],
+        ["Diện tích đáy", "48", "m²"],
+        ["Mức tràn", "4,0", "m"],
+        ["Dung tích hữu ích (0,6–3,8 m)", "≈154", "m³"],
+        ["Thời gian lưu trung bình", "≈8–9", "h"],
+        ["Phân rã clo khối (k_b)", "0,4", "1/ngày"],
+        ["Lắng cặn (k_s)", "0,2", "1/h"]
+      ],
+      "range": "Mức làm việc 1,2–3,8 m; dừng bơm < 0,6 m; khóa an toàn < 0,5 m; phao cứng LSLL 0,35 m",
+      "live": ["level", "volume"]
+    },
+    {
+      "tag": "FV-01",
+      "group": "Thủy lực",
+      "name": "Van phao cấp nước vào bể",
+      "desc": "Van phao điều biến cơ khí: mở dần khi mức nước giảm dưới 3,8 m, mở hoàn toàn ở 3,4 m. Lưu lượng phụ thuộc áp lực ống cấp thành phố (giảm vào giờ cao điểm).",
+      "params": [
+        ["Lưu lượng cấp tối đa", "26", "m³/h"],
+        ["Mức đóng hoàn toàn", "3,8", "m"],
+        ["Dải điều biến", "0,4", "m"],
+        ["Hệ số cấp giờ cao điểm", "0,75–0,8", "–"]
+      ],
+      "range": "0–26 m³/h",
+      "live": ["q_in"]
+    },
+    {
+      "tag": "VX-01",
+      "group": "Thủy lực",
+      "name": "Van xả đáy bể",
+      "desc": "Van xả cặn/súc rửa bể, điều khiển từ gateway theo lệnh của trung tâm (quy trình khôi phục sau sự cố chất lượng).",
+      "params": [
+        ["Lưu lượng xả", "120", "m³/h"],
+        ["Cỡ van", "DN150", "–"]
+      ],
+      "range": "Đóng/Mở",
+      "live": ["drain_open"]
+    },
+    {
+      "tag": "P-01",
+      "group": "Thủy lực",
+      "name": "Bơm ly tâm trục ngang số 1 + biến tần VFD-01",
+      "desc": "Bơm ly tâm một tầng cánh, động cơ 5,5 kW, điều khiển tốc độ bằng biến tần. Đường đặc tính H = H0·(f/50)² − K·Q²; công suất trục theo luật tương tự.",
+      "params": [
+        ["Cột áp đóng van H0 @50 Hz", "44", "m"],
+        ["Hệ số đặc tính K", "0,015", "m/(m³/h)²"],
+        ["Điểm hiệu suất tốt nhất (BEP)", "24 m³/h · 35,4 m", "–"],
+        ["Hiệu suất bơm cực đại", "72", "%"],
+        ["Hiệu suất động cơ + biến tần", "88", "%"],
+        ["Công suất động cơ", "5,5", "kW"],
+        ["Dải tần số", "25–50", "Hz"],
+        ["Tốc độ tăng/giảm tần", "2,5", "Hz/s"]
+      ],
+      "range": "Q 0–38 m³/h; H 0–44 m; tần số 25–50 Hz; tối đa 6 lần khởi động/giờ",
+      "live": ["f0", "q0", "kw0", "run0"]
+    },
+    {
+      "tag": "P-02",
+      "group": "Thủy lực",
+      "name": "Bơm ly tâm trục ngang số 2 + biến tần VFD-02",
+      "desc": "Giống P-01. Hai bơm chạy luân phiên theo giờ chạy (bơm chính/bơm dự phòng) và ghép song song khi nhu cầu cao.",
+      "params": [
+        ["Cột áp đóng van H0 @50 Hz", "44", "m"],
+        ["Hệ số đặc tính K", "0,015", "m/(m³/h)²"],
+        ["Công suất động cơ", "5,5", "kW"],
+        ["Dải tần số", "25–50", "Hz"]
+      ],
+      "range": "Như P-01",
+      "live": ["f1", "q1", "kw1", "run1"]
+    },
+    {
+      "tag": "CV-01/02",
+      "group": "Thủy lực",
+      "name": "Van một chiều sau bơm",
+      "desc": "Ngăn dòng chảy ngược qua bơm đang dừng; trong mô hình thể hiện bằng ràng buộc Q ≥ 0.",
+      "params": [
+        ["Cỡ van", "DN80", "–"],
+        ["Áp lực danh định", "PN16", "–"]
+      ],
+      "range": "Q ≥ 0",
+      "live": []
+    },
+    {
+      "tag": "HT-01",
+      "group": "Thủy lực",
+      "name": "Bình tích áp màng (thủy khí)",
+      "desc": "Bình màng làm mềm dao động áp lực, cấp nước khi bơm ngủ đông. Khí nén đẳng nhiệt: V_khí = V·(p0+1)/(p+1).",
+      "params": [
+        ["Thể tích bình", "300", "L"],
+        ["Áp nạp trước", "1,8", "bar"],
+        ["Độ đàn hồi đường ống", "0,005", "m³/bar"]
+      ],
+      "range": "1,8–6,0 bar",
+      "live": ["ht_water_l"]
+    },
+    {
+      "tag": "PSV-01",
+      "group": "Thủy lực",
+      "name": "Van an toàn cơ khí (xả về bể)",
+      "desc": "Lớp bảo vệ cuối cùng, độc lập với điện tử: mở khi áp lực ống đẩy vượt 6,0 bar.",
+      "params": [
+        ["Áp lực mở", "6,0", "bar"],
+        ["Hệ số xả", "40", "m³/h/bar"]
+      ],
+      "range": "Đóng < 6,0 bar",
+      "live": ["q_relief"]
+    },
+    {
+      "tag": "MV-02",
+      "group": "Thủy lực",
+      "name": "Van điện đầu ra mạng lưới",
+      "desc": "Van bướm điện cách ly trạm khỏi mạng lưới khi dừng an toàn do chất lượng nước.",
+      "params": [
+        ["Cỡ van", "DN100", "–"],
+        ["Thời gian hành trình", "20", "s"]
+      ],
+      "range": "0–100 % mở",
+      "live": ["outlet_open"]
+    },
+    {
+      "tag": "MANG-LUOI",
+      "group": "Thủy lực",
+      "name": "Mạng lưới phân phối khu dân cư A (DMA-A)",
+      "desc": "≈2.400 người, 160 L/người/ngày, phần lớn hộ có bồn mái. Nhu cầu phụ thuộc áp lực (mô hình Wagner, như EPANET 2.2), rò rỉ theo FAVAD (Q = C·P^1,18).",
+      "params": [
+        ["Nhu cầu trung bình", "16", "m³/h"],
+        ["Chênh cao điểm bất lợi", "+4", "m"],
+        ["Tổn thất đến điểm bất lợi", "0,00111·Q²", "bar"],
+        ["Áp đủ cấp đủ nhu cầu", "1,0", "bar"],
+        ["Hệ số rò rỉ C", "0,7", "m³/h/bar^1,18"],
+        ["Dung tích bồn mái quy đổi", "300", "m³"]
+      ],
+      "range": "Áp tại điểm bất lợi ≥ 1,4 bar; áp đầu ra ≤ 4,0 bar",
+      "live": ["q_out", "p_crit"]
+    },
+    {
+      "tag": "PT-101",
+      "group": "Cảm biến",
+      "name": "Cảm biến áp lực đầu ra (điều khiển)",
+      "desc": "Áp lực kế điện tử màng gốm, 4–20 mA, dùng cho vòng điều khiển PI.",
+      "params": [
+        ["Dải đo", "0–10", "bar"],
+        ["Sai số", "±0,25 % FS", "–"],
+        ["Thời gian đáp ứng", "< 200", "ms"],
+        ["Tín hiệu lỗi (NAMUR NE43)", "< 3,6 mA", "–"]
+      ],
+      "range": "0–10 bar",
+      "live": ["pt101"]
+    },
+    {
+      "tag": "PT-102",
+      "group": "Cảm biến",
+      "name": "Cảm biến áp lực đầu ra (bảo vệ, dự phòng)",
+      "desc": "Cảm biến độc lập thứ hai cho lớp an toàn (cắt áp rất cao) và đối chiếu chéo với PT-101.",
+      "params": [
+        ["Dải đo", "0–10", "bar"],
+        ["Sai số", "±0,25 % FS", "–"],
+        ["Ngưỡng lệch PT-101/PT-102", "0,3 bar / 10 s", "–"]
+      ],
+      "range": "0–10 bar",
+      "live": ["pt102"]
+    },
+    {
+      "tag": "PI-101/102",
+      "group": "Cảm biến",
+      "name": "Đồng hồ áp lực cơ trên ống đẩy từng bơm",
+      "desc": "Đồng hồ kim Bourdon, mặt 100 mm, chỉ thị tại chỗ (không nối gateway). Dùng cho kiểm tra hiện trường và đối chiếu.",
+      "params": [
+        ["Dải đo", "0–10", "bar"],
+        ["Cấp chính xác", "1,6", "–"]
+      ],
+      "range": "0–10 bar",
+      "live": ["gauge0", "gauge1"]
+    },
+    {
+      "tag": "FT-101",
+      "group": "Cảm biến",
+      "name": "Đồng hồ lưu lượng điện từ đầu ra",
+      "desc": "Đo lưu lượng cấp vào mạng lưới, đầu vào cho đường đặt áp theo lưu lượng và phát hiện rò rỉ ban đêm.",
+      "params": [
+        ["Cỡ ống", "DN100", "–"],
+        ["Dải đo", "0–80", "m³/h"],
+        ["Sai số", "±0,5 %", "–"],
+        ["Ngưỡng cắt lưu lượng nhỏ", "0,3", "m³/h"]
+      ],
+      "range": "0–80 m³/h",
+      "live": ["ft101"]
+    },
+    {
+      "tag": "FT-100",
+      "group": "Cảm biến",
+      "name": "Đồng hồ lưu lượng nước vào bể",
+      "desc": "Đồng hồ Woltmann có đầu xung, dùng cân bằng nước và dự báo thời gian cạn bể.",
+      "params": [
+        ["Cỡ ống", "DN100", "–"],
+        ["Dải đo", "0–50", "m³/h"]
+      ],
+      "range": "0–50 m³/h",
+      "live": ["ft100"]
+    },
+    {
+      "tag": "LT-101",
+      "group": "Cảm biến",
+      "name": "Cảm biến mức siêu âm",
+      "desc": "Đo mức nước bể từ nắp bể. Phao cứng LSLL-101 (0,35 m) độc lập, nối thẳng mạch khởi động bơm.",
+      "params": [
+        ["Dải đo", "0–5", "m"],
+        ["Sai số", "±3", "mm"],
+        ["Phao chống cạn LSLL-101", "0,35 (reset 0,6)", "m"]
+      ],
+      "range": "0–5 m",
+      "live": ["lt101"]
+    },
+    {
+      "tag": "AIT-201",
+      "group": "Chất lượng nước",
+      "name": "Máy đo clo dư tự do (amperometric)",
+      "desc": "Lấy mẫu liên tục từ ống đẩy. QCVN 01-1:2018/BYT: clo dư tự do 0,2–1,0 mg/L.",
+      "params": [
+        ["Dải đo", "0–5", "mg/L"],
+        ["Sai số", "±0,03", "mg/L"],
+        ["Thời gian đáp ứng T90", "≈90", "s"],
+        ["Cảnh báo / Dừng", "<0,3 hoặc >0,8 / <0,2 hoặc >1,0", "mg/L"]
+      ],
+      "range": "Làm việc 0,3–0,8 mg/L",
+      "live": ["ait201"]
+    },
+    {
+      "tag": "AIT-202",
+      "group": "Chất lượng nước",
+      "name": "Máy đo độ đục (nephelometric)",
+      "desc": "QCVN 01-1:2018/BYT: độ đục ≤ 2 NTU.",
+      "params": [
+        ["Dải đo", "0–100", "NTU"],
+        ["Sai số", "±2 % hoặc ±0,02", "NTU"],
+        ["Thời gian đáp ứng", "≈30", "s"],
+        ["Cảnh báo / Dừng", "> 1,0 / > 2,0 (60 s)", "NTU"]
+      ],
+      "range": "Làm việc < 1,0 NTU",
+      "live": ["ait202"]
+    },
+    {
+      "tag": "AIT-203",
+      "group": "Chất lượng nước",
+      "name": "Máy đo pH (điện cực thủy tinh)",
+      "desc": "QCVN 01-1:2018/BYT: pH 6,0–8,5.",
+      "params": [
+        ["Dải đo", "0–14", "pH"],
+        ["Sai số", "±0,05", "pH"],
+        ["Cảnh báo / Dừng", "<6,5 hoặc >8,0 / <6,0 hoặc >8,5", "pH"]
+      ],
+      "range": "Làm việc 6,5–8,0",
+      "live": ["ait203"]
+    },
+    {
+      "tag": "CP-01",
+      "group": "Điều khiển",
+      "name": "Tủ điều khiển trạm",
+      "desc": "Gồm edge gateway, 2 biến tần, công tơ điện EM-101, UPS, router 4G và màn hình HMI tại chỗ. Mạch an toàn cứng (phao LSLL, rơ-le nhiệt) độc lập với phần mềm.",
+      "params": [
+        ["Nguồn", "3 pha 400 V", "–"],
+        ["UPS cho gateway + router", "4", "h"],
+        ["Cấp bảo vệ", "IP54", "–"],
+        ["Nhiệt độ làm việc", "0–50", "°C"]
+      ],
+      "range": "–",
+      "live": ["kw", "kwh"]
+    },
+    {
+      "tag": "GW-01",
+      "group": "Điều khiển",
+      "name": "Edge gateway (PLC/IoT gateway)",
+      "desc": "Thu thập dữ liệu chu kỳ 1 s, kiểm tra hợp lệ tín hiệu, lớp an toàn ưu tiên cao nhất, kịch bản điều khiển có phiên bản, bộ đệm lưu-và-chuyển, đồng bộ với máy chủ qua MQTT.",
+      "params": [
+        ["Chu kỳ quét", "1", "s"],
+        ["Gói dữ liệu đo xa", "10", "s"],
+        ["Nhịp tim (heartbeat)", "10", "s"],
+        ["Phát hiện mất mạng", "60", "s"],
+        ["Bộ đệm", "4.320 bản ghi (12 h) + nén", "–"],
+        ["Tốc độ phát lại", "20", "bản ghi/s"]
+      ],
+      "range": "–",
+      "live": ["gw_mode", "buffer"]
+    },
+    {
+      "tag": "RT-01",
+      "group": "Truyền thông",
+      "name": "Router 4G/LTE + kênh SMS dự phòng",
+      "desc": "Kết nối MQTT/TLS tới máy chủ điều hành; khi mất IP, cảnh báo nghiêm trọng gửi qua SMS tới tổ trực.",
+      "params": [
+        ["Độ trễ điển hình", "0,4", "s"],
+        ["Giao thức", "MQTT 3.1.1/5 trên TLS 1.2", "–"]
+      ],
+      "range": "–",
+      "live": ["online"]
+    }
+  ]
+}

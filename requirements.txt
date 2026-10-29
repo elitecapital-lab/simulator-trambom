@@ -1,0 +1,4 @@
+# Lõi mô phỏng chỉ dùng thư viện chuẩn Python 3.9+.
+# Các gói dưới đây cần cho biểu đồ báo cáo và kiểm thử.
+matplotlib>=3.5
+pytest>=7

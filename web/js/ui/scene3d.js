@@ -6,6 +6,9 @@ import { CSS2DObject, CSS2DRenderer } from 'three/addons/CSS2DRenderer.js';
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const css = (name, fallback) => (getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback);
 const PRIMARY = new Set(['T-01', 'P-01', 'P-02', 'FT-101', 'PT-101', 'MV-02', 'AIT-202', 'CP-01', 'CP-02', 'MPC-01', 'MANG-LUOI', 'LT-101']);
+const CTRL = new Set(['P-01', 'P-02', 'MV-02']); // thiết bị điều khiển TAY được – nhãn ưu tiên khi chồng nhau
+const B3 = (x0, y0, z0, x1, y1, z1) => new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1));
+const ovl = (a, b) => Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
 // Màu phân loại phạm vi thiết bị: hiện trạng / giải pháp đưa vào / khuyến nghị bổ sung
 const CONTAINERS = new Set(['CP-01', 'CP-02']);
 export const SCOPE_COLOR = { hien_trang: 0xa0703c, giai_phap: 0x7a5af5, khuyen_nghi: 0x0f9fb0 };
@@ -106,9 +109,13 @@ export class StationScene {
     const cv = this.renderer.domElement;
     cv.addEventListener('pointerdown', (e) => { this._down = [e.clientX, e.clientY]; this._setHover(null); });
     cv.addEventListener('pointerup', (e) => {
-      if (!this._down || Math.hypot(e.clientX - this._down[0], e.clientY - this._down[1]) > 5) return;
+      if (!this._down) return;
+      // kéo = người dùng tự xoay/dời camera: từ đó không tự đặt lại góc nhìn khi khung đổi
+      if (Math.hypot(e.clientX - this._down[0], e.clientY - this._down[1]) > 5) { this._moved = true; this._mv = (this._mv || 0) + 1; return; }
       this._pick(e);
     });
+    cv.addEventListener('wheel', () => { this._moved = true; this._mv = (this._mv || 0) + 1; }, { passive: true });
+    this.view0 = 'overview'; this._moved = false; // góc nhìn đặt sẵn đang dùng (null sau khi bay tới thiết bị)
     this._initHover();
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
@@ -197,20 +204,69 @@ export class StationScene {
     if (text !== tag) this.labels[tag].span.textContent = text;
     return obj;
   }
+  /**
+   * Chọn nhãn hiển thị rồi gỡ chồng chéo trên màn hình (gọi vài khung hình một lần, kể cả khi camera đang bay):
+   * xếp theo ưu tiên đang chọn/rê chuột > báo động > điều khiển được > chính > còn lại; nhãn đè lên nhãn đã đặt
+   * hoặc nằm dưới HUD/dock/thanh trên/bảng nổi (this.occluders) thì dời lên/xuống (nhãn chính tới hai bậc), không được thì ẩn
+   * (visibility: hidden – không nhận cú nhấp, vẫn đo được kích thước).
+   */
   _labelVisibility() {
-    const cam = this.camera.position;
+    const cam = this.camera, W = this._w || 1, H = this._h || 1, v = this._pc, cands = [];
+    const remeasure = (this._lv || 0) % 120 === 0; // phông chữ tải xong có thể đổi bề rộng
     for (const [tag, l] of Object.entries(this.labels)) {
-      const primary = PRIMARY.has(tag);
-      const near = cam.distanceTo(l.obj.position) < 9.5;
-      const show = this.labelMode === 2 || (this.labelMode === 1 && (primary || near) || l.div.classList.contains('alarm'));
-      l.div.classList.toggle('hide', !show);
+      const cl = l.div.classList, alarm = cl.contains('alarm');
+      const near = cam.position.distanceTo(l.obj.position) < 9.5;
+      const show = this.labelMode === 2 || (this.labelMode === 1 && (PRIMARY.has(tag) || near)) || alarm;
+      if (cl.contains('hide') === show) cl.toggle('hide', !show);
+      if (!show || cl.contains('ctl-hide') || cl.contains('scope-off')) { this._dcSet(l, false, 0); continue; }
+      v.setFromMatrixPosition(l.obj.matrixWorld).project(cam);
+      if (v.z < -1 || v.z > 1) continue;
+      const pr = tag === this._sel || tag === this._hover ? 0 : alarm ? 1 : CTRL.has(tag) ? 2 : PRIMARY.has(tag) ? 3 : 4;
+      cands.push({ l, pr, x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, dist: cam.position.distanceToSquared(l.obj.position) });
     }
+    // đọc kích thước (một lần dàn trang) chỉ cho nhãn vừa đổi chữ
+    for (const c of cands) {
+      const l = c.l;
+      if (l.w === undefined || l.dirty || remeasure) { const w = l.div.offsetWidth; if (w) { l.w = w; l.h = l.div.offsetHeight; l.dirty = false; } }
+      c.w = l.w ?? 8 * (l.div.textContent.length + 2); c.h = l.h ?? 20;
+    }
+    const occ = this.occluders ? this.occluders() : this._insetRects(W, H);
+    cands.sort((a, b) => a.pr - b.pr || a.dist - b.dist);
+    const placed = [], vp = { l: 0, t: 0, r: W, b: H };
+    for (const c of cands) {
+      const step = c.h + 3, a = c.w * c.h;
+      let dy = null, r0 = null;
+      for (const d of c.pr <= 3 ? [0, -step, step, -2 * step, 2 * step] : [0, -step, step]) {
+        const r = { l: c.x - c.w / 2 - 2, r: c.x + c.w / 2 + 2, t: c.y - c.h / 2 + d - 1, b: c.y + c.h / 2 + d + 1 };
+        // phần ra ngoài khung hoặc nằm dưới lớp giao diện
+        let hid = (r.r - r.l) * (r.b - r.t) - ovl(r, vp);
+        if (occ) for (const o of occ) hid += ovl(r, o);
+        if (hid > 0.1 * a) continue;
+        if (!r0) r0 = { r, d };
+        if (placed.some((p) => ovl(r, p) > 4)) continue;
+        dy = d; placed.push(r); break;
+      }
+      // nhãn báo động / đang chọn: không ẩn vì chồng nhãn khác, chỉ ẩn khi bị lớp giao diện che
+      if (dy === null && c.pr <= 1 && r0) { dy = r0.d; placed.push(r0.r); }
+      this._dcSet(c.l, dy === null, dy ?? 0);
+    }
+  }
+  _dcSet(l, hid, dy) {
+    if (l.dc !== hid) { l.dc = hid; l.div.classList.toggle('dc', hid); }
+    if (l.dy !== dy) { l.dy = dy; l.div.style.translate = dy ? `0 ${dy}px` : ''; }
+  }
+  /** Vùng bị che theo app.insets khi không có hàm occluders (HUD trái, dock phải, thanh trên, dock dưới). */
+  _insetRects(W, H) {
+    const I = this.insX;
+    if (!I) return null;
+    const r = Math.max(I.r, I.sr || 0), b = Math.max(I.b, I.sb || 0);
+    return [{ l: 0, t: 0, r: W, b: I.t }, { l: 0, t: 0, r: I.l, b: H }, { l: W - r, t: 0, r: W, b: H }, { l: 0, t: H - b, r: W, b: H }].filter((o) => o.r > o.l && o.b > o.t);
   }
   setLabel(tag, text, alarm = false) {
     const l = this.labels[tag];
     if (!l) return;
-    if (l.last !== text) { l.span.textContent = text; l.last = text; if (tag === this._hover) this._tipText(); }
-    l.div.classList.toggle('alarm', alarm);
+    if (l.last !== text) { l.span.textContent = text; l.last = text; l.dirty = true; if (tag === this._hover) this._tipText(); }
+    if (l.div.classList.contains('alarm') !== alarm) { l.div.classList.toggle('alarm', alarm); l.dirty = true; }
   }
   /** Ẩn/hiện nhãn 3D của một thiết bị (khi dấu điều khiển TAY thay chỗ nhãn). */
   setLabelHidden(tag, on) { const l = this.labels[tag]; if (l) l.div.classList.toggle('ctl-hide', Boolean(on)); }
@@ -423,7 +479,8 @@ export class StationScene {
     this.flows.outlet = new FlowPath(S, hdr, { radius: 0.055 });
     // ---- bảng phân tích chất lượng nước ----
     this._box(3.2, 1.6, 0.06, this.mat.cabinet, 5.8, 1.75, -4.52);
-    this._pipe([V(5.8, 2.2, 0), V(5.8, 2.2, -4.3), V(5.8, 2.55, -4.3)], 0.015, this.mat.steel);
+    // ống lấy mẫu đi sát sàn rồi lên đáy máy phân tích (không vắt ngang trước màn hình khi nhìn bảng phân tích)
+    this._pipe([V(5.8, 2.2, 0), V(5.8, 0.06, -0.05), V(5.8, 0.06, -4.42), V(5.8, 1.38, -4.42)], 0.015, this.mat.steel);
     this.aitScreens = {};
     [['AIT-201', 4.7], ['AIT-202', 5.8], ['AIT-203', 6.9]].forEach(([tag, x]) => {
       this._box(0.8, 0.95, 0.22, this.mat.cabinet, x, 1.85, -4.38, { tag });
@@ -506,13 +563,18 @@ export class StationScene {
       this.houses.push({ fill, base: hill + h + 0.2 });
     });
     this._label('MANG-LUOI', V(29, 1.2 + 7.8 + 1.6, 5));
+    // Góc nhìn đặt sẵn. Ngoài trời (fit): vùng cần vừa khung + hướng nhìn [tỉ lệ vùng trống rộng/cao, phương vị, góc ngẩng]
+    // (độ; nội suy theo tỉ lệ: dải rộng → nhìn thẳng, thấp; gần vuông → chéo, cao) và aeP khi vùng trống dọc (điện thoại
+    // đứng: nhìn dọc trục dài của trạm từ phía bể). Khoảng cách và đích tính theo vùng trống giữa HUD/dock/thanh trên.
+    // Trong nhà (pos/target, posP/targetP cho khung dọc): điểm đặt cố định, tia nhìn đi phía trên/sau ống góp đẩy (y 2,2, z 0)
+    // để không bị ống che; không lùi theo tỉ lệ khung.
     this.camPresets = {
-      overview: [V(0.5, 11.5, 17.5), V(-1.5, 1.0, 0)],
-      tank: [V(-8, 8.5, 12), V(-8, 2, 0)],
-      pumps: [V(4.5, 3.6, 6), V(1.4, 0.9, 0)],
-      cabinet: [V(6.3, 1.65, 0.9), V(9.0, 1.4, -3.4)],
-      quality: [V(5.8, 2.2, 0.2), V(5.8, 1.9, -4.4)],
-      network: [V(14, 12, 24), V(22, 2.5, 0)],
+      overview: { fit: B3(-14, -0.2, -5.6, 11.2, 6, 5.2), ae: [[1.2, -30, 46], [2.6, -14, 30]], aeP: [-90, 52] },
+      tank: { fit: B3(-14, -0.2, -5.6, -3.5, 5.2, 3.6), ae: [[1.2, -8, 36], [2.6, 0, 28]], aeP: [-20, 48] },
+      pumps: { fit: B3(-0.8, -0.1, -2.8, 3.8, 2.4, 2.4), ae: [[1.2, 30, 30], [2.6, 27, 24]], aeP: [60, 42] },
+      cabinet: { pos: V(5.7, 3.0, -0.42), target: V(9.0, 1.4, -3.5), posP: V(4.4, 6.6, -0.6), targetP: V(8.9, 1.3, -3.2) },
+      quality: { pos: V(5.8, 3.3, -0.6), target: V(5.8, 1.95, -4.4), posP: V(5.8, 8.6, 2.4) },
+      network: { fit: B3(12, -0.2, -7, 32, 12, 8), ae: [[1.2, -20, 30], [2.6, -18, 22]], aeP: [-35, 40] },
     };
   }
 
@@ -585,16 +647,31 @@ export class StationScene {
     this._applyProj();
   }
   /**
-   * Phần khung bị lớp giao diện che (pixel): { l, r, t, b }. Tâm chiếu của camera dời vào giữa vùng còn trống
-   * (setViewOffset) để trạm không nằm dưới HUD/dock; lần đầu nhận thì đặt camera tổng quan vừa khung.
+   * Phần khung bị lớp giao diện che (pixel): { l, r, t, b } (+ sb, sr: tấm biểu đồ / khung bên phải – chỉ để gỡ chồng nhãn).
+   * Tâm chiếu của camera dời vào giữa vùng còn trống (setViewOffset) để trạm không nằm dưới HUD/dock. Lần đầu nhận thì
+   * đặt góc nhìn tổng quan vừa khung; về sau khung đổi nhiều (thu gọn HUD, đổi cỡ cửa sổ, máy tính ↔ điện thoại) thì
+   * đặt lại góc nhìn đang chọn – chỉ khi người dùng chưa tự xoay/thu phóng kể từ lần đặt trước.
    */
   setInsets(ins) {
-    const k = [ins.l, ins.r, ins.t, ins.b].map((v) => Math.round(v)).join(',');
+    this.insX = ins;
+    const k = [ins.l, ins.r, ins.t, ins.b, this._w, this._h].map((v) => Math.round(v || 0)).join(',');
     if (k === this._insKey) return;
-    const first = this._insKey === undefined;
+    const first = this._insKey === undefined, prev = this.ins, sz = this._fitSz;
     this._insKey = k; this.ins = { l: ins.l, r: ins.r, t: ins.t, b: ins.b };
     this._applyProj();
-    if (first) { const [p, t] = this._fit(this.camPresets.overview); this.camera.position.copy(p); this.controls.target.copy(t); this.controls.update(); }
+    if (first) { this._refit(true); return; }
+    const resized = !sz || sz[0] !== this._w || sz[1] !== this._h;
+    const big = prev && Math.max(Math.abs(prev.l - ins.l), Math.abs(prev.r - ins.r), Math.abs(prev.t - ins.t), Math.abs(prev.b - ins.b)) >= 40;
+    if (resized || big) this._refit(resized);
+  }
+  /** Đặt lại góc nhìn đặt sẵn đang dùng cho vừa khung hiện tại (now: tức thì; không thì bay nhanh 0,6 s). */
+  _refit(now) {
+    if (!this.view0 || this._moved || !this._w) return;
+    const v = this._presetView(this.view0);
+    if (!v) return;
+    this._fitSz = [this._w, this._h]; this._rev = null; // khung đổi: không trả camera về chỗ cũ khi đóng tấm trượt
+    if (now) { this.tween = null; this.camera.position.copy(v[0]); this.controls.target.copy(v[1]); this.controls.update(); }
+    else this.tween = { t: 0, dur: 0.6, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: v[0], t1: v[1] };
   }
   _applyProj() {
     const w = this._w, h = this._h, I = this.ins, cam = this.camera;
@@ -608,12 +685,87 @@ export class StationScene {
     }
     cam.updateProjectionMatrix();
   }
-  /** Điểm đặt camera của một góc nhìn, lùi xa hơn khi vùng trống hẹp/dọc (điện thoại) để vẫn thấy đủ cảnh. */
-  _fit(p) {
+  /** Tỉ lệ rộng/cao của vùng trống (khung trừ HUD, dock, thanh trên). */
+  _freeAspect() {
     const I = this.ins || { l: 0, r: 0, t: 0, b: 0 };
-    const w = Math.max(1, (this._w || 1) - I.l - I.r), hh = Math.max(1, (this._h || 1) - I.t - I.b);
-    const f = clamp(Math.pow(1.6 / (w / hh), 0.9), 1, 2.6);
-    return [p[1].clone().add(p[0].clone().sub(p[1]).multiplyScalar(f)), p[1].clone()];
+    return Math.max(1, (this._w || 1) - I.l - I.r) / Math.max(1, (this._h || 1) - I.t - I.b);
+  }
+  /** [vị trí camera, đích] của một góc nhìn đặt sẵn theo khung hiện tại. */
+  _presetView(name) {
+    const P = this.camPresets[name];
+    if (!P) return null;
+    const A = this._freeAspect(), port = A < 0.95;
+    if (P.pos) return [((port && P.posP) || P.pos).clone(), ((port && P.targetP) || P.target).clone()];
+    let [az, el] = port && P.aeP ? P.aeP : P.ae[0].slice(1);
+    if (!port) { const [a0, z0, e0] = P.ae[0], [a1, z1, e1] = P.ae[1], k = clamp((A - a0) / (a1 - a0), 0, 1); az = z0 + (z1 - z0) * k; el = e0 + (e1 - e0) * k; }
+    const r = Math.PI / 180, dir = V(Math.sin(az * r) * Math.cos(el * r), Math.sin(el * r), Math.cos(az * r) * Math.cos(el * r));
+    const pts = this._fitPoints(P.fit), c = P.fit.getCenter(new THREE.Vector3());
+    if (pts.length) { c.set(0, 0, 0); for (const p of pts) c.add(p); c.multiplyScalar(1 / pts.length); }
+    return this._solveFit(pts, dir, c) || [c.clone().addScaledVector(dir, 30), c];
+  }
+  /** Điểm (thế giới) phải nằm trong khung: góc hộp bao của từng mesh có tâm trong vùng (cắt theo vùng) + điểm neo nhãn. */
+  _fitPoints(region) {
+    this._fitCache = this._fitCache || new Map();
+    let pts = this._fitCache.get(region);
+    if (pts) return pts;
+    pts = [];
+    const seen = new Set(), b = new THREE.Box3(), c = new THREE.Vector3();
+    const add = (x, y, z) => { const k = `${Math.round(x * 10)},${Math.round(y * 10)},${Math.round(z * 10)}`; if (!seen.has(k)) { seen.add(k); pts.push(V(x, y, z)); } };
+    this.scene.updateMatrixWorld(true);
+    this.scene.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || o === this.ground || o === this.selMesh) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+      if (!region.containsPoint(b.getCenter(c))) return;
+      b.intersect(region);
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) add(x, y, z);
+    });
+    for (const l of Object.values(this.labels)) { const p = l.obj.position; if (region.containsPoint(p)) add(p.x, p.y, p.z); }
+    this._fitCache.set(region, pts);
+    return pts;
+  }
+  /**
+   * Camera nhìn theo hướng dir sao cho mọi điểm pts nằm trong vùng trống [ins.l+m, W−ins.r−m] × [ins.t+m, H−ins.b−m]
+   * (lề m ≈ 7 %): dò khoảng cách nhỏ nhất bằng chia đôi với phép chiếu thật (gồm dời tâm chiếu), rồi dời đích trong
+   * mặt phẳng ảnh để khối chiếu nằm giữa vùng trống; lặp vài lần. Trả về [vị trí, đích].
+   */
+  _solveFit(pts, dir, target) {
+    const W = this._w, H = this._h;
+    if (!W || !H || !pts.length) return null;
+    const I = this.ins || { l: 0, r: 0, t: 0, b: 0 };
+    const fw = Math.max(60, W - I.l - I.r), fh = Math.max(60, H - I.t - I.b);
+    const mx = Math.max(12, fw * 0.07), my = Math.max(10, fh * 0.07);
+    const FL = I.l + mx, FR = Math.max(FL + 20, W - I.r - mx), FT = I.t + my, FB = Math.max(FT + 20, H - I.b - my);
+    const cam = this._fcam || (this._fcam = new THREE.PerspectiveCamera());
+    cam.copy(this.camera, false);
+    const n = dir.clone().normalize(), t = target.clone(), v = new THREE.Vector3(), ax = new THREE.Vector3(), ay = new THREE.Vector3();
+    const dmin = this.controls.minDistance, dmax = this.controls.maxDistance;
+    const proj = (d) => {
+      cam.position.copy(t).addScaledVector(n, d); cam.lookAt(t); cam.updateMatrixWorld(true);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const p of pts) {
+        v.copy(p).applyMatrix4(cam.matrixWorldInverse);
+        if (v.z > -cam.near) return null; // điểm ở sau camera: còn quá gần
+        v.applyMatrix4(cam.projectionMatrix);
+        const x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      return [x0, x1, y0, y1];
+    };
+    const fits = (d) => { const s = proj(d); return Boolean(s) && s[0] >= FL && s[1] <= FR && s[2] >= FT && s[3] <= FB; };
+    let d = dmax;
+    for (let it = 0; ; it++) {
+      if (fits(dmax)) { let lo = dmin, hi = dmax; for (let k = 0; k < 22; k++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; } d = hi; } else d = dmax;
+      const s = proj(d);
+      if (!s || it === 3) break;
+      const ex = (FL + FR - s[0] - s[1]) / 2, ey = (FT + FB - s[2] - s[3]) / 2;
+      if (Math.abs(ex) < 2 && Math.abs(ey) < 2) break;
+      // số mét trên một pixel ở độ sâu của đích (khung chiếu đầy đủ khi có dời tâm chiếu)
+      const k = 2 * d * Math.tan(cam.fov * Math.PI / 360) / (cam.view && cam.view.enabled ? cam.view.fullHeight : H);
+      ax.setFromMatrixColumn(cam.matrixWorld, 0); ay.setFromMatrixColumn(cam.matrixWorld, 1);
+      t.addScaledVector(ax, -ex * k).addScaledVector(ay, ey * k);
+    }
+    return [t.clone().addScaledVector(n, d), t];
   }
   /** Thiết bị dưới điểm (x, y) theo pixel trong khung; null nếu không trúng. */
   _hitAt(x, y) {
@@ -635,10 +787,10 @@ export class StationScene {
     if (tag && this.onPick) this.onPick(tag);
   }
   goto(name) {
-    const p = this.camPresets[name];
-    if (!p) return;
-    const [p1, t1] = this._fit(p);
-    this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1, t1 };
+    const v = this._presetView(name);
+    if (!v) return;
+    this.view0 = name; this._moved = false; this._fitSz = [this._w, this._h]; this._rev = null;
+    this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: v[0], t1: v[1] };
   }
 
   // ---------- rê chuột: tô sáng + chú thích ----------
@@ -774,8 +926,31 @@ export class StationScene {
     const el = clamp(Math.asin(clamp(dir.y / Math.max(1e-6, dir.length()), -1, 1)), 0.32, tag in FACING ? 0.5 : 0.85);
     const p1 = V(c.x + Math.sin(az) * Math.cos(el) * dist, c.y + Math.sin(el) * dist, c.z + Math.cos(az) * Math.cos(el) * dist);
     p1.y = Math.max(0.6, p1.y);
+    this.view0 = null; this._rev = null; // không tự đặt lại góc nhìn đặt sẵn khi khung đổi
     this.tween = { t: 0, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1, t1: c };
     return true;
+  }
+  /**
+   * Dời camera song song mặt phẳng ảnh (giữ hướng và khoảng cách) để thân thiết bị hiện tại điểm (x, y) trên màn hình –
+   * dùng khi tấm trượt điều khiển trên điện thoại che thiết bị. unreveal() trả camera về nếu người dùng chưa tự xoay/thu phóng.
+   */
+  reveal(tag, x, y) {
+    const p = this.bodyPos(tag, {}), c = this._anchor.get('body:' + tag) || this._anchorOf(tag);
+    if (!c || p.behind) return false;
+    const W = this._w || 1, H = this._h || 1, cam = this.camera;
+    const depth = -this._pv.copy(c).applyMatrix4(cam.matrixWorldInverse).z;
+    const k = 2 * depth * Math.tan(cam.fov * Math.PI / 360) / (cam.view && cam.view.enabled ? cam.view.fullHeight : H);
+    const ax = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0), ay = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+    const d = ax.multiplyScalar((p.x - clamp(x, 0, W)) * k).add(ay.multiplyScalar((y - p.y) * k));
+    this._rev = { p: cam.position.clone(), t: this.controls.target.clone(), mv: this._mv || 0 };
+    this.tween = { t: 0, dur: 0.5, p0: cam.position.clone(), t0: this.controls.target.clone(), p1: cam.position.clone().add(d), t1: this.controls.target.clone().add(d) };
+    return true;
+  }
+  unreveal() {
+    const r = this._rev;
+    this._rev = null;
+    if (!r || (this._mv || 0) !== r.mv) return;
+    this.tween = { t: 0, dur: 0.5, p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: r.p, t1: r.t };
   }
   /** Điểm neo của thiết bị: vị trí nhãn 3D nếu có, nếu không là tâm hộp bao các mesh. */
   _anchorOf(tag) {
@@ -804,6 +979,22 @@ export class StationScene {
     if (!p) return this.screenPos(tag, out);
     return this.project(p, out);
   }
+  /** Hộp bao của thiết bị trên màn hình (pixel trong khung): { l, t, r, b }; null nếu có góc ở sau camera. */
+  screenRect(tag, out = {}) {
+    const b = this._boxOf(tag), cam = this.camera, v = this._pv;
+    if (b.isEmpty()) return null;
+    const W = this._w || this.el.clientWidth, H = this._h || this.el.clientHeight, mn = b.min.clone(), mx = b.max.clone();
+    let l = Infinity, r = -Infinity, t = Infinity, bt = -Infinity;
+    for (let k = 0; k < 8; k++) {
+      v.set(k & 1 ? mx.x : mn.x, k & 2 ? mx.y : mn.y, k & 4 ? mx.z : mn.z).applyMatrix4(cam.matrixWorldInverse);
+      if (v.z > -cam.near) return null;
+      v.applyMatrix4(cam.projectionMatrix);
+      const x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H;
+      l = Math.min(l, x); r = Math.max(r, x); t = Math.min(t, y); bt = Math.max(bt, y);
+    }
+    out.l = l; out.r = r; out.t = t; out.b = bt;
+    return out;
+  }
   project(p, out = {}) {
     const W = this._w || this.el.clientWidth, H = this._h || this.el.clientHeight;
     const v = this._pv.copy(p).applyMatrix4(this.camera.matrixWorldInverse);
@@ -822,7 +1013,7 @@ export class StationScene {
     this.anim.t += dt;
     if (this.tween) {
       const tw = this.tween;
-      tw.t = Math.min(1, tw.t + dt / 0.9);
+      tw.t = Math.min(1, tw.t + dt / (tw.dur || 0.9));
       const k = tw.t < 0.5 ? 2 * tw.t * tw.t : 1 - Math.pow(-2 * tw.t + 2, 2) / 2;
       this.camera.position.lerpVectors(tw.p0, tw.p1, k);
       this.controls.target.lerpVectors(tw.t0, tw.t1, k);
@@ -845,7 +1036,7 @@ export class StationScene {
       this.selMesh.material.opacity = 0.65 + 0.3 * Math.sin(this.anim.t * 4);
     }
     this._lv = (this._lv || 0) + 1;
-    if (this._lv % 10 === 0) this._labelVisibility();
+    if (this._lv % 5 === 0) this._labelVisibility();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);

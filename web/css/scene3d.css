@@ -27,6 +27,10 @@
 .tag3d.hl { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 3px 12px color-mix(in srgb, var(--accent) 30%, transparent); }
 .tag3d.hl b { color: var(--accent); }
 .tag3d.ctl-hide { display: none; }
+/* gỡ chồng nhãn (scene3d._labelVisibility): nhãn bị nhường chỗ vẫn đo được nhưng không hiện, không nhận cú nhấp */
+.tag3d.dc { visibility: hidden; pointer-events: none; }
+/* tên thiết bị trên nhãn: đủ tương phản (≥ 4,5:1) ở cả giao diện sáng và tối */
+.tag3d b { color: var(--ink-2); }
 
 /* ---------- chú thích khi rê chuột ---------- */
 .s3d-tip {
@@ -55,6 +59,8 @@
   border: 1px solid var(--c3d-edge); border-radius: 10px; box-shadow: var(--c3d-card-shadow); will-change: transform;
   scrollbar-width: thin;
 }
+.c3d-card:focus { outline: none; }
+.c3d-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .c3d-card .btn { min-height: 30px; }
 .c3d-card .btn:disabled, .c3d-mk button:disabled, .c3d-card input:disabled { opacity: 0.42; cursor: not-allowed; }
 .c3d-card .btn:disabled:hover { border-color: var(--line); }
@@ -79,9 +85,17 @@
 .c3d-pill.wait { background: var(--warning); color: #241900; border-color: transparent; }
 .c3d-pill.info { background: #b7d3f6; color: #0b0b0b; border-color: transparent; }
 .c3d-pill.fault { background: var(--critical); color: #fff; border-color: transparent; }
-.c3d-where { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 12px; border-bottom: 1px solid var(--line-2); }
-.c3d-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
-.c3d-seg button { border: 0; background: none; padding: 2px 11px; min-height: 24px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
+/* vị trí ra lệnh nằm trong đầu thẻ (luôn thấy khi cuộn); giả lập trung tâm → dải xanh */
+.c3d-where { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px -8px -8px -12px; padding: 5px 8px 5px 12px; border-top: 1px solid var(--line-2); }
+.c3d-wl { display: grid; flex: 1 1 auto; min-width: 0; line-height: 1.15; }
+.c3d-org { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c3d-card.remote { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.c3d-card.remote .c3d-head { box-shadow: inset 0 3px 0 var(--accent); }
+.c3d-card.remote .c3d-where { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.c3d-card.remote .c3d-org { color: var(--accent); font-weight: 600; }
+.c3d-card.remote .c3d-seg button.on { background: var(--accent); color: var(--accent-ink); }
+.c3d-seg { flex: none; display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.c3d-seg button { white-space: nowrap; border: 0; background: none; padding: 2px 11px; min-height: 24px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
 .c3d-seg button + button { border-left: 1px solid var(--line); }
 .c3d-seg button.on { background: var(--ink); color: var(--surface); font-weight: 600; }
 .c3d-k { font: 600 11px/1.2 var(--f-label); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
@@ -124,7 +138,9 @@
 .btn.c3d-amber { background: var(--c3d-amber); border-color: color-mix(in srgb, var(--c3d-amber) 70%, #000); color: var(--c3d-amber-ink); font-weight: 700; }
 .btn.c3d-amber:hover { border-color: var(--c3d-amber-ink); }
 .c3d-hint, .c3d-warn { margin: 0; padding: 6px 9px; border-radius: 5px; font-size: 12px; line-height: 1.35; border-left: 3px solid var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--ink); }
-.c3d-hint { border-left-color: var(--c3d-amber); font-weight: 600; }
+.c3d-hint { border-left-color: var(--c3d-amber); font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 6px 10px; flex-wrap: wrap; }
+.c3d-hint .btn { font-weight: 700; }
+.c3d-warn.info { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .c3d-permhead {
   display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; padding: 5px 9px; border-radius: 5px; cursor: pointer; font-size: 12px;
   border: 1px solid var(--line-2); border-left: 3px solid var(--good); background: none; color: var(--ink-2);
@@ -137,6 +153,7 @@
 .c3d-perm li::before { content: "✓"; color: var(--good-ink); font-weight: 700; }
 .c3d-perm li.no { color: var(--ink); }
 .c3d-perm li.no::before { content: "✗"; color: var(--critical); }
+.c3d-perm li.info::before { content: "i"; color: var(--accent); font: italic 700 12px/1.35 Georgia, "Times New Roman", serif; text-align: center; }
 .c3d-last { flex: 1; min-width: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 3px 6px; align-items: center; font-size: 12px; }
 .c3d-last .mono { font-size: 11.5px; }
 .c3d-lastt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
@@ -147,13 +164,25 @@
 .c3d-foot { display: flex; align-items: center; gap: 10px; padding: 7px 12px 9px; }
 .c3d-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
-/* bảng nổi thành tấm trượt từ đáy khi khung hẹp */
-.c3d-card.sheet {
-  left: 8px; right: 8px; top: auto; bottom: calc(var(--dock-h, 0px) + 8px); width: auto; max-width: none; max-height: min(calc(100% - var(--topbar-h, 0px) - var(--dock-h, 0px) - 24px), 520px) !important; transform: none !important;
-  border-radius: 12px; animation: c3d-sheet 0.22s ease-out;
+/* bảng nổi thành tấm trượt từ đáy trên điện thoại (cả khi nằm ngang). Tên lớp riêng c3d-sheet: không trùng .sheet
+   (bảng biểu đồ) của app.css. bottom / max-height do control3d.js đặt theo dải HUD, dock và tấm biểu đồ. */
+.c3d-card.c3d-sheet {
+  left: calc(8px + var(--sl, 0px)); right: calc(8px + var(--sr, 0px)); top: auto; bottom: calc(var(--dock-h, 0px) + 8px); width: auto; max-width: none; transform: none !important;
+  max-height: min(calc(100% - var(--topbar-h, 0px) - var(--hud-h, 0px) - var(--dock-h, 0px) - 16px), 560px); border-radius: 12px; animation: c3d-sheet 0.22s ease-out;
 }
-.c3d-card.sheet .c3d-head { border-radius: 12px 12px 0 0; }
-.c3d-card.sheet .c3d-head::before { content: ""; position: absolute; left: 50%; top: 4px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line); }
+.c3d-card.c3d-sheet.land { left: auto; width: min(440px, calc(100% - 16px)); }
+.c3d-card.c3d-sheet.land.lft { left: calc(8px + var(--sl, 0px)); right: auto; }
+.c3d-card.c3d-sheet.land .c3d-hsub { display: none; }
+/* điện thoại nằm ngang (thấp): đầu thẻ gọn một hàng + hàng vị trí ra lệnh, để khối lệnh vẫn nằm trong khung */
+.c3d-card.c3d-sheet.land .c3d-head { grid-template-columns: minmax(0, 1fr) auto auto; padding: 9px 6px 6px 12px; }
+.c3d-card.c3d-sheet.land .c3d-name { grid-row: 1; grid-column: 1; }
+.c3d-card.c3d-sheet.land .c3d-pill { grid-row: 1; grid-column: 2; }
+.c3d-card.c3d-sheet.land .c3d-hbtns { grid-row: 1; grid-column: 3; }
+.c3d-card.c3d-sheet.land .c3d-where { margin: 2px -6px -6px -12px; padding: 3px 6px 3px 12px; }
+.c3d-card.c3d-sheet.land .c3d-ctl { padding: 6px 12px; gap: 5px; }
+.c3d-card.c3d-sheet .c3d-head { border-radius: 12px 12px 0 0; padding-top: 11px; }
+.c3d-card.c3d-sheet .c3d-head::before { content: ""; position: absolute; left: 50%; top: 4px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line); }
+.c3d-card.c3d-sheet .c3d-ctl { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 
 /* ---------- gợi ý thiết bị ngoài khung nhìn ---------- */
 .c3d-off {
@@ -185,6 +214,13 @@
 .c3d-mk.closed { border-color: var(--critical); } .c3d-mk.closed .c3d-mk-dot { background: var(--critical); }
 .c3d-mk.fault { border-color: var(--critical); } .c3d-mk.fault .c3d-mk-dot { background: var(--critical); animation: c3d-blink 0.8s steps(2, jump-none) infinite; }
 .c3d-mk.fault .c3d-mk-open span { color: var(--critical); font-weight: 700; }
+.c3d-mk.remote { border-style: dashed; }
+/* dấu bị dời vào vùng trống vì thiết bị nằm dưới HUD/dock: mũi tên trong dấu chỉ về phía thiết bị */
+.c3d-mk-edge { display: none; flex: none; align-self: center; width: 0; height: 0; border: 5px solid transparent; }
+.c3d-mk[data-edge="r"] .c3d-mk-edge { display: block; border-left-color: var(--accent); margin: 0 5px 0 0; }
+.c3d-mk[data-edge="l"] .c3d-mk-edge { display: block; order: -1; border-right-color: var(--accent); margin: 0 0 0 5px; }
+.c3d-mk[data-edge="t"] .c3d-mk-edge { display: block; border-bottom-color: var(--accent); margin: -5px 7px 0 0; }
+.c3d-mk[data-edge="b"] .c3d-mk-edge { display: block; border-top-color: var(--accent); margin: 5px 7px 0 0; }
 
 /* ---------- khung hổ phách khi trạm ở chế độ TAY ---------- */
 .c3d-vig {
@@ -193,7 +229,10 @@
 }
 .c3d-vig[hidden] { display: none; }
 .c3d-vg-tab {
-  position: absolute; top: calc(var(--topbar-h, 0px) + var(--banner-h, 0px) + 8px + var(--c3d-tab-top, 0px)); left: 0; right: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+  /* trong vùng trống như dải chế độ (.banner): sau HUD, trước dock; dời khi khung bên phải mở */
+  --vg-l: calc(2 * var(--edge, 10px) + var(--hud-w, 0px) + var(--sl, 0px)); --vg-r: calc(2 * var(--edge, 10px) + var(--dock-w, 0px) + var(--sr, 0px));
+  position: absolute; top: calc(var(--topbar-h, 0px) + var(--banner-h, 0px) + 8px + var(--c3d-tab-top, 0px)); left: var(--vg-l); right: var(--vg-r); margin: 0 auto; width: max-content;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - var(--vg-l) - var(--vg-r));
   padding: 5px 6px 6px 12px; pointer-events: auto; border-radius: 0 0 10px 10px; background: var(--c3d-amber); color: var(--c3d-amber-ink);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
@@ -208,9 +247,15 @@
 .c3d-vg-btn:hover { background: #fff; }
 .c3d-vg-tab { border-radius: 10px; }
 .c3d-vig.float .c3d-vg-tab { border-radius: 10px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c3d-amber) 30%, transparent), 0 6px 18px rgba(0, 0, 0, 0.2); }
-.c3d-vig.narrow .c3d-vg-tab { top: auto; bottom: calc(var(--dock-h, 0px) + 8px); border-radius: 10px; padding: 4px 5px 4px 10px; gap: 8px; }
+body.side-open .c3d-vg-tab { --vg-r: calc(3 * var(--edge, 10px) + var(--dock-w, 0px) + var(--side-w, 420px) + var(--sr, 0px)); }
+/* điện thoại: trên dock dưới (và trên tấm biểu đồ nếu đang mở) */
+.c3d-vig.narrow .c3d-vg-tab { --vg-l: calc(8px + var(--sl, 0px)); --vg-r: calc(8px + var(--sr, 0px)); top: auto; bottom: calc(var(--dock-h, 0px) + 8px); border-radius: 10px; padding: 4px 5px 4px 10px; gap: 8px; }
+body.sheet-open .c3d-vig.narrow .c3d-vg-tab { bottom: calc(var(--dock-h, 0px) + var(--sheet-h, 0px) + 12px); }
 .c3d-vig.narrow .c3d-vg-txt small { display: none; }
 .c3d-vig.narrow.sheet-open .c3d-vg-tab { display: none; }
+/* điện thoại nằm ngang: tấm trượt neo phải, nhãn TAY vẫn hiện ở góc trái */
+.c3d-vig.narrow.land.sheet-open .c3d-vg-tab { display: flex; margin: 0; right: auto; max-width: calc(100% - min(440px, 100% - 16px) - 32px); }
+.c3d-vig.narrow.land.sheet-open.lft .c3d-vg-tab { left: auto; right: var(--vg-r); }
 .c3d-vig.narrow .c3d-vg-txt b { font-size: 12px; }
 .c3d-layer.narrow .c3d-mk { font-size: 11px; }
 .c3d-layer.narrow .c3d-mk-btn { min-width: 34px; }
@@ -221,5 +266,5 @@
 @keyframes c3d-halo { from { transform: scale(0.5); opacity: 0.9; } to { transform: scale(1.6); opacity: 0; } }
 @keyframes c3d-sheet { from { transform: translateY(16px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .c3d-mk .c3d-mk-dot, .c3d-vg-dot, .c3d-lead circle.halo, .c3d-card.sheet { animation: none !important; }
+  .c3d-mk .c3d-mk-dot, .c3d-vg-dot, .c3d-lead circle.halo, .c3d-card.c3d-sheet { animation: none !important; }
 }

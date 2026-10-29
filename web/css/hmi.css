@@ -18,7 +18,7 @@
   --h-m1: #33506b; --h-m2: #8eb0cd; --h-k1: #1a2f47; --h-k2: #112235; --h-b1: #3b5e85; --h-b2: #1f3c5d;
   --h-bub: #dce7f1; --h-bub-ink: #0b2034; --h-bub-line: #6f8aa4;
   --h-tbg: #0d1a28; --h-tplot: #06111c; --h-tgrid: #17314a; --h-tframe: #34516f; --h-latebg: rgba(255, 194, 58, 0.12);
-  color-scheme: dark; position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; overflow: hidden; container-type: inline-size;
+  color-scheme: dark; position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; overflow: hidden; overflow: clip; container-type: inline-size;
   font: 13px/1.35 var(--h-f); color: var(--h-ink); background: var(--h-bg); -webkit-font-smoothing: antialiased; text-align: left;
 }
 /* Sáng: WinCC xám cổ điển */
@@ -44,6 +44,7 @@
 .hmi :focus-visible { outline: 2px solid var(--h-acc); outline-offset: 1px; }
 .hmi .h-hit:focus-visible { outline: none; }
 .hmi .h-ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.hmi .h-ico .h-ico-f { fill: currentColor; stroke: none; }
 
 /* ---------- thanh tiêu đề ---------- */
 .hmi .h-hdr { flex: none; position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 10px; background: var(--h-hdr); color: var(--h-hdr-ink);
@@ -61,6 +62,12 @@
 .hmi .h-ttl small { display: inline-block; font-size: 11px; padding: 1px 5px; margin-right: 9px; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 3px; vertical-align: 2px; letter-spacing: 0.04em; }
 .hmi .h-hright { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
 .hmi .h-manbadge { background: #f0a800; color: #111; font-weight: 800; font-size: 12px; padding: 5px 9px; border-radius: 3px; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 10px rgba(240, 168, 0, 0.45); white-space: nowrap; }
+/* liên động/cắt đã chốt trên tiêu đề (bấm mở bảng chế độ trạm) */
+.hmi .h-intlk { font: 800 12px var(--h-f); letter-spacing: 0.05em; padding: 5px 9px; border-radius: 3px; white-space: nowrap; cursor: pointer; color: #fff; background: #d32f2f;
+  border: 1px solid #5a0b0b; box-shadow: 0 0 10px rgba(255, 60, 60, 0.5); }
+.hmi .h-intlk.warn { color: #111; background: #f0a800; border-color: #6b4a00; box-shadow: 0 0 10px rgba(240, 168, 0, 0.45); }
+/* chất lượng không chắc chắn (dữ liệu cũ ở trung tâm): sọc chéo, mờ */
+.hmi .h-manbadge.q, .hmi .h-intlk.q { box-shadow: none; opacity: 0.8; background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.32) 0 5px, transparent 5px 10px); }
 .hmi .h-leds { display: flex; gap: 9px; padding: 4px 9px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(0, 0, 0, 0.4); border-radius: 4px; }
 .hmi .h-led { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #d3e5f6; white-space: nowrap; }
 .hmi .h-ledi { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #6d7a87, #2b3540 70%); box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.6); }
@@ -112,7 +119,7 @@
 .hmi .h-sbar-t { flex: 1; min-width: 0; }
 
 /* ---------- vùng màn hình ---------- */
-.hmi .h-area { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--h-bg); }
+.hmi .h-area { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; overflow: clip; background: var(--h-bg); }
 .hmi .h-scr { position: absolute; inset: 0; overflow: auto; padding: 10px; }
 .hmi .h-scr-ov { padding: 0; overflow: hidden; }
 .hmi .h-scr-trend { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
@@ -125,6 +132,8 @@
   font-size: 12.5px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; color: var(--h-btn-ink); background: var(--h-btn); cursor: pointer;
   border: 1px solid; border-color: var(--h-btn-hi) var(--h-btn-lo) var(--h-btn-lo) var(--h-btn-hi); border-radius: 3px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
 .hmi .h-nb:hover { filter: brightness(1.12); }
+.hmi .h-nb { overflow: hidden; }
+.hmi .h-nb > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .hmi .h-nb small { position: absolute; left: 5px; top: 3px; font-size: 9.5px; font-weight: 700; opacity: 0.7; }
 .hmi .h-nb.on { background: var(--h-btn-on); color: #fff; border-color: #0a2c49 #5fc0ff #5fc0ff #0a2c49; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.45); }
 .hmi .h-nb em { position: absolute; right: 4px; top: 3px; min-width: 18px; height: 16px; padding: 0 4px; border-radius: 8px; background: #8e1c1c; color: #fff; font-style: normal; font-size: 10.5px; line-height: 16px; text-align: center; }
@@ -132,6 +141,7 @@
 .hmi .h-sb { flex: none; display: flex; align-items: center; gap: 16px; height: 26px; padding: 0 10px; font-size: 12px; background: var(--h-sbbg); color: var(--h-ink); border-top: 1px solid var(--h-lo); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
 .hmi .h-sbi small { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; color: var(--h-mut); margin-right: 6px; }
 .hmi .h-sb b.ok { color: var(--h-okt); } .hmi .h-sb b.warn { color: var(--h-warnt); } .hmi .h-sb b.alarm { color: var(--h-alarmt); } .hmi .h-sb b.info { color: var(--h-infot); }
+.hmi .h-sb b.q { opacity: 0.7; font-style: italic; }
 .hmi .h-sbsp { flex: 1 1 auto; }
 .hmi .h-sbsrc { font-size: 11px; color: var(--h-mut); }
 
@@ -146,6 +156,8 @@
 .hmi .h-btn.warn { background: linear-gradient(#f4bb34, #c98a06); color: #111; border-color: #ffe39b #6b4a00 #6b4a00 #ffe39b; }
 .hmi .h-btn.sel { background: var(--h-btn-on); color: #fff; border-color: #0a2c49 #5fc0ff #5fc0ff #0a2c49; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.45); }
 .hmi .h-btn.sel.man { background: linear-gradient(#f4bb34, #c98a06); color: #111; border-color: #6b4a00 #ffe39b #ffe39b #6b4a00; }
+.hmi .h-btn.sel.q { background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0 5px, transparent 5px 10px), var(--h-btn-on); }
+.hmi .h-btn.sel.man.q { background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0 5px, transparent 5px 10px), linear-gradient(#f4bb34, #c98a06); }
 .hmi .h-btn.go.act { box-shadow: 0 0 0 2px #7dffa5, 0 0 12px rgba(40, 220, 100, 0.55); }
 .hmi .h-btn.stop.act { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55); }
 .hmi .h-btn:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.7); box-shadow: none; }
@@ -166,6 +178,9 @@
 .hmi .h-lamp.c i { background: radial-gradient(circle at 35% 30%, #d8f4ff, #29b6f6 55%, #0b5a85); box-shadow: 0 0 7px #4fc8ff; }
 .hmi .h-lamp.w i { background: radial-gradient(circle at 35% 30%, #ffffff, #c9d3dc 55%, #6c7a87); box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
 .hmi .h-lamp.blink i { animation: h-blink 1s steps(1) infinite; }
+.hmi .h-lamp.q { border-style: dashed; color: var(--h-mut); }
+.hmi .h-lamp.q i { opacity: 0.5; box-shadow: none; animation: none; }
+.hmi .h-lamp.q::after { content: "?"; margin-left: -2px; font-weight: 900; color: var(--h-warn); }
 .hmi .h-lamprow { display: flex; flex-wrap: wrap; gap: 6px; }
 .hmi .h-lampcol { display: flex; flex-direction: column; gap: 6px; width: 142px; flex: none; }
 .hmi .h-lampcol .h-lamp { justify-content: flex-start; }
@@ -180,6 +195,9 @@
 .hmi .h-hd.na { color: var(--h-na); font-size: 13px; }
 .hmi .h-hd.bad { color: var(--h-bad); }
 .hmi .h-hdw.big .h-hd { font-size: 22px; min-width: 108px; padding: 4px 9px; }
+/* ô chữ trạng thái (chế độ, kịch bản): chữ thường, không cắt mất đầu chữ */
+.hmi .h-hdw.t .h-hd { font: 700 12.5px/1.45 var(--h-f); letter-spacing: 0.01em; justify-content: flex-start; overflow: hidden; }
+.hmi .h-hdw.t .h-hd b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hmi .h-hu { font-size: 12px; color: var(--h-ink2); }
 .hmi .h-ro { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .hmi .h-ro > small { font-size: 11px; color: var(--h-ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -194,8 +212,11 @@
 .hmi .h-cap.c { text-align: center; }
 .hmi .h-chip { font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 2px; background: #2b3a49; color: #c9d6e2; white-space: nowrap; }
 .hmi .h-chip.g { background: #1c8f45; color: #fff; } .hmi .h-chip.r { background: #d32f2f; color: #fff; animation: h-blink 1s steps(1) infinite; } .hmi .h-chip.w { background: #6f7f8f; color: #fff; }
+.hmi .h-chip.q { opacity: 0.7; animation: none; background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0 5px, transparent 5px 10px); }
+.hmi .h-chip.q::before { content: "? "; }
 .hmi .h-bigtxt { font-size: 17px; font-weight: 800; letter-spacing: 0.03em; }
 .hmi .h-bigtxt.ok { color: var(--h-okt); } .hmi .h-bigtxt.warn { color: var(--h-warnt); } .hmi .h-bigtxt.alarm { color: var(--h-alarmt); }
+.hmi .h-bigtxt.q { opacity: 0.7; font-style: italic; }
 
 /* ---------- khung panel ---------- */
 .hmi .h-pnl { display: flex; flex-direction: column; min-width: 0; background: var(--h-pnlg); border: 1px solid; border-color: var(--h-hi) var(--h-lo) var(--h-lo) var(--h-hi); border-radius: 3px; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); }
@@ -239,14 +260,21 @@
 .hmi .h-spk-ax .tl, .hmi .h-spk-ax .tr { transform: translateY(100%); }
 .hmi .h-spk-ax .lv { position: absolute; left: 4px; transform: translateY(-110%); color: var(--h-alarm); }
 .hmi .h-spk-ax .lv.warn { color: var(--h-warn); }
+.hmi .h-spk-ax .lv.dn { transform: translateY(8%); }
 .hmi .h-spk-ax .tl, .hmi .h-spk-ax .tr { position: absolute; bottom: -1px; color: var(--h-mut); font-weight: 600; }
 .hmi .h-spk-ax .tl { left: 4px; } .hmi .h-spk-ax .tr { right: 6px; }
 .hmi .h-narrowrow .h-btn { flex: 0 1 320px; }
 .hmi .h-kv td.num.t { font-family: var(--h-f); font-weight: 700; }
 .hmi .h-scr-pump { display: flex; flex-direction: column; }
 .hmi .h-scr-pump > .h-grid3 { flex: 1 0 auto; }
-.hmi .h-scr-pump .h-pp-top { flex: 1 1 auto; }
-.hmi .h-scr-pump .h-gauge { max-width: 320px; }
+.hmi .h-scr-pump .h-pp-top { flex: 1 1 auto; min-height: 0; }
+.hmi .h-scr-pump .h-pp-g { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+.hmi .h-scr-pump .h-gauge { flex: 1 1 auto; width: 100%; height: 100%; min-height: 190px; max-width: none; max-height: 520px; }
+/* màn chất lượng: xu hướng 6 giờ cao theo khoảng trống */
+.hmi .h-scr-qual { display: flex; flex-direction: column; }
+.hmi .h-scr-qual > .h-grid3 { flex: 1 0 auto; }
+.hmi .h-scr-qual .h-sparkw { flex: 1 1 auto; min-height: 112px; max-height: 420px; }
+.hmi .h-scr-qual .h-spark { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% - 14px); }
 .hmi .h-spk-bg { fill: var(--h-tplot); }
 .hmi .h-spk { fill: none; stroke: var(--h-acc); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .hmi .h-spk-l { stroke: var(--h-alarm); stroke-width: 1; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
@@ -319,6 +347,8 @@
 .hmi input.h-inp { width: 78px; min-height: 32px; padding: 3px 6px; font: 700 15px var(--h-fm); text-align: right; color: var(--h-ink); background: var(--h-inpbg);
   border: 1px solid; border-color: var(--h-lo) var(--h-hi) var(--h-hi) var(--h-lo); border-radius: 2px; }
 .hmi input.h-rng { flex: 1 1 auto; min-width: 60px; accent-color: var(--h-acc); }
+.hmi input.h-inp.bad { border-color: var(--h-alarm); box-shadow: 0 0 0 2px rgba(255, 86, 86, 0.35); color: var(--h-alarmt); }
+.hmi .h-ferr { margin: 0; font-size: 11.5px; font-weight: 700; color: var(--h-alarmt); }
 .hmi input:disabled { opacity: 0.45; cursor: not-allowed; }
 .hmi .h-why { margin: 0; padding: 6px 9px; font-size: 12px; color: var(--h-ink); border-left: 3px solid var(--h-acc); background: rgba(60, 196, 255, 0.09); border-radius: 0 2px 2px 0; }
 .hmi .h-why.warn { border-left-color: var(--h-warn); background: rgba(255, 194, 58, 0.13); }
@@ -329,8 +359,13 @@
 .hmi .h-perm li.ok i { color: var(--h-okt); }
 .hmi .h-perm li.no { color: var(--h-alarmt); font-weight: 700; }
 .hmi .h-perm li.na { color: var(--h-ink2); }
+.hmi .h-perm li.info { color: var(--h-ink2); }
+.hmi .h-perm li.info i { color: var(--h-infot); font-style: italic; font-family: Georgia, serif; }
+.hmi .h-perm li.info.on { color: var(--h-warnt); font-weight: 700; }
+.hmi .h-perm li.info.on i { color: var(--h-warnt); }
 .hmi .h-res { margin: 0; padding-top: 7px; font-size: 11.5px; color: var(--h-ink2); border-top: 1px solid var(--h-line); }
 .hmi .h-res.good { color: var(--h-okt); } .hmi .h-res.critical { color: var(--h-alarmt); } .hmi .h-res.warning { color: var(--h-warnt); } .hmi .h-res.info { color: var(--h-infot); }
+.hmi .h-res.off { color: var(--h-ink2); }
 .hmi .h-cf { display: flex; flex-direction: column; gap: 8px; padding: 9px; border: 2px solid var(--h-warn); background: var(--h-cfbg); border-radius: 3px; box-shadow: 0 0 0 3px rgba(255, 194, 58, 0.15); }
 .hmi .h-cf p { margin: 0; display: flex; align-items: center; gap: 9px; font-weight: 700; }
 .hmi .h-cf-ic { flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--h-warn); color: #111; font-weight: 900; }
@@ -351,22 +386,24 @@
 
 /* ---------- sơ đồ công nghệ (SVG) ---------- */
 .hmi .h-pid text { font-family: var(--h-f); }
+/* bù cỡ chữ khi sơ đồ bị thu nhỏ: hmi.js đặt --pz (chữ nhỏ), --pm (nhãn/tiêu đề), --pv (ô số) theo tỉ lệ hiển thị */
+.hmi .h-pid { --pz: 1; --pm: 1; --pv: 1; }
 .hmi .h-pidbg { fill: var(--h-pidbg); }
 .hmi .h-s1 { stop-color: var(--h-s1); } .hmi .h-s2 { stop-color: var(--h-s2); } .hmi .h-s3 { stop-color: var(--h-s3); } .hmi .h-w1 { stop-color: var(--h-w1); } .hmi .h-w2 { stop-color: var(--h-w2); }
 .hmi .h-gl { stop-color: var(--h-gl); } .hmi .h-m1 { stop-color: var(--h-m1); } .hmi .h-m2 { stop-color: var(--h-m2); } .hmi .h-k1 { stop-color: var(--h-k1); } .hmi .h-k2 { stop-color: var(--h-k2); }
 .hmi .h-b1 { stop-color: var(--h-b1); } .hmi .h-b2 { stop-color: var(--h-b2); } .hmi .h-vg { stop-color: #9fd0ff; } .hmi.h-light .h-vg { stop-color: #ffffff; }
-.hmi .h-vl { font-size: 10.5px; fill: var(--h-ink2); }
-.hmi .h-tag { font-size: 12px; font-weight: 700; fill: var(--h-ink2); letter-spacing: 0.02em; }
-.hmi .h-tag2 { font-size: 13px; font-weight: 700; fill: var(--h-ink); letter-spacing: 0.02em; }
+.hmi .h-vl { font-size: calc(11px * var(--pz)); fill: var(--h-ink2); }
+.hmi .h-tag { font-size: calc(12px * var(--pm)); font-weight: 700; fill: var(--h-ink2); letter-spacing: 0.02em; }
+.hmi .h-tag2 { font-size: calc(13px * var(--pm)); font-weight: 700; fill: var(--h-ink); letter-spacing: 0.02em; }
 .hmi .h-ptag { font-size: 15px; font-weight: 800; fill: var(--h-ink); letter-spacing: 0.04em; }
-.hmi .h-lbl { font-size: 12px; font-weight: 700; fill: var(--h-ink2); letter-spacing: 0.06em; }
-.hmi .h-sm { font-size: 11.5px; fill: var(--h-ink2); }
-.hmi .h-xs { font-size: 10.5px; fill: var(--h-mut); }
-.hmi .h-it { font-size: 10px; font-weight: 800; fill: var(--h-bub-ink); }
-.hmi .h-tcap { font-size: 11px; font-weight: 800; fill: #ffffff; letter-spacing: 0.06em; paint-order: stroke; stroke: rgba(4, 22, 44, 0.75); stroke-width: 3px; }
-.hmi .h-btitle { font-size: 12px; font-weight: 800; fill: #ffffff; letter-spacing: 0.05em; }
+.hmi .h-lbl { font-size: calc(12px * var(--pm)); font-weight: 700; fill: var(--h-ink2); letter-spacing: 0.06em; }
+.hmi .h-sm { font-size: calc(11.5px * var(--pz)); fill: var(--h-ink2); }
+.hmi .h-xs { font-size: calc(11px * var(--pz)); fill: var(--h-mut); }
+.hmi .h-it { font-size: calc(11px * var(--pz)); font-weight: 800; fill: var(--h-bub-ink); }
+.hmi .h-tcap { font-size: calc(11px * var(--pz)); font-weight: 800; fill: #ffffff; letter-spacing: 0.06em; paint-order: stroke; stroke: rgba(4, 22, 44, 0.75); stroke-width: 3px; }
+.hmi .h-btitle { font-size: calc(12px * var(--pm)); font-weight: 800; fill: #ffffff; letter-spacing: 0.05em; }
 .hmi.h-light .h-btitle.d { fill: #0d1116; }
-.hmi .h-legend .h-lgt { font-size: 11px; font-weight: 700; fill: var(--h-ink2); letter-spacing: 0.03em; }
+.hmi .h-legend .h-lgt { font-size: calc(11px * var(--pz)); font-weight: 700; fill: var(--h-ink2); letter-spacing: 0.03em; }
 .hmi .h-lgsw { stroke: var(--h-eqline); stroke-width: 1; }
 .hmi .h-lgsw.run { fill: var(--h-run); } .hmi .h-lgsw.stop { fill: var(--h-stop); } .hmi .h-lgsw.fault { fill: var(--h-fault); } .hmi .h-lgsw.move { fill: var(--h-move); } .hmi .h-lgsw.unk { fill: var(--h-unk); }
 .hmi .h-lgflow { stroke: var(--h-pipe-b); stroke-width: 9; stroke-dasharray: 6 6; }
@@ -382,16 +419,18 @@
 .hmi .h-selr.on { stroke: var(--h-acc); stroke-width: 2; fill: rgba(60, 196, 255, 0.08); }
 .hmi .h-d .h-db { fill: var(--h-db); stroke: var(--h-db-line); stroke-width: 1; }
 .hmi .h-d .h-dbs { fill: #000; opacity: 0.55; }
-.hmi .h-dv { font: 700 15px var(--h-fm); fill: var(--h-ok); }
+.hmi .h-dv { font: 700 calc(15px * var(--pv)) var(--h-fm); fill: var(--h-ok); }
 .hmi .h-d.warn .h-dv { fill: var(--h-warn); }
 .hmi .h-d.alarm .h-dv { fill: var(--h-alarm); }
 .hmi .h-d.alarm .h-db { stroke: var(--h-alarm); stroke-width: 1.8; }
-.hmi .h-d.na .h-dv { fill: var(--h-na); font-size: 13px; }
+.hmi .h-d.na .h-dv { fill: var(--h-na); font-size: calc(13px * var(--pv)); }
 .hmi .h-d.bad .h-dv { fill: var(--h-bad); }
-.hmi .h-dq { display: none; font: 800 12px var(--h-f); fill: var(--h-warn); }
+.hmi .h-d.closed .h-dv { fill: var(--h-alarm); }
+.hmi .h-d.frame .h-db { stroke: var(--h-alarm); stroke-width: 2.2; animation: h-blink 1s steps(1) infinite; }
+.hmi .h-dq { display: none; font: 800 calc(12.5px * var(--pv)) var(--h-f); fill: var(--h-warn); }
 .hmi .h-d.stale .h-dq { display: inline; }
 .hmi .h-d.stale .h-dv { opacity: 0.55; }
-.hmi .h-du { font-size: 11.5px; fill: var(--h-ink2); }
+.hmi .h-du { font-size: calc(11.5px * var(--pz)); fill: var(--h-ink2); }
 .hmi .h-inst circle { fill: var(--h-bub); stroke: var(--h-bub-line); stroke-width: 1.5; }
 .hmi .h-ibar { stroke: var(--h-bub-line); stroke-width: 1; }
 .hmi .h-lead { stroke: var(--h-ink2); stroke-width: 1.2; stroke-dasharray: 3 2; }
@@ -401,6 +440,8 @@
 .hmi .h-water.unk { fill: url(#hmiG-hatch); }
 .hmi .h-hatchbg { fill: var(--h-tankin); } .hmi .h-hatch { fill: var(--h-unk); opacity: 0.6; }
 .hmi .h-pid.stale .h-water { opacity: 0.6; }
+.hmi .h-pid.stale .h-pf.on, .hmi .h-pid.stale .h-imp.spin { animation-play-state: paused; }
+.hmi .h-pid.stale .h-qlamp, .hmi .h-pid.stale .h-qlt, .hmi .h-pid.stale .h-vst { opacity: 0.6; }
 .hmi .h-wtop { stroke: #c4e6ff; stroke-width: 1.5; opacity: 0.85; }
 .hmi .h-glass { fill: url(#hmiG-glass); pointer-events: none; }
 .hmi .h-mk { stroke: #ffffff; stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.28; }
@@ -421,7 +462,10 @@
 .hmi .h-coil { fill: none; stroke: #e1eef9; stroke-width: 1.3; }
 .hmi .h-vessel { fill: url(#hmiG-steel); stroke: var(--h-eqline); stroke-width: 1.4; }
 .hmi .h-psv { fill: var(--h-stop); stroke: var(--h-eqline); stroke-width: 1.3; }
-.hmi .h-psv.relief { fill: var(--h-fault); animation: h-blink 0.8s steps(1) infinite; }
+.hmi .h-psv.closed { fill: var(--h-fault); } .hmi .h-psv.unk { fill: var(--h-unk); }
+.hmi .h-psv.relief { fill: var(--h-run); animation: h-blink 0.8s steps(1) infinite; }
+.hmi .h-fv { fill: var(--h-valve); stroke: var(--h-eqline); stroke-width: 1.3; }
+.hmi .h-fv.open { fill: var(--h-run); } .hmi .h-fv.closed { fill: var(--h-fault); } .hmi .h-fv.stop { fill: var(--h-stop); } .hmi .h-fv.unk { fill: var(--h-unk); }
 .hmi .h-spring { fill: none; stroke: var(--h-ink2); stroke-width: 1.3; }
 .hmi .h-mv { fill: var(--h-stop); stroke: var(--h-eqline); stroke-width: 1.5; }
 .hmi .h-mv.open { fill: var(--h-run); } .hmi .h-mv.closed { fill: var(--h-fault); } .hmi .h-mv.moving { fill: var(--h-move); animation: h-blink 0.8s steps(1) infinite; } .hmi .h-mv.unk { fill: var(--h-unk); }
@@ -436,10 +480,13 @@
 .hmi .h-sep { stroke: var(--h-line); stroke-width: 1; }
 .hmi .h-cval { font-size: 14px; font-weight: 800; fill: var(--h-ink); letter-spacing: 0.02em; }
 .hmi .h-cval.ok { fill: var(--h-okt); } .hmi .h-cval.warn { fill: var(--h-warnt); } .hmi .h-cval.alarm { fill: var(--h-alarmt); } .hmi .h-cval.info { fill: var(--h-infot); }
-.hmi .h-cval2 { font-size: 12.5px; font-weight: 700; fill: var(--h-ink); }
+.hmi .h-pid .h-qm { fill: var(--h-warn); font-weight: 900; }
+.hmi .h-pid text.q > tspan:last-child { opacity: 0.6; font-style: italic; }
+.hmi .h-pid .h-qn { fill: var(--h-warnt); font-weight: 700; }
+.hmi .h-cval2 { font-size: calc(12.5px * var(--pm)); font-weight: 700; fill: var(--h-ink); }
 .hmi .h-qlamp { fill: #26323e; stroke: var(--h-eqline); stroke-width: 1; }
 .hmi .h-qlamp.ok { fill: #1c8f45; } .hmi .h-qlamp.bad { fill: #d32f2f; animation: h-blink 1s steps(1) infinite; } .hmi .h-qlamp.unk { fill: #3a4654; }
-.hmi .h-qlt { font-size: 11px; font-weight: 800; fill: #9fb0c0; letter-spacing: 0.04em; pointer-events: none; }
+.hmi .h-qlt { font-size: calc(11px * var(--pz)); font-weight: 800; fill: #9fb0c0; letter-spacing: 0.04em; pointer-events: none; }
 .hmi .h-qlt.ok, .hmi .h-qlt.bad { fill: #ffffff; }
 .hmi .h-pbtrk { fill: var(--h-db); stroke: var(--h-db-line); }
 .hmi .h-pbhi { fill: var(--h-alarm); opacity: 0.35; }
@@ -447,7 +494,7 @@
 .hmi .h-pbset { fill: var(--h-ink); stroke: var(--h-ink); stroke-width: 1.5; }
 .hmi .h-svgbtn rect { fill: url(#hmiG-btn); stroke: var(--h-hi); stroke-width: 1.2; }
 .hmi .h-svgbtn:hover rect, .hmi .h-svgbtn:focus-visible rect { stroke: var(--h-acc); stroke-width: 2; }
-.hmi .h-svgbtnt { font-size: 14px; font-weight: 800; fill: var(--h-btn-ink); letter-spacing: 0.05em; pointer-events: none; }
+.hmi .h-svgbtnt { font-size: calc(14px * var(--pm)); font-weight: 800; fill: var(--h-btn-ink); letter-spacing: 0.05em; pointer-events: none; }
 .hmi .h-vol { fill: var(--h-stop); stroke: var(--h-eqline); stroke-width: 1.5; }
 .hmi .h-vol.run { fill: var(--h-run); } .hmi .h-vol.fault { fill: var(--h-fault); animation: h-blink 1s steps(1) infinite; } .hmi .h-vol.unk { fill: var(--h-unk); }
 .hmi .h-shine { fill: url(#hmiG-shine); pointer-events: none; }
@@ -462,15 +509,17 @@
 .hmi .h-base { fill: #4a5866; stroke: var(--h-eqline); stroke-width: 1.2; }
 .hmi .h-badge { fill: #2a3644; stroke: var(--h-eqline); stroke-width: 1; }
 .hmi .h-badge.auto { fill: #1f7a3e; } .hmi .h-badge.man, .hmi .h-badge.loc { fill: #e0a100; } .hmi .h-badge.rem { fill: #1e7fb8; }
-.hmi .h-badget { font-size: 10px; font-weight: 800; fill: #ffffff; letter-spacing: 0.05em; pointer-events: none; }
+.hmi .h-badget { font-size: calc(11px * var(--pz)); font-weight: 800; fill: #ffffff; letter-spacing: 0.05em; pointer-events: none; }
 .hmi .h-badge.man + .h-badget, .hmi .h-badge.loc + .h-badget { fill: #111111; }
+.hmi .h-badge.intlk { fill: #d32f2f; stroke: #5a0b0b; }
 .hmi .h-badge.off, .hmi .h-badge.off + .h-badget { display: none; }
+.hmi .h-badge.q, .hmi .h-badge.q + .h-badget { opacity: 0.5; }
 .hmi .h-tankg .h-du { fill: #ffffff; paint-order: stroke; stroke: rgba(4, 22, 44, 0.75); stroke-width: 3px; }
 .hmi .h-vfd { fill: url(#hmiG-blk); stroke: var(--h-hi); stroke-width: 1; }
 .hmi .h-vfd.fault { stroke: var(--h-fault); stroke-width: 2.5; }
 .hmi .h-vfdt { fill: #23466d; }
 .hmi.h-light .h-vfdt { fill: #1f3f6e; }
-.hmi .h-vst { font-size: 11px; font-weight: 800; letter-spacing: 0.05em; fill: #c3ced9; }
+.hmi .h-vst { font-size: calc(11px * var(--pz)); font-weight: 800; letter-spacing: 0.05em; fill: #c3ced9; }
 .hmi .h-vst.run { fill: #6dffa0; } .hmi .h-vst.fault { fill: #ff8080; } .hmi .h-vst.unk { fill: var(--h-na); }
 .hmi .h-ftrk { fill: var(--h-db); }
 .hmi .h-fbar { fill: #3fb4ff; }
@@ -484,7 +533,29 @@
 @keyframes h-rowblink { 50% { background-color: transparent; } }
 @media (prefers-reduced-motion: reduce) {
   .hmi .h-imp.spin, .hmi .h-pf.on { animation-duration: 4s !important; }
-  .hmi .h-ab.un, .hmi .h-almcnt.un, .hmi .h-altbl tr.unack td, .hmi .h-lamp.blink i, .hmi .h-ledi.r { animation: none; }
+  .hmi .h-ab.un, .hmi .h-almcnt.un, .hmi .h-altbl tr.unack td, .hmi .h-lamp.blink i, .hmi .h-ledi.r, .hmi .h-d.frame .h-db, .hmi .h-psv.relief { animation: none; }
+}
+
+/* ---------- màn thấp (≤ 820 px, ví dụ 1366×768, 1280×720): thu gọn khung runtime để sơ đồ lớn hơn ---------- */
+@media (max-height: 820px) {
+  .hmi .h-hdr { min-height: 44px; padding: 2px 10px; }
+  .hmi .h-logo { width: 30px; height: 30px; }
+  .hmi .h-user { height: 34px; }
+  .hmi .h-almcnt, .hmi .h-skinbtn { height: 30px; }
+  .hmi .h-ab { height: 28px; }
+  .hmi .h-nav { padding: 4px 6px; }
+  .hmi .h-nb { height: 38px; }
+  .hmi .h-sb { height: 24px; }
+}
+
+/* điện thoại xoay ngang (≤ 500 px cao): bỏ dải trạng thái dưới, sơ đồ vừa bề ngang và cuộn dọc thay vì thu nhỏ */
+@media (max-height: 500px) {
+  .hmi .h-hdr { min-height: 40px; }
+  .hmi .h-sb { display: none; }
+  .hmi .h-nav { padding: 3px 5px; }
+  .hmi .h-nb { height: 34px; }
+  .hmi .h-statebar { padding: 3px 8px; font-size: 11.5px; }
+  .hmi .h-pidwrap .h-pid { width: 100%; height: auto; min-height: 0; }
 }
 
 /* ---------- co giãn theo bề rộng khung HMI ---------- */
@@ -502,7 +573,8 @@
 @container (max-width: 600px) {
   .hmi .h-hdr { gap: 8px; padding: 5px 8px; }
   .hmi .h-hright { flex: 1 1 0; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 5px 6px; }
-  .hmi .h-hright > .h-manbadge, .hmi .h-hright > .h-leds { order: 2; }
+  .hmi .h-hright > .h-manbadge, .hmi .h-hright > .h-intlk, .hmi .h-hright > .h-leds { order: 2; }
+  .hmi .h-manbadge, .hmi .h-intlk { padding: 4px 7px; font-size: 11px; }
   .hmi .h-skinbtn span, .hmi .h-user > span { display: none; }
   .hmi .h-user { padding: 0 7px 0 5px; height: 32px; }
   .hmi .h-leds { gap: 7px; padding: 3px 6px; }

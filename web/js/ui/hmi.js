@@ -5,9 +5,10 @@
 //   - Tại trạm (màn cảm ứng HMI-01 trên cửa tủ CP-02): đọc trực tiếp từ gateway, lệnh đi thẳng, không qua mạng.
 //   - Trung tâm (SCADA): chỉ thấy dữ liệu MÁY CHỦ đã nhận qua MQTT (chu kỳ 10 s, đứng yên khi mất mạng);
 //     lệnh đi qua máy chủ, có thời hạn ngắn, có thể bị từ chối (quyền tại chỗ) hoặc hết hạn (mất mạng).
+import { D_PREFIXES } from '../sim/gateway.js';
 import { fmtClock, fmtHM } from '../sim/util.js';
 import { h, SEV_LABEL, tShort } from './dom.js';
-import { ackAlarm, CMD_STATUS, commandLog, CTL_NAME, MODE_NAME, permissives, sendCommand, SEV_ORDER, stationData } from './ops.js';
+import { ackAlarm, CMD_STATUS, CMD_TXT, cmdName, commandLog, CTL_NAME, firstBlock, fmtLease, MODE_NAME, needsReset, permissives, sendCommand, SEV_ORDER, stationData, viNum } from './ops.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 function S(tag, attrs = {}, ...kids) {
@@ -23,7 +24,13 @@ function S(tag, attrs = {}, ...kids) {
 }
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const num = (v, nd) => v.toFixed(nd).replace('.', ',');
+const num = (v, nd) => { const s = v.toFixed(nd); return (/^-0(\.0+)?$/.test(s) ? s.slice(1) : s).replace('.', ','); }; // không hiện "-0,00"
+const CMD_RE = new RegExp('\\b(' + Object.keys(CMD_TXT).join('|') + ')\\b', 'g'), ST_RE = /\b(ok|rejected|expired|duplicate)(?= \()/g;
+/** Chuỗi do lõi mô phỏng tạo (báo động, lý do lệnh, nhật ký): dấu phẩy thập phân, tên lệnh tiếng Việt thay mã nội bộ. */
+const viTxt = (s) => viNum(s).replace(CMD_RE, (m) => { const n = cmdName(m); return n[0].toLowerCase() + n.slice(1); }).replace(ST_RE, (m) => CMD_STATUS[m][1]);
+const STRAT = { threshold: 'theo ngưỡng', predictive: 'theo dự báo', fallback: 'dự phòng theo ngưỡng', custom: 'của học viên' };
+const NOOP = /không ở trạng thái dừng an toàn|đã ở chế độ tự động/; // lệnh hợp lệ nhưng không làm thay đổi gì
+const VB = { y: 14, w: 1280, h: 638 }; // khung nhìn sơ đồ P&ID (cắt bớt lề trên/dưới trống)
 // chỉ ghi DOM khi giá trị thay đổi (update() chạy mỗi 250 ms)
 const setT = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
 const setC = (el, c) => { if (el._c !== c) { el._c = c; el.setAttribute('class', c); } };
@@ -36,7 +43,7 @@ const ICON = {
   qual: 'M10 2.5c3 4 5.5 6.6 5.5 9.5a5.5 5.5 0 0 1-11 0c0-2.9 2.5-5.5 5.5-9.5zM7.5 12.3l2 2 3.5-4', trend: 'M2 17h16M2 3v14M4 13l4-5 3 3 4-6 3 3',
   alarm: 'M10 2.8a5 5 0 0 1 5 5v4l1.6 2.6H3.4L5 11.8v-4a5 5 0 0 1 5-5zM8 16.6a2 2 0 0 0 4 0', log: 'M7 5h10M7 10h10M7 15h10M3 5h1.5M3 10h1.5M3 15h1.5',
   par: 'M4 3v14M10 3v14M16 3v14M2 7h4M8 12.5h4M14 6h4', user: 'M10 10a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM3 18c.6-3.8 3.4-6 7-6s6.4 2.2 7 6',
-  skin: 'M10 2.5a7.5 7.5 0 1 0 0 15zM10 2.5a7.5 7.5 0 0 1 0 15', bell: 'M10 2.8a5 5 0 0 1 5 5v4l1.6 2.6H3.4L5 11.8v-4a5 5 0 0 1 5-5zM8 16.6a2 2 0 0 0 4 0',
+  bell: 'M10 2.8a5 5 0 0 1 5 5v4l1.6 2.6H3.4L5 11.8v-4a5 5 0 0 1 5-5zM8 16.6a2 2 0 0 0 4 0',
 };
 const SCREENS = [
   ['ov', 'TỔNG QUAN', 'TỔNG QUAN TRẠM BƠM'], ['pump', 'BƠM – BIẾN TẦN', 'BƠM TĂNG ÁP VÀ BIẾN TẦN'], ['qual', 'CHẤT LƯỢNG NƯỚC', 'CHẤT LƯỢNG NƯỚC SAU BỂ CHỨA'],
@@ -46,18 +53,25 @@ const POS = {
   local: { name: 'TẠI TRẠM · HMI-01', role: 'Kỹ thuật viên vận hành', desc: 'Màn cảm ứng trên tủ CP-02 – đọc trực tiếp gateway, lệnh không qua mạng' },
   remote: { name: 'TRUNG TÂM · SCADA', role: 'Điều độ viên trung tâm', desc: 'Máy chủ điều hành – dữ liệu qua MQTT 10 s, lệnh có hạn 60 s' },
 };
-// thiết bị đo: trường trong stationData, đơn vị, số lẻ, cột lịch sử tại trạm, cột chuỗi phút ở máy chủ
+// thiết bị đo: trường trong stationData, đơn vị, số lẻ, cột lịch sử tại trạm, cột chuỗi phút ở máy chủ.
+// PT-101/PT-102 (áp ống góp, trước MV-02) lấy từ app.uiHist; hist.p_out của lõi là áp ra mạng SAU MV-02.
+const UI_HIST = new Set(['p1', 'p2']);
 const INST = {
-  'PT-101': { k: 'p1', u: 'bar', nd: 2, hk: 'p_out', sk: 'p', lbl: 'Áp lực đầu ra (điều khiển)' }, 'PT-102': { k: 'p2', u: 'bar', nd: 2, hk: 'p_out', lbl: 'Áp lực đầu ra (bảo vệ)' },
+  'PT-101': { k: 'p1', u: 'bar', nd: 2, hk: 'p1', sk: 'p', lbl: 'Áp lực đầu ra (điều khiển)' }, 'PT-102': { k: 'p2', u: 'bar', nd: 2, hk: 'p2', lbl: 'Áp lực đầu ra (bảo vệ)' },
   'FT-100': { k: 'q_in', u: 'm³/h', nd: 1, hk: 'q_in', lbl: 'Lưu lượng nước vào bể' }, 'FT-101': { k: 'q', u: 'm³/h', nd: 1, hk: 'q_out', sk: 'q', lbl: 'Lưu lượng ra mạng lưới' },
   'LT-101': { k: 'level', u: 'm', nd: 2, hk: 'level', sk: 'level', lbl: 'Mức nước bể T-01' }, 'AIT-201': { k: 'cl', u: 'mg/L', nd: 2, hk: 'cl', lbl: 'Clo dư tự do' },
   'AIT-202': { k: 'ntu', u: 'NTU', nd: 2, hk: 'ntu', lbl: 'Độ đục' }, 'AIT-203': { k: 'ph', u: '', nd: 2, hk: 'ph', lbl: 'pH' },
   'PL-301': { k: 'p_crit', u: 'bar', nd: 2, hk: 'p_crit', lbl: 'Áp lực điểm bất lợi DMA-A' },
 };
 const PUMP_TAG = ['P-01', 'P-02'];
-const PEN_COL = { dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'], light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6'] };
+const PEN_COL = {
+  dark: ['#3987e5', '#9cc8ff', '#e2e8ee', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'],
+  light: ['#2a78d6', '#6f9fe0', '#3a4652', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6'],
+};
+// ui: cột lấy từ app.uiHist (cùng chỉ số với hist.data.t); sk: cột chuỗi phút ở máy chủ (trung tâm)
 const PENS = [
-  { k: 'p_out', sk: 'p', name: 'Áp đầu ra PT-101', u: 'bar', lo: 0, hi: 6, nd: 2 }, { k: 'p_set', name: 'Áp đặt P_set', u: 'bar', lo: 0, hi: 6, nd: 2, dash: [7, 5] },
+  { k: 'p1', ui: true, sk: 'p', name: 'Áp đầu ra PT-101', u: 'bar', lo: 0, hi: 6, nd: 2 }, { k: 'p2', ui: true, name: 'Áp đầu ra PT-102', u: 'bar', lo: 0, hi: 6, nd: 2, dash: [4, 3] },
+  { k: 'p_out', name: 'Áp ra mạng (sau MV-02)', u: 'bar', lo: 0, hi: 6, nd: 2 }, { k: 'p_set', name: 'Áp đặt P_set', u: 'bar', lo: 0, hi: 6, nd: 2, dash: [7, 5] },
   { k: 'p_crit', name: 'Áp điểm bất lợi PL-301', u: 'bar', lo: 0, hi: 6, nd: 2, dash: [2, 4] }, { k: 'q_out', sk: 'q', name: 'Lưu lượng ra FT-101', u: 'm³/h', lo: 0, hi: 40, nd: 1 },
   { k: 'level', sk: 'level', name: 'Mức bể LT-101', u: 'm', lo: 0, hi: 5, nd: 2 }, { k: 'kw', sk: 'kw', name: 'Công suất điện', u: 'kW', lo: 0, hi: 15, nd: 2 },
 ];
@@ -72,20 +86,34 @@ export class HmiView {
     this.visible = false;
     this.scr = 'ov';
     this.D = {}; this.PF = {}; this.O = {}; this.fps = []; this._keys = {}; this._z = 20;
-    this.TR = { range: 3600, sel: 0, hide: new Set(), hx: null, last: 0 };
+    this.TR = { range: 3600, sel: 0, hide: new Set([1]), hx: null, last: 0 }; // PT-102 thường trùng PT-101 – ẩn nét, vẫn hiện giá trị
     this.skin = 'dark';
     try { if (localStorage.getItem('trambom-hmi-skin') === 'light') this.skin = 'light'; } catch (e) { /* bỏ qua */ }
     this.root = h('div', { class: 'hmi', hidden: true, 'aria-label': 'Màn hình HMI/SCADA trạm bơm ST-01' });
     host.append(this.root);
     this._build();
     new ResizeObserver(() => this._resize()).observe(this.root);
+    // dải trạng thái hiện/ẩn làm vùng màn hình co giãn – giữ faceplate dưới các dải, tính lại cỡ chữ sơ đồ
+    new ResizeObserver(() => { for (const fp of this.fps) this._fpClamp(fp); this._pidScale(); }).observe(this.area);
   }
   show(on) { this.visible = on; this.root.hidden = !on; if (on) { this._resize(); this.update(true); } }
   setWhere(w) {
     this.where = w === 'remote' ? 'remote' : 'local';
     for (const fp of this.fps) this._cancel(fp);
+    this._cancel(this.QS); this._pend = null;
     this._keys = {}; this.TR.last = 0;
     this.update(true);
+  }
+  /** Bắt đầu kịch bản mới: đóng mọi faceplate, hủy xác nhận đang chờ, xóa trạng thái tạm của lần chạy trước. */
+  reset() {
+    this._d = null;
+    while (this.fps.length) this._fpClose(this.fps[0]);
+    this._cancel(this.QS); this.QS.last = null;
+    this.H.menu.hidden = true;
+    this._deadHide = null; this._pend = null; this._wait = null; this._top = null; this._qT = 0; this._keys = {};
+    this.TR.last = 0; this.TR.hx = null;
+    this.deadMsg._k = null; this.stateBar._k = null;
+    if (this.visible) this.update(true);
   }
   go(k) {
     this.scr = k;
@@ -94,6 +122,7 @@ export class HmiView {
     const i = SCREENS.findIndex((s) => s[0] === k);
     this.H.title.replaceChildren(h('small', {}, String(i + 1).padStart(2, '0')), SCREENS[i][2]);
     this._keys = {}; this.TR.last = 0;
+    if (k === 'ov') this._pidScale();
     this.update(true);
   }
   toggleSkin() {
@@ -109,7 +138,31 @@ export class HmiView {
     if (narrow !== this.narrow) { this.narrow = narrow; this.root.classList.toggle('h-narrow', narrow); while (narrow && this.fps.length > 1) this._fpClose(this.fps[0]); }
     for (const fp of this.fps) this._fpClamp(fp);
     this.TR.last = 0;
-    if (this.visible && this.ctx && this.scr === 'trend') this._updTrend(this._d, true);
+    this._pidScale();
+    if (this.visible && this.ctx && this._d && this.scr === 'trend') this._updTrend(this._d, true);
+    if (this.visible && this.ctx && this._d && this.scr === 'qual') this._updQuality(this._d, true);
+  }
+  /**
+   * Bù cỡ chữ nhỏ của sơ đồ: khi sơ đồ bị thu nhỏ (màn 1366×768, 1280×720) chữ chú thích vẫn ≥ ~11 px trên màn hình.
+   * --pz: chữ nhỏ, --pm: nhãn thiết bị/tiêu đề khối, --pv: ô số.
+   */
+  _pidScale() {
+    const svg = this.pid, w = svg?.clientWidth, hh = svg?.clientHeight;
+    if (!w || !hh) return;
+    const s = Math.min(w / VB.w, hh / VB.h), r2 = (x) => Math.round(x * 100) / 100;
+    const k = [clamp(1 / s, 1, 1.3), clamp(1 / s, 1, 1.22), clamp(0.88 / s, 1, 1.12)].map(r2);
+    if (this._pz === k.join()) return;
+    this._pz = k.join();
+    ['--pz', '--pm', '--pv'].forEach((n, i) => svg.style.setProperty(n, k[i]));
+    for (const [el, max] of this._fits || []) this._fit(el, max, true);
+  }
+  /** Nén chữ SVG cho vừa bề rộng (chỉ khi dài hơn chỗ trống). */
+  _fit(el, max, force = false) {
+    if (!force && el._ft === el.textContent) return;
+    el._ft = el.textContent;
+    el.removeAttribute('textLength'); el.removeAttribute('lengthAdjust');
+    const w = el.getComputedTextLength ? el.getComputedTextLength() : 0;
+    if (w > max) { el.setAttribute('textLength', max); el.setAttribute('lengthAdjust', 'spacingAndGlyphs'); }
   }
 
   // ================= khung runtime =================
@@ -132,7 +185,17 @@ export class HmiView {
       this._ax = e.clientX; // vị trí nhấp – để đặt faceplate không che thiết bị
       if (!this.H.menu.hidden && !this.H.menu.contains(e.target) && !this.H.user.contains(e.target)) this.H.menu.hidden = true;
     });
-    this.root.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!this.H.menu.hidden) this.H.menu.hidden = true; else if (this.fps.length) this._fpClose(this.fps[this.fps.length - 1]); } });
+    // Esc: đóng menu, hoặc hủy xác nhận đang chờ, hoặc đóng faceplate trên cùng – chỉ một việc mỗi lần bấm, không để lớp ngoài (shell) xử lý tiếp
+    this.root.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const fp = this.fps.find((f) => f.el.contains(e.target)) || [...this.fps].sort((x, y) => (+y.el.style.zIndex) - (+x.el.style.zIndex))[0];
+      if (!this.H.menu.hidden) this.H.menu.hidden = true;
+      else if (fp && !fp.cf.hidden) { this._cancel(fp); fp.el.focus({ preventScroll: true }); }
+      else if (fp) this._fpClose(fp);
+      else if (!this.QS.cf.hidden) this._cancel(this.QS);
+      else return;
+      e.preventDefault(); e.stopPropagation();
+    });
     this._applySkin();
     this.go(this.scr);
   }
@@ -143,6 +206,7 @@ export class HmiView {
       S('path', { d: 'M16 5.5c4.2 5.6 7.4 9.1 7.4 13a7.4 7.4 0 0 1-14.8 0c0-3.9 3.2-7.4 7.4-13z', class: 'h-logo-d' }), S('path', { d: 'M12.4 18.8a3.7 3.7 0 0 0 3.6 3.5', class: 'h-logo-s' }));
     H.title = h('div', { class: 'h-ttl', 'aria-live': 'polite' });
     H.man = h('span', { class: 'h-manbadge', hidden: true, title: 'Trạm đang ở chế độ điều khiển TAY – kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động' }, 'TAY');
+    H.intlk = h('button', { class: 'h-intlk', hidden: true, onclick: () => this._fpOpen('station', 'ST') }, '');
     H.leds = {};
     const led = (k, label) => { const i = h('i'); const s = h('span', { class: 'h-led' }, i, h('span', {}, label)); H.leds[k] = { i, s }; return s; };
     H.almN = h('b', {}, '0');
@@ -151,14 +215,16 @@ export class HmiView {
     H.uPos = h('b'); H.uRole = h('small');
     H.user = h('button', { class: 'h-user', 'aria-haspopup': 'menu', title: 'Đổi vị trí vận hành', onclick: () => { H.menu.hidden = !H.menu.hidden; this._syncMenu(); } }, icon(ICON.user), h('span', {}, H.uPos, H.uRole));
     H.skinTxt = h('span');
-    H.skin = h('button', { class: 'h-skinbtn', onclick: () => this.toggleSkin(), title: 'Đổi giao diện màn hình HMI: Tối / Sáng' }, icon(ICON.skin), H.skinTxt);
+    // biểu tượng giao diện: vòng tròn nửa tô đặc (không nhầm với nút nguồn)
+    const skinIco = S('svg', { viewBox: '0 0 20 20', class: 'h-ico', 'aria-hidden': 'true' }, S('circle', { cx: 10, cy: 10, r: 7.2 }), S('path', { d: 'M10 2.8a7.2 7.2 0 0 0 0 14.4z', class: 'h-ico-f' }));
+    H.skin = h('button', { class: 'h-skinbtn', onclick: () => this.toggleSkin(), title: 'Đổi giao diện màn hình HMI: Tối / Sáng' }, skinIco, H.skinTxt);
     H.menu = h('div', { class: 'h-menu', hidden: true, role: 'menu', 'aria-label': 'Vị trí vận hành' }, h('div', { class: 'h-menu-t' }, 'ĐĂNG NHẬP VỊ TRÍ VẬN HÀNH'),
       ...['local', 'remote'].map((w) => h('button', { role: 'menuitemradio', 'data-w': w, onclick: () => { H.menu.hidden = true; this.setWhere(w); } },
         icon(ICON.user), h('span', {}, h('b', {}, POS[w].name), h('small', {}, POS[w].role + ' – ' + POS[w].desc)))));
     return h('header', { class: 'h-hdr' },
       h('div', { class: 'h-brand' }, logo, h('div', { class: 'h-bfull' }, h('small', {}, 'HỆ THỐNG SCADA CẤP NƯỚC'), h('b', {}, 'TRẠM BƠM TĂNG ÁP ST-01 · DMA-A')), h('b', { class: 'h-bshort' }, 'ST-01')),
       H.title,
-      h('div', { class: 'h-hright' }, H.man, h('div', { class: 'h-leds', role: 'group', 'aria-label': 'Trạng thái truyền thông' }, led('gw', 'GW'), led('lte', '4G'), led('srv', 'MÁY CHỦ')),
+      h('div', { class: 'h-hright' }, H.intlk, H.man, h('div', { class: 'h-leds', role: 'group', 'aria-label': 'Trạng thái truyền thông' }, led('gw', 'GW'), led('lte', '4G'), led('srv', 'MÁY CHỦ')),
         H.alm, h('div', { class: 'h-clock' }, H.date, H.time), H.user, H.skin),
       H.menu);
   }
@@ -209,21 +275,25 @@ export class HmiView {
   _sv(key, v, nd, o) {
     const D = this.D[key];
     const [txt, st] = this._fv(v, nd, o);
-    setT(D.t, txt); setC(D.g, 'h-d ' + st + (this.ctx.stale ? ' stale' : ''));
+    setT(D.t, txt); setC(D.g, 'h-d ' + st + (this.ctx.stale && !o?.live ? ' stale' : ''));
     return st;
   }
   /** Ô số HTML (faceplate, bảng). */
-  _hd(unit = '', big = false) {
-    const b = h('b'), el = h('span', { class: 'h-hdw' + (big ? ' big' : '') }, h('span', { class: 'h-hd ok' }, h('i', {}, '?'), b), unit ? h('small', { class: 'h-hu' }, unit) : null);
+  _hd(unit = '', big = false, txt = false) {
+    const b = h('b'), el = h('span', { class: 'h-hdw' + (big ? ' big' : '') + (txt ? ' t' : '') }, h('span', { class: 'h-hd ok' }, h('i', {}, '?'), b), unit ? h('small', { class: 'h-hu' }, unit) : null);
     return { el, box: el.firstChild, b };
   }
   _hv(D, v, nd, o) {
     const [txt, st] = this._fv(v, nd, o);
-    setT(D.b, txt); setC(D.box, 'h-hd ' + st + (this.ctx.stale ? ' stale' : ''));
+    setT(D.b, txt); setC(D.box, 'h-hd ' + st + (this.ctx.stale && !o?.live ? ' stale' : ''));
     return st;
   }
   _lamp(txt) { const t = h('span', {}, txt); const el = h('span', { class: 'h-lamp' }, h('i'), t); return { el, t }; }
-  _setLamp(L, cls, txt) { setC(L.el, 'h-lamp' + (cls ? ' ' + cls : '')); if (txt !== undefined) setT(L.t, txt); }
+  /** Đèn trạng thái; dữ liệu cũ (trung tâm mất kết nối) → chất lượng không chắc chắn 'q' (mờ, dấu ?), trừ đèn live. */
+  _setLamp(L, cls, txt, live = false) {
+    setC(L.el, 'h-lamp' + (cls ? ' ' + cls : '') + (this.ctx.stale && !live ? ' q' : ''));
+    if (txt !== undefined) setT(L.t, txt);
+  }
   _changed(k, key, force) { if (!force && this._keys[k] === key) return false; this._keys[k] = key; return true; }
   _hit(g, fn, label) {
     g.setAttribute('class', (g.getAttribute('class') || '') + ' h-hit');
@@ -264,15 +334,70 @@ export class HmiView {
   }
   _absent(tag) { const d = this._d; return Boolean(d && d.installed && INST[tag] && tag !== 'PL-301' && !d.installed.has(tag)); }
   _ival(tag) { const d = this._d; return d[INST[tag].k]; }
-  _ctlText(d) {
-    if (d.dead) { const fb = this.app.st.gw_dead; return fb.enabled && !fb.inhibit ? 'PID BIẾN TẦN' : 'KHÔNG ĐIỀU KHIỂN'; }
-    return CTL_NAME[d.ctl] || d.ctl;
+  /**
+   * Liên động/cắt đang chặn bơm: { k, sev, short, badge, text, reset } hoặc null.
+   * Tại trạm đọc lớp an toàn của gateway; trung tâm suy ra từ báo động máy chủ đã nhận.
+   */
+  _intlk(d) {
+    if (this._ilk && this._ilk[0] === d) return this._ilk[1]; // tính một lần cho mỗi ảnh chụp dữ liệu
+    const r = this._intlk0(d);
+    this._ilk = [d, r];
+    return r;
   }
+  _intlk0(d) {
+    if (d.dead) return null;
+    const a = this.app, s = a.cfg.safety, lv = this._lv(), f1 = (v) => num(v, 1);
+    let k = null, why = '', left = null;
+    if (!this.ctx.remote) {
+      const g = a.st.gw, sf = g.safety;
+      if (sf.lockout) k = 'lockout';
+      else if (sf.trip_active) { k = 'trip'; left = Math.max(0, s.p_trip_restart_s - (d.t - sf.trip_t)); }
+      else if (sf.safe_stop) { k = 'safe'; why = sf.safe_reason; }
+      else if (sf.level_trip || a.st.sensors.lsll) k = 'level';
+      else if (g.ctrl.level_stop && d.ctl === 'auto') k = 'lstop';
+    } else {
+      const has = (c) => d.alarms.find((x) => x.code === c), ss = has('SAFE_STOP');
+      if (has('LOCKOUT')) k = 'lockout';
+      else if (has('P_HH_TRIP')) k = 'trip';
+      else if (ss) { k = 'safe'; why = ss.msg?.match(/:\s*(.+?) không đạt/)?.[1] ?? ''; }
+      else if (has('LEVEL_LL') || has('DRY_RUN_FLOAT')) k = 'level';
+      else if (has('LEVEL_STOP') && d.ctl === 'auto') k = 'lstop';
+    }
+    if (!k) return null;
+    const W = why ? why.toUpperCase() : 'CHẤT LƯỢNG NƯỚC';
+    const T = {
+      lockout: { sev: 'bad', short: 'KHÓA ÁP CAO', badge: 'KHÓA ÁP CAO', reset: true, text: 'TRẠM KHÓA SAU NHIỀU LẦN CẮT ÁP CAO – bơm bị cấm chạy · cần lệnh ĐẶT LẠI' },
+      trip: { sev: 'bad', short: 'CẮT ÁP CAO', badge: 'CẮT ÁP CAO', reset: false,
+        text: `CẮT BƠM DO ÁP LỰC RẤT CAO (> ${f1(s.p_highhigh_bar)} bar) – ` + (left !== null ? `tự chạy lại sau ${num(left, 0)} s nếu áp đã giảm` : 'tự chạy lại khi áp giảm') },
+      safe: { sev: 'bad', short: 'DỪNG AN TOÀN', badge: 'DỪNG AN TOÀN', reset: true, text: `TRẠM DỪNG AN TOÀN – ${W} KHÔNG ĐẠT QCVN · bơm dừng, van MV-02 đóng · chờ lệnh ĐẶT LẠI` },
+      level: { sev: 'bad', short: 'KHÓA CẠN', badge: 'KHÓA CHẠY KHÔ', reset: false,
+        text: `KHÓA CHỐNG CHẠY KHÔ – mức bể rất thấp (< ${f1(s.level_ll_m)} m hoặc phao LSLL-101 báo cạn) · tự mở khóa khi mức > ${f1(s.level_ll_restart_m)} m` },
+      lstop: { sev: 'warn', short: 'CHỐNG CẠN', badge: 'DỪNG CHỐNG CẠN', reset: false,
+        text: `KỊCH BẢN DỪNG BƠM CHỐNG CHẠY KHÔ – mức bể < ${f1(lv.stop_m)} m · tự chạy lại khi mức > ${f1(lv.restart_m)} m` },
+    };
+    return { k, ...T[k] };
+  }
+  /** Giờ của bản tin cuối trung tâm nhận được (hh:mm) hoặc '–'. */
+  _lastHM(d) { return isNum(d.age) ? fmtHM(d.t - d.age) : '–'; }
+  /** Chế độ điều khiển cho các ô chữ: { t, cls }; gộp liên động đang chặn, đánh dấu '?' khi dữ liệu cũ. */
+  _ctlState(d) {
+    if (d.dead) { const fb = this.app.st.gw_dead; return { t: fb.enabled && !fb.inhibit ? 'PID BIẾN TẦN' : 'KHÔNG ĐIỀU KHIỂN', cls: 'alarm', q: false }; }
+    const I = this._intlk(d), base = CTL_NAME[d.ctl] || d.ctl;
+    return { t: I ? `${base} · ${I.short}` : base, cls: I ? (I.sev === 'bad' ? 'alarm' : 'warn') : d.ctl === 'auto' ? 'ok' : 'warn', q: this.ctx.stale };
+  }
+  /** Lớp màu của chế độ gateway; (d) theo mức nghiêm trọng cao nhất đang có: chỉ cảnh báo → vàng, báo động/khẩn/dừng an toàn → đỏ. */
+  _modeCls(d) {
+    if (d.mode !== 'd') return { a: 'ok', b: 'warn', c: 'info', x: 'alarm' }[d.mode] || '';
+    if (!this.ctx.remote && !d.dead && ['trip', 'safe_stop', 'level_stop'].includes(this.app.st.gw.safety.state)) return 'alarm';
+    return d.alarms.some((x) => (x.sev === 'critical' || x.sev === 'alarm') && D_PREFIXES.some((p) => x.code.startsWith(p))) ? 'alarm' : 'warn';
+  }
+  /** Tên chế độ gateway; trung tâm mất bản tin thì (b) chỉ là suy luận. */
+  _modeText(d) { return this.ctx.remote && this.ctx.stale ? '(b)? Tự vận hành – suy luận' : MODE_NAME[d.mode] || d.mode; }
   _script() {
     const a = this.app;
-    if (this.where === 'local') { const g = a.st.gw; return { v: g.script.version, s: g.ctrl.strategy_used === 'custom' ? 'của học viên' : g.script.strategy }; }
-    const S0 = a.server.stations[a.st.sid], v = S0.reported ?? S0.target;
-    return { v, s: S0.repo?.[v]?.strategy ?? '' };
+    if (this.where === 'local') { const g = a.st.gw, k = g.ctrl.strategy_used === 'custom' ? 'custom' : g.script.strategy; return { v: g.script.version, s: STRAT[k] || k }; }
+    const S0 = a.server.stations[a.st.sid], v = S0.reported ?? S0.target, k = S0.repo?.[v]?.strategy ?? '';
+    return { v, s: STRAT[k] || k };
   }
   _fset(d, i) {
     const p = d.pumps[i];
@@ -293,9 +418,11 @@ export class HmiView {
       S('pattern', { id: 'hmiG-hatch', width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, S('rect', { width: 10, height: 10, class: 'h-hatchbg' }), S('rect', { width: 3, height: 10, class: 'h-hatch' })));
   }
   _buildOverview(host) {
-    const svg = S('svg', { viewBox: '0 0 1280 660', class: 'h-pid', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Sơ đồ công nghệ trạm bơm tăng áp ST-01' });
+    const svg = S('svg', { viewBox: `0 ${VB.y} ${VB.w} ${VB.h}`, class: 'h-pid', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Sơ đồ công nghệ trạm bơm tăng áp ST-01' });
     const O = this.O, cfg = this.app.cfg, add = (...els) => svg.append(...els);
     const txt = (x, y, s, cls = 'h-tag', anchor = null) => S('text', { x, y, class: cls, 'text-anchor': anchor, text: s });
+    // chữ trạng thái có tiền tố '?' (chất lượng không chắc chắn khi dữ liệu cũ)
+    const qtxt = (x, y, cls, max) => { const q = S('tspan', { class: 'h-qm' }), t = S('tspan'), el = S('text', { x, y, class: cls, 'text-anchor': 'end' }, q, t); (this._fits ||= []).push([el, max]); return { el, q, t, max }; };
     const pipe = (d, id = null) => {
       const g = S('g', { class: 'h-pipe' }, S('path', { d, class: 'h-pe' }), S('path', { d, class: 'h-pb' }), S('path', { d, class: 'h-ph' }));
       if (id) { const f = S('path', { d, class: 'h-pf' }); g.append(f); (this.PF[id] ||= []).push(f); }
@@ -316,8 +443,8 @@ export class HmiView {
     add(S('rect', { x: 0, y: 0, width: 1280, height: 660, class: 'h-pidbg' }), S('rect', { x: 0, y: 0, width: 1280, height: 660, fill: 'url(#hmiG-vign)', 'pointer-events': 'none' }));
     // ---- chú giải màu ----
     const lg = S('g', { class: 'h-legend' });
-    [['run', 'CHẠY / MỞ'], ['stop', 'DỪNG'], ['fault', 'LỖI / ĐÓNG'], ['move', 'HÀNH TRÌNH'], ['unk', 'KHÔNG RÕ']].forEach(([k, s], i) => {
-      lg.append(S('rect', { x: 430 + i * 104, y: 22, width: 14, height: 14, rx: 2, class: 'h-lgsw ' + k }), txt(450 + i * 104, 34, s, 'h-lgt'));
+    [['run', 'CHẠY / MỞ', 0], ['stop', 'DỪNG', 118], ['fault', 'LỖI / ĐÓNG', 198], ['move', 'HÀNH TRÌNH', 326], ['unk', 'KHÔNG RÕ', 460]].forEach(([k, s, dx]) => {
+      lg.append(S('rect', { x: 430 + dx, y: 22, width: 14, height: 14, rx: 2, class: 'h-lgsw ' + k }), txt(450 + dx, 34, s, 'h-lgt'));
     });
     lg.append(S('path', { d: 'M430 52 H470', class: 'h-lgflow' }), txt(478, 56, 'DÒNG CHẢY (TỐC ĐỘ THEO LƯU LƯỢNG)', 'h-lgt'));
     add(lg);
@@ -330,7 +457,8 @@ export class HmiView {
     // ---- cấp nước vào: ống thành phố -> FT-100 -> FV-01 -> bể ----
     add(txt(8, 130, 'ỐNG CẤP THÀNH PHỐ', 'h-lbl'), txt(8, 146, 'DN100', 'h-sm'));
     add(instHit('FT-100', { x: 58, y: 26, width: 160, height: 90 }, S('rect', { x: 66, y: 90, width: 28, height: 20, rx: 3, class: 'h-meter' }), bubble('FT-100', 80, 48, 90), this._disp('qin', 102, 37, 66, 'm³/h')));
-    add(drawer('FV-01', S('g', {}, S('rect', { class: 'h-selr', x: 182, y: 84, width: 36, height: 52 }), bowtie(200, 100, 'h-hv'), txt(200, 130, 'FV-01', 'h-tag', 'middle'))));
+    O.fv = bowtie(200, 100, 'h-fv');
+    add(drawer('FV-01', S('g', {}, S('rect', { class: 'h-selr', x: 180, y: 66, width: 40, height: 48 }), O.fv, txt(200, 84, 'FV-01', 'h-tag', 'middle'))));
     // ---- bể chứa T-01 ----
     const tank = S('g', { class: 'h-tankg' }, S('rect', { class: 'h-selr', x: TK.x - 6, y: TK.y0 - 6, width: TK.w + 12, height: TK.y1 - TK.y0 + 12 }),
       S('rect', { x: TK.x, y: TK.y0, width: TK.w, height: TK.y1 - TK.y0, rx: 8, class: 'h-tank' }),
@@ -343,15 +471,15 @@ export class HmiView {
     for (const [L] of marks) tank.append(S('line', { x1: TK.x + 8, x2: TK.x + TK.w - 8, y1: lvY(L), y2: lvY(L), class: 'h-mk' }));
     tank.append(txt(300, 290, 'MỨC BỂ', 'h-tcap', 'middle'), this._disp('lvp', 252, 298, 82, '%'), txt(300, 346, 'THỂ TÍCH', 'h-tcap', 'middle'), this._disp('vol', 252, 354, 82, 'm³'));
     add(this._hit(tank, () => this._fpOpen('inst', 'LT-101'), 'Bể chứa T-01 – mở bảng mức nước LT-101'));
-    add(txt(TK.x - 4, 553, 'T-01 · BỂ CHỨA ' + num(cfg.tank.area_m2 * cfg.tank.overflow_m, 0) + ' m³', 'h-tag2'));
+    add(txt(362, 553, 'T-01 · BỂ CHỨA ' + num(cfg.tank.area_m2 * cfg.tank.overflow_m, 0) + ' m³', 'h-tag2', 'end'));
     // thanh mức bên cạnh bể
     O.bgf = S('rect', { x: 177, y: TK.y1, width: 14, height: 0, class: 'h-bgf ok' });
     add(S('rect', { x: 175, y: TK.y0, width: 18, height: TK.y1 - TK.y0, rx: 2, class: 'h-bgt' }), O.bgf);
     for (const [L, s, k] of marks) add(S('line', { x1: 166, x2: 196, y1: lvY(L), y2: lvY(L), class: 'h-bgm ' + k }), txt(162, lvY(L) + 4, s, 'h-sm', 'end'));
     add(txt(162, TK.y0 + 10, num(TK.hMax, 1) + ' m', 'h-sm', 'end'), txt(162, TK.y1, '0', 'h-sm', 'end'));
     add(instHit('LT-101', { x: 330, y: 84, width: 146, height: 48 }, bubble('LT-101', 352, 108, 150), this._disp('lt', 374, 97, 72, 'm')));
-    O.lsll = S('circle', { cx: 218, cy: 578, r: 7, class: 'h-lampc' });
-    add(drawer('LSLL-101', S('g', {}, S('rect', { class: 'h-selr', x: 206, y: 566, width: 150, height: 24 }), O.lsll, txt(231, 582, 'LSLL-101 · PHAO CẠN', 'h-sm'))));
+    O.lsll = S('circle', { cx: 184, cy: 578, r: 7, class: 'h-lampc' });
+    add(drawer('LSLL-101', S('g', {}, S('rect', { class: 'h-selr', x: 172, y: 566, width: 186, height: 24 }), O.lsll, txt(197, 582, 'LSLL-101 · PHAO CẠN', 'h-sm'))));
     O.vx = bowtie(372, 568, 'h-vx', true);
     add(drawer('VX-01', S('g', {}, S('rect', { class: 'h-selr', x: 358, y: 552, width: 64, height: 32 }), O.vx, txt(386, 572, 'VX-01', 'h-tag'))), txt(474, 604, 'XẢ ĐÁY', 'h-sm'));
     // ---- ống hút, van tay, cụm bơm + biến tần ----
@@ -379,9 +507,9 @@ export class HmiView {
       txt(1105, 108, 'MV-02', 'h-tag', 'middle'), this._disp('mv', 1075, 182, 60)), () => this._fpOpen('valve', 'MV-02'), 'Van điện MV-02 – mở bảng điều khiển van'));
     // ---- mạng lưới DMA-A + logger điểm bất lợi ----
     const dma = S('g', {}, S('rect', { class: 'h-selr', x: 1166, y: 86, width: 112, height: 176 }), S('rect', { x: 1172, y: 92, width: 102, height: 164, rx: 4, class: 'h-blk' }),
-      txt(1223, 112, 'MẠNG LƯỚI', 'h-btitle d', 'middle'), txt(1223, 128, 'DMA-A', 'h-btitle d', 'middle'),
+      txt(1223, 110, 'MẠNG LƯỚI', 'h-btitle d', 'middle'), txt(1223, 129, 'DMA-A', 'h-btitle d', 'middle'),
       S('path', { d: 'M1190 152 l12 -10 l12 10 v12 h-24z M1214 152 l12 -10 l12 10 v12 h-24z M1238 152 l12 -10 l12 10 v12 h-24z', class: 'h-house' }),
-      txt(1223, 180, 'PL-301', 'h-tag', 'middle'), txt(1223, 194, 'ĐIỂM BẤT LỢI', 'h-xs', 'middle'), this._disp('pc', 1182, 202, 58, 'bar'), txt(1223, 244, '≥ ' + num(cfg.service.p_crit_min_bar, 1) + ' bar', 'h-sm', 'middle'));
+      txt(1223, 181, 'PL-301', 'h-tag', 'middle'), txt(1223, 197, 'ĐIỂM BẤT LỢI', 'h-xs', 'middle'), this._disp('pc', 1182, 204, 58, 'bar'), txt(1223, 247, '≥ ' + num(cfg.service.p_crit_min_bar, 1) + ' bar', 'h-sm', 'middle'));
     add(this._hit(dma, () => this._fpOpen('inst', 'PL-301'), 'Mạng lưới DMA-A – áp lực điểm bất lợi PL-301'));
     // ---- khối chất lượng nước ----
     const qb = S('g', {}, S('rect', { x: 790, y: 318, width: 240, height: 327, rx: 4, class: 'h-blk' }), S('rect', { x: 790, y: 318, width: 240, height: 26, rx: 4, class: 'h-blkt' }),
@@ -391,7 +519,7 @@ export class HmiView {
       const y = 352 + i * 97, L = this._lim(tag);
       const lamp = S('rect', { x: 944, y: y + 30, width: 78, height: 22, rx: 3, class: 'h-qlamp' }), lt = txt(983, y + 45, 'ĐẠT', 'h-qlt', 'middle');
       const row = S('g', {}, S('rect', { class: 'h-selr', x: 794, y: y - 2, width: 232, height: 92 }), txt(800, y + 16, `${name} · ${tag}`, 'h-tag2'),
-        this._disp('q_' + k, 800, y + 30, 82, INST[tag].u), lamp, lt, txt(800, y + 76, 'QCVN 01-1:2018: ' + L.qc, 'h-sm'));
+        this._disp('q_' + k, 800, y + 30, 82, INST[tag].u), lamp, lt, txt(800, y + 76, 'QCVN 01-1: ' + L.qc, 'h-sm'));
       if (i < 2) row.append(S('line', { x1: 798, x2: 1022, y1: y + 92, y2: y + 92, class: 'h-sep' }));
       qb.append(this._hit(row, () => this._fpOpen('inst', tag), `${tag} ${name} – mở bảng thiết bị đo`));
       O.q[k] = { lamp, lt };
@@ -401,17 +529,18 @@ export class HmiView {
     const cb = S('g', {}, S('rect', { x: 1045, y: 268, width: 231, height: 377, rx: 4, class: 'h-blk' }), S('rect', { x: 1045, y: 268, width: 231, height: 26, rx: 4, class: 'h-blkt' }),
       txt(1055, 286, 'ĐIỀU KHIỂN TRẠM', 'h-btitle'));
     const row = (y, label) => cb.append(txt(1055, y, label, 'h-sm'));
-    row(318, 'Chế độ điều khiển'); O.ctl = txt(1266, 336, '', 'h-cval', 'end');
-    row(360, 'Chế độ gateway'); O.mode = txt(1266, 378, '', 'h-cval', 'end');
-    row(402, 'Kịch bản'); O.scr = txt(1266, 402, '', 'h-cval2', 'end');
-    cb.append(O.ctl, O.mode, O.scr, S('line', { x1: 1053, x2: 1268, y1: 414, y2: 414, class: 'h-sep' }));
-    row(436, 'P đặt'); cb.append(this._disp('pset', 1150, 422, 80, 'bar'));
-    row(466, 'P thực PT-101'); cb.append(this._disp('preal', 1150, 452, 80, 'bar'));
+    O.ctlL = txt(1055, 318, 'Chế độ điều khiển', 'h-sm'); cb.append(O.ctlL); O.ctl = qtxt(1266, 337, 'h-cval', 211);
+    O.ctlN = txt(1266, 318, '', 'h-xs h-qn', 'end');
+    row(360, 'Chế độ gateway'); O.mode = qtxt(1266, 379, 'h-cval', 211);
+    row(402, 'Kịch bản'); O.scr = qtxt(1266, 402, 'h-cval2', 150);
+    cb.append(O.ctl.el, O.ctlN, O.mode.el, O.scr.el, S('line', { x1: 1053, x2: 1268, y1: 414, y2: 414, class: 'h-sep' }));
+    row(436, 'P đặt'); cb.append(this._disp('pset', 1160, 422, 72, 'bar'));
+    row(466, 'P thực PT-101'); cb.append(this._disp('preal', 1160, 452, 72, 'bar'));
     O.pbarSet = S('path', { d: '', class: 'h-pbset' }); O.pbarVal = S('rect', { x: 1055, y: 486, width: 0, height: 8, class: 'h-pbval' });
     cb.append(S('rect', { x: 1055, y: 486, width: 210, height: 8, rx: 2, class: 'h-pbtrk' }), S('rect', { x: 1055 + 210 * (cfg.service.p_out_max_bar / 6), y: 486, width: 210 * (1 - cfg.service.p_out_max_bar / 6), height: 8, class: 'h-pbhi' }),
       O.pbarVal, O.pbarSet, txt(1055, 508, '0', 'h-xs'), txt(1265, 508, '6 bar', 'h-xs', 'end'));
-    row(534, 'Công suất'); cb.append(this._disp('kw', 1150, 520, 80, 'kW'));
-    row(564, 'Điện năng'); cb.append(this._disp('kwh', 1150, 550, 80, 'kWh'));
+    row(534, 'Công suất'); cb.append(this._disp('kw', 1160, 520, 72, 'kW'));
+    row(564, 'Điện năng'); cb.append(this._disp('kwh', 1160, 550, 72, 'kWh'));
     const btn = S('g', { class: 'h-svgbtn' }, S('rect', { x: 1057, y: 590, width: 207, height: 42, rx: 4 }), txt(1160, 616, 'CHẾ ĐỘ TRẠM ▸', 'h-svgbtnt', 'middle'));
     cb.append(this._hit(btn, () => this._fpOpen('station', 'ST'), 'Mở bảng chế độ trạm: tự động / tay, đặt lại dừng an toàn, luân phiên bơm'));
     add(cb);
@@ -429,25 +558,27 @@ export class HmiView {
     P.q = S('text', { x: cx, y: cy + 6, class: 'h-pq', 'text-anchor': 'middle', text: '?' });
     P.bA = S('rect', { x: cx - 74, y: cy - 88, width: 44, height: 16, rx: 3, class: 'h-badge' }); P.bAt = S('text', { x: cx - 52, y: cy - 76, class: 'h-badget', 'text-anchor': 'middle' });
     P.bL = S('rect', { x: cx - 74, y: cy - 68, width: 44, height: 16, rx: 3, class: 'h-badge' }); P.bLt = S('text', { x: cx - 52, y: cy - 56, class: 'h-badget', 'text-anchor': 'middle' });
+    // thẻ liên động: lớp an toàn đang chặn bơm (dừng an toàn, cắt/khóa áp cao, khóa chạy khô)
+    P.bI = S('rect', { x: cx - 76, y: cy - 48, width: 48, height: 16, rx: 3, class: 'h-badge off' }); P.bIt = S('text', { x: cx - 52, y: cy - 36, class: 'h-badget', 'text-anchor': 'middle', text: 'INTLK' });
     const motor = S('g', {}, S('rect', { x: cx - 8, y: cy - 94, width: 16, height: 8, rx: 1, class: 'h-motor' }), S('rect', { x: cx - 22, y: cy - 87, width: 44, height: 41, rx: 5, class: 'h-motor' }),
       ...[0, 1, 2, 3, 4].map((k) => S('line', { x1: cx - 15 + k * 7.5, x2: cx - 15 + k * 7.5, y1: cy - 82, y2: cy - 51, class: 'h-fin' })),
       S('path', { d: `M${cx - 12} ${cy - 46} L${cx + 12} ${cy - 46} L${cx + 7} ${cy - 27} L${cx - 7} ${cy - 27} Z`, class: 'h-lant' }));
     P.sel = S('rect', { class: 'h-selr', x: cx - 80, y: cy - 100, width: 128, height: 168 });
     P.g = S('g', {}, P.sel, motor, P.noz, P.vol, S('circle', { cx, cy, r: 28, class: 'h-shine' }), P.imp, P.q,
       S('path', { d: `M${cx - 30} ${cy + 39} L${cx + 30} ${cy + 39} L${cx + 22} ${cy + 27} L${cx - 22} ${cy + 27} Z`, class: 'h-base' }),
-      S('text', { x: cx, y: cy + 58, class: 'h-ptag', 'text-anchor': 'middle', text: tag }), P.bA, P.bAt, P.bL, P.bLt);
+      S('text', { x: cx, y: cy + 58, class: 'h-ptag', 'text-anchor': 'middle', text: tag }), P.bA, P.bAt, P.bL, P.bLt, P.bI, P.bIt);
     this._hit(P.g, () => this._fpOpen('pump', i), `${tag} – mở bảng điều khiển bơm`);
     // khối dữ liệu biến tần
-    const x0 = cx + 40, y0 = cy - 2;
-    P.vst = S('text', { x: x0 + 132, y: y0 + 15, class: 'h-vst', 'text-anchor': 'end' });
+    const x0 = cx + 34, y0 = cy - 2;
+    P.vst = S('text', { x: x0 + 144, y: y0 + 15, class: 'h-vst', 'text-anchor': 'end' });
     P.fbar = S('rect', { x: x0 + 8, y: y0 + 95, width: 0, height: 5, class: 'h-fbar' });
-    P.vbox = S('rect', { x: x0, y: y0, width: 140, height: 106, rx: 4, class: 'h-vfd' });
-    P.vsel = S('rect', { class: 'h-selr', x: x0 - 4, y: y0 - 4, width: 148, height: 114 });
-    P.vfd = S('g', {}, P.vsel, P.vbox, S('rect', { x: x0, y: y0, width: 140, height: 20, rx: 4, class: 'h-vfdt' }),
+    P.vbox = S('rect', { x: x0, y: y0, width: 152, height: 106, rx: 4, class: 'h-vfd' });
+    P.vsel = S('rect', { class: 'h-selr', x: x0 - 3, y: y0 - 4, width: 158, height: 114 });
+    P.vfd = S('g', {}, P.vsel, P.vbox, S('rect', { x: x0, y: y0, width: 152, height: 20, rx: 4, class: 'h-vfdt' }),
       S('text', { x: x0 + 8, y: y0 + 15, class: 'h-btitle', text: 'VFD-0' + (i + 1) }), P.vst,
-      ...[['Hz', 'f', 24], ['A', 'a', 47], ['kW', 'kw', 70]].map(([u, k, dy]) => S('g', {}, S('text', { x: x0 + 8, y: y0 + dy + 16, class: 'h-vl', text: { f: 'Tần số', a: 'Dòng', kw: 'Công suất' }[k] }),
-        this._disp(`v${i}_${k}`, x0 + 60, y0 + dy, 52), S('text', { x: x0 + 116, y: y0 + dy + 16, class: 'h-du', text: u }))),
-      S('rect', { x: x0 + 8, y: y0 + 95, width: 124, height: 5, rx: 1, class: 'h-ftrk' }), P.fbar);
+      ...[['Hz', 'f', 24], ['A', 'a', 47], ['kW', 'kw', 70]].map(([u, k, dy]) => S('g', {}, S('text', { x: x0 + 7, y: y0 + dy + 16, class: 'h-vl', text: { f: 'Tần số', a: 'Dòng', kw: 'Công suất' }[k] }),
+        this._disp(`v${i}_${k}`, x0 + 72, y0 + dy, 48), S('text', { x: x0 + 124, y: y0 + dy + 16, class: 'h-du', text: u }))),
+      S('rect', { x: x0 + 8, y: y0 + 95, width: 136, height: 5, rx: 1, class: 'h-ftrk' }), P.fbar);
     this._hit(P.vfd, () => this._fpOpen('pump', i), `VFD-0${i + 1} – mở bảng điều khiển ${tag}`);
     return P;
   }
@@ -470,9 +601,12 @@ export class HmiView {
     const pl = this._lim('PT-101');
     this._sv('p1', d.p1, 2, { lim: pl.st }); this._sv('p2', d.p2, 2, { absent: absent('PT-102'), lim: pl.st });
     this._sv('q', d.q, 1, { lim: this._lim('FT-101').st }); this._sv('pc', d.p_crit, 2, { lim: this._lim('PL-301').st });
-    this._sv('psv', d.psv === undefined ? undefined : isNum(d.psv) ? (d.psv > 0.05 ? 'XẢ ' + num(d.psv, 1) : 'ĐÓNG') : d.psv, 1, { st: d.psv > 0.05 ? 'alarm' : 'ok' });
-    const mvAbsent = cfg.hardware['MV-02'] === false, vv = d.valve;
-    this._sv('mv', isNum(vv) ? (vv > 0.99 ? 'MỞ' : vv < 0.01 ? 'ĐÓNG' : num(vv * 100, 0) + ' %') : vv, 0, { absent: mvAbsent, st: isNum(vv) && vv < 0.99 ? (vv < 0.01 ? 'alarm' : 'warn') : 'ok' });
+    // chữ trạng thái thiết bị theo chú giải (mở xanh, đóng đỏ, hành trình vàng); bất thường thêm khung báo động nhấp nháy
+    const relief = isNum(d.psv) && d.psv > 0.05;
+    this._sv('psv', d.psv === undefined ? undefined : isNum(d.psv) ? (relief ? 'XẢ ' + num(d.psv, 1) : 'ĐÓNG') : d.psv, 1, { st: relief ? 'ok frame' : 'closed' });
+    const mvAbsent = cfg.hardware['MV-02'] === false, vv = d.valve, I = this._intlk(d);
+    this._sv('mv', isNum(vv) ? (vv > 0.99 ? 'MỞ' : vv < 0.01 ? 'ĐÓNG' : num(vv * 100, 0) + ' %') : vv, 0,
+      { absent: mvAbsent, st: !isNum(vv) || vv > 0.99 ? 'ok' : vv < 0.01 ? 'closed' + (I?.k === 'safe' ? ' frame' : '') : 'warn' });
     // bể
     const showL = known && isNum(lvl) ? lvl : 0;
     const wy = known ? lvY(showL) : TK.y0 + 7;
@@ -484,8 +618,11 @@ export class HmiView {
     setC(O.lsll, 'h-lampc' + (local && known && a.st.sensors.lsll ? ' alarm' : local && known ? ' ok' : ''));
     const drain = local && known && a.st.plant.drain_open;
     setC(O.vx, 'h-vx' + (drain ? ' open' : ''));
+    // van phao FV-01 không có phản hồi vị trí: suy ra từ lưu lượng vào FT-100 (có dòng = mở, bể đầy không dòng = đóng, còn lại = không có nước cấp)
+    const qin = d.q_in, fv = !known || absent('FT-100') || !isNum(qin) ? 'unk' : qin > 0.3 ? 'open' : isNum(lvl) && lvl >= cfg.inlet.float_close_m - 0.05 ? 'closed' : 'stop';
+    setC(O.fv, 'h-fv ' + fv);
     // bơm
-    const any = d.pumps.some((p) => p.running);
+    const any = d.pumps.some((p) => p.running), q = c.stale ? ' q' : '';
     d.pumps.forEach((p, i) => {
       const P = O.pumps[i];
       const st = !known ? 'unk' : p.fault ? 'fault' : p.running ? 'run' : 'stop';
@@ -493,15 +630,16 @@ export class HmiView {
       const spin = known && p.running && isNum(p.f) && p.f > 1;
       setC(P.imp, 'h-imp' + (spin ? ' spin' : ''));
       if (spin) setA(P.imp, 'style', `transform-origin:${P.cx}px ${P.cy}px;animation-duration:${(30 / Math.max(10, Math.round(p.f))).toFixed(2)}s`);
-      setC(P.q, 'h-pq' + (known ? '' : ' on'));
+      setC(P.q, 'h-pq' + (known && !c.stale ? '' : ' on'));
       const man = d.ctl !== 'auto';
-      setC(P.bA, 'h-badge ' + (!known ? 'off' : man ? 'man' : 'auto')); setT(P.bAt, !known ? '–' : man ? 'MAN' : 'AUTO');
-      setC(P.bL, 'h-badge ' + (!known || !man ? 'off' : d.ctl === 'local' ? 'loc' : 'rem')); setT(P.bLt, !known || !man ? '–' : d.ctl === 'local' ? 'LOC' : 'REM');
+      setC(P.bA, 'h-badge ' + (!known ? 'off' : man ? 'man' : 'auto') + q); setT(P.bAt, !known ? '–' : man ? 'MAN' : 'AUTO');
+      setC(P.bL, 'h-badge ' + (!known || !man ? 'off' : d.ctl === 'local' ? 'loc' : 'rem') + q); setT(P.bLt, !known || !man ? '–' : d.ctl === 'local' ? 'LOC' : 'REM');
+      setC(P.bI, 'h-badge ' + (I && I.sev === 'bad' ? 'intlk' : 'off') + q);
       setT(P.vst, !known ? '####' : p.fault ? 'LỖI' : p.running ? 'CHẠY' : 'DỪNG');
       setC(P.vst, 'h-vst ' + st);
       setC(P.vbox, 'h-vfd' + (p.fault && known ? ' fault' : ''));
       this._sv(`v${i}_f`, p.f, 1); this._sv(`v${i}_a`, p.amps, 1); this._sv(`v${i}_kw`, p.kw, 2);
-      setA(P.fbar, 'width', (known && isNum(p.f) ? clamp(p.f / 50, 0, 1) * 124 : 0).toFixed(1));
+      setA(P.fbar, 'width', (known && isNum(p.f) ? clamp(p.f / 50, 0, 1) * 136 : 0).toFixed(1));
       const open = this.fps.some((f) => f.id === 'pump:' + i);
       setC(P.sel, 'h-selr' + (open ? ' on' : '')); setC(P.vsel, 'h-selr' + (open ? ' on' : ''));
       this._flow('suc' + (i + 1), known && p.running, d.q); this._flow('dis' + (i + 1), known && p.running, d.q);
@@ -512,7 +650,7 @@ export class HmiView {
     this._flow('psv', known && isNum(d.psv) && d.psv > 0.05, d.psv * 4);
     this._flow('drain', drain, 30);
     // van
-    setC(O.psv, 'h-psv' + (known && d.psv > 0.05 ? ' relief' : ''));
+    setC(O.psv, 'h-psv' + (!known || !isNum(d.psv) ? ' unk' : relief ? ' relief' : ' closed'));
     const mst = !known || mvAbsent || !isNum(vv) ? 'unk' : vv > 0.99 ? 'open' : vv < 0.01 ? 'closed' : 'moving';
     setC(O.mv, 'h-mv ' + mst); setC(O.mvAct, 'h-act ' + mst);
     setC(O.mvSel, 'h-selr' + (this.fps.some((f) => f.id === 'valve:MV-02') ? ' on' : ''));
@@ -523,11 +661,14 @@ export class HmiView {
       setC(Q.lamp, 'h-qlamp ' + (bad ? 'bad' : ok ? 'ok' : 'unk')); setT(Q.lt, bad ? 'KHÔNG ĐẠT' : ok ? 'ĐẠT' : st === 'na' ? 'N/A' : '####');
       setC(Q.lt, 'h-qlt' + (bad ? ' bad' : ok ? ' ok' : ''));
     }
-    // điều khiển trạm
-    setT(O.ctl, this._ctlText(d)); setC(O.ctl, 'h-cval ' + (d.dead ? 'alarm' : d.ctl === 'auto' ? 'ok' : 'warn'));
-    setT(O.mode, MODE_NAME[d.mode] || d.mode); setC(O.mode, 'h-cval ' + ({ a: 'ok', b: 'warn', c: 'info', d: 'alarm', x: 'alarm' }[d.mode] || ''));
+    // điều khiển trạm (dữ liệu cũ: tiền tố '?' và ghi chú giờ bản tin cuối)
+    const cs = this._ctlState(d), qm = c.stale ? '? ' : '';
+    const stxt = (T, s, cls, mq = qm) => { setT(T.q, mq); setT(T.t, s); setC(T.el, cls + q); this._fit(T.el, T.max); };
+    stxt(O.ctl, cs.t, 'h-cval ' + cs.cls);
+    setT(O.ctlN, c.stale ? `bản tin cuối ${this._lastHM(d)}` : ''); setT(O.ctlL, c.stale ? 'Điều khiển' : 'Chế độ điều khiển');
+    stxt(O.mode, this._modeText(d), 'h-cval ' + this._modeCls(d), '');
     const sc = this._script();
-    setT(O.scr, c.dead ? '####' : `v${sc.v} · ${sc.s}`);
+    stxt(O.scr, c.dead ? '####' : `v${sc.v} · ${sc.s}`, 'h-cval2');
     this._sv('pset', d.p_set, 2); this._sv('preal', d.p1, 2, { lim: pl.st });
     this._sv('kw', d.kw, 2); this._sv('kwh', d.kwh, 1);
     const X = (v) => 1055 + clamp(v / 6, 0, 1) * 210;
@@ -543,7 +684,7 @@ export class HmiView {
     const ang = (v) => a0 + (a1 - a0) * clamp((v - min) / (max - min), 0, 1);
     const pt = (a, rr) => [cx + rr * Math.cos((a * Math.PI) / 180), cy + rr * Math.sin((a * Math.PI) / 180)];
     const arc = (v0, v1, rr) => { const [x0, y0] = pt(ang(v0), rr), [x1, y1] = pt(ang(v1), rr); return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${rr} ${rr} 0 ${ang(v1) - ang(v0) > 180 ? 1 : 0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`; };
-    const svg = S('svg', { viewBox: '0 0 220 196', class: 'h-gauge', 'aria-hidden': 'true' }, S('circle', { cx, cy, r: r + 16, class: 'h-g-face' }), S('path', { d: arc(min, max, r), class: 'h-g-trk' }));
+    const svg = S('svg', { viewBox: '0 0 220 214', class: 'h-gauge', 'aria-hidden': 'true' }, S('circle', { cx, cy, r: r + 16, class: 'h-g-face' }), S('path', { d: arc(min, max, r), class: 'h-g-trk' }));
     for (const [v0, v1, cls] of bands) svg.append(S('path', { d: arc(v0, v1, r + 9), class: 'h-g-band ' + cls }));
     for (let v = min; v <= max + 1e-9; v += minor) {
       const major = Math.abs((v - min) / step - Math.round((v - min) / step)) < 1e-6, [x0, y0] = pt(ang(v), r - 8), [x1, y1] = pt(ang(v), r - (major ? 19 : 13));
@@ -572,7 +713,7 @@ export class HmiView {
   _buildPumps(host) {
     this.PP = [0, 1].map((i) => {
       const P = { g: this._gauge(0, 50, 10, 2.5, 'Hz', [[25, 50, 'ok']]) };
-      P.lamps = { run: this._lamp('CHẠY'), stop: this._lamp('DỪNG'), flt: this._lamp('LỖI'), mode: this._lamp('TỰ ĐỘNG'), src: this._lamp('TẠI CHỖ/TỪ XA') };
+      P.lamps = { run: this._lamp('CHẠY'), stop: this._lamp('DỪNG'), flt: this._lamp('LỖI'), mode: this._lamp('TỰ ĐỘNG'), src: this._lamp('TẠI CHỖ/TỪ XA'), ilk: this._lamp('LIÊN ĐỘNG') };
       P.R = { fs: this._hd('Hz'), a: this._hd('A'), kw: this._hd('kW'), rh: this._hd('h'), sh: this._hd(''), st: this._hd('') };
       P.chip = h('span', { class: 'h-chip' });
       const pnl = this._pnl(`${PUMP_TAG[i]} · BƠM SỐ ${i + 1} · VFD-0${i + 1}`,
@@ -595,10 +736,11 @@ export class HmiView {
     host.append(h('div', { class: 'h-grid3' }, this.PP[0].el, this.PP[1].el, qp));
   }
   _pumpLamps(Ls, d, i) {
-    const p = d.pumps[i], c = this.ctx, k = !c.dead, man = d.ctl !== 'auto';
+    const p = d.pumps[i], c = this.ctx, k = !c.dead, man = d.ctl !== 'auto', I = this._intlk(d);
     this._setLamp(Ls.run, k && p.running ? 'g' : ''); this._setLamp(Ls.stop, k && !p.running ? 'w' : ''); this._setLamp(Ls.flt, k && p.fault ? 'r blink' : '');
     this._setLamp(Ls.mode, !k ? '' : man ? 'a' : 'g', !k ? 'TỰ ĐỘNG/TAY' : man ? 'TAY' : 'TỰ ĐỘNG');
     this._setLamp(Ls.src, !k || !man ? '' : d.ctl === 'local' ? 'a' : 'c', !k || !man ? 'TẠI CHỖ/TỪ XA' : d.ctl === 'local' ? 'TẠI CHỖ' : 'TỪ XA');
+    if (Ls.ilk) { this._setLamp(Ls.ilk, I && I.sev === 'bad' ? 'r' : ''); setA(Ls.ilk.el, 'title', I && I.sev === 'bad' ? 'Liên động đang chặn bơm: ' + I.text : 'Không có liên động chặn bơm'); }
   }
   _updPumps(d) {
     const max = this.app.cfg.safety.max_starts_per_h;
@@ -606,7 +748,7 @@ export class HmiView {
       const P = this.PP[i], k = !this.ctx.dead, fs = this._fset(d, i);
       P.g.set(p.f, 1, fs);
       this._pumpLamps(P.lamps, d, i);
-      setT(P.chip, !k ? '####' : p.fault ? 'LỖI' : p.running ? 'ĐANG CHẠY' : 'DỪNG'); setC(P.chip, 'h-chip ' + (!k ? 'unk' : p.fault ? 'r' : p.running ? 'g' : 'w'));
+      setT(P.chip, !k ? '####' : p.fault ? 'LỖI' : p.running ? 'ĐANG CHẠY' : 'DỪNG'); setC(P.chip, 'h-chip ' + (!k ? 'unk' : p.fault ? 'r' : p.running ? 'g' : 'w') + (this.ctx.stale ? ' q' : ''));
       this._hv(P.R.fs, fs, 1); this._hv(P.R.a, p.amps, 1); this._hv(P.R.kw, p.kw, 2); this._hv(P.R.rh, p.run_h, 1);
       this._hv(P.R.sh, isNum(p.starts_h) ? `${p.starts_h} / ${max}` : p.starts_h, 0, { st: p.starts_h >= max ? 'alarm' : p.starts_h >= max - 1 ? 'warn' : 'ok' });
       this._hv(P.R.st, isNum(p.starts) ? String(p.starts) : p.starts, 0);
@@ -615,7 +757,8 @@ export class HmiView {
     Q.g.set(d.p1, 2, d.p_set, { lim: pl.st });
     this._hv(Q.R.pset, d.p_set, 2); this._hv(Q.R.err, isNum(d.p1) && isNum(d.p_set) ? d.p1 - d.p_set : undefined, 2);
     this._hv(Q.R.pc, d.p_crit, 2, { lim: this._lim('PL-301').st }); this._hv(Q.R.q, d.q, 1); this._hv(Q.R.kw, d.kw, 2); this._hv(Q.R.kwh, d.kwh, 1);
-    setT(Q.ctl, this._ctlText(d)); setC(Q.ctl, 'h-bigtxt ' + (d.dead ? 'alarm' : d.ctl === 'auto' ? 'ok' : 'warn'));
+    const cs = this._ctlState(d);
+    setT(Q.ctl, (cs.q ? '? ' : '') + cs.t); setC(Q.ctl, 'h-bigtxt ' + cs.cls + (cs.q ? ' q' : ''));
   }
 
   // ================= màn 03: chất lượng nước =================
@@ -630,7 +773,7 @@ export class HmiView {
       return A;
     });
     const Z = this.QS = { lamp: this._lamp('DỪNG AN TOÀN'), vlamp: this._lamp('VAN MV-02'), txt: h('p', { class: 'h-qs-t' }), note: h('p', { class: 'h-qlim m' }) };
-    Z.reset = h('button', { class: 'h-btn warn',
+    Z.reset = h('button', { class: 'h-btn',
       onclick: () => this._askScreen('Xác nhận ĐẶT LẠI DỪNG AN TOÀN? Trạm chỉ chạy lại khi chất lượng nước đã đạt liên tục.', () => this._sendScr('reset_safe_stop', {})) }, 'ĐẶT LẠI DỪNG AN TOÀN');
     Z.cf = h('div', { class: 'h-cf', hidden: true });
     Z.res = h('p', { class: 'h-res' });
@@ -641,7 +784,7 @@ export class HmiView {
     // trả về [[t...],[v...]] trong cửa sổ, lấy thưa còn khoảng n điểm
     const a = this.app, ts = [], vs = [];
     if (this.where === 'local') {
-      const H = a.st.hist.data, T = H.t, V = H[key];
+      const H = a.st.hist.data, T = H.t, V = UI_HIST.has(key) ? a.uiHist?.[key] : H[key];
       if (!V) return null;
       let lo = 0, hi = T.length; while (lo < hi) { const m = (lo + hi) >> 1; if (T[m] < t0) lo = m + 1; else hi = m; }
       const step = Math.max(1, Math.floor((T.length - lo) / n));
@@ -666,7 +809,14 @@ export class HmiView {
     }
     svg.replaceChildren(S('rect', { x: 0, y: 0, width: W, height: H, class: 'h-spk-bg' }), ...kids);
     const ax = svg.parentNode?.querySelector('.h-spk-ax'), hrs = Math.round((t1 - t0) / 3600);
-    if (ax) ax.replaceChildren(...lines.map(([v, cls]) => h('span', { class: 'lv ' + cls, style: `top:${((Y(v) / H) * 100).toFixed(1)}%` }, num(v, v < 10 ? 1 : 0))),
+    // nhãn giới hạn: đặt trên vạch; vạch sát nhau (< 12 px) thì nhãn sau xuống dưới vạch, vẫn chồng thì gộp
+    const px = svg.clientHeight || H, lab = [];
+    let bottom = 0;
+    for (const [v, cls] of [...lines].sort((p, q) => Y(p[0]) - Y(q[0]))) {
+      const y = (Y(v) / H) * px, s = num(v, v < 10 ? 1 : 0);
+      if (y - 12 >= bottom) { lab.push({ v, cls, s, dn: false }); bottom = y; } else if (y >= bottom - 0.5) { lab.push({ v, cls, s, dn: true }); bottom = y + 12; } else if (lab.length) lab[lab.length - 1].s += ' / ' + s;
+    }
+    if (ax) ax.replaceChildren(...lab.map((L) => h('span', { class: 'lv ' + L.cls + (L.dn ? ' dn' : ''), style: `top:${((Y(L.v) / H) * 100).toFixed(1)}%` }, L.s)),
       h('span', { class: 'tl' }, `−${hrs} giờ`), h('span', { class: 'tr' }, 'hiện tại'));
     return Boolean(ser);
   }
@@ -705,8 +855,7 @@ export class HmiView {
     const mn = (x) => num(x / 60, 0);
     setT(Z.note, `Khi vượt ngưỡng QCVN liên tục (clo ${mn(s.cl_delay_s)} phút, độ đục ${mn(s.ntu_delay_s)} phút, pH ${mn(s.ph_delay_s)} phút) trạm tự dừng an toàn. `
       + `Chạy lại cần lệnh ĐẶT LẠI sau khi chất lượng đạt liên tục ${mn(s.quality_reset_hold_s)} phút (độ đục < ${num(s.ntu_reset_max, 1)} NTU).`);
-    setD(Z.reset, c.dead || (local && !ss));
-    setA(Z.reset, 'title', local && !ss ? 'Trạm không ở trạng thái dừng an toàn' : 'Gửi lệnh đặt lại dừng an toàn');
+    this._syncReset(Z.reset, d);
     this._resLine(Z.res, ['reset_safe_stop']);
   }
 
@@ -719,7 +868,7 @@ export class HmiView {
     T.cv.addEventListener('pointermove', (e) => { const r = T.cv.getBoundingClientRect(); T.hx = e.clientX - r.left; this._drawTrend(); });
     T.cv.addEventListener('pointerleave', () => { T.hx = null; this._drawTrend(); });
     T.rows = PENS.map((p, i) => {
-      const cb = h('input', { type: 'checkbox', checked: true, 'aria-label': 'Hiện ' + p.name, onchange: () => { if (cb.checked) T.hide.delete(i); else T.hide.add(i); this._drawTrend(); } });
+      const cb = h('input', { type: 'checkbox', checked: !T.hide.has(i), 'aria-label': 'Hiện ' + p.name, onchange: () => { if (cb.checked) T.hide.delete(i); else T.hide.add(i); this._drawTrend(); } });
       const sw = h('i', { class: 'h-tsw' }), v = h('b'), tr = h('tr', { onclick: (e) => { if (e.target !== cb) { T.sel = i; this._drawTrend(); } } },
         h('td', {}, cb), h('td', {}, sw), h('td', { class: 'n' }, p.name), h('td', { class: 'v' }, v), h('td', {}, p.u), h('td', { class: 'r' }, `${p.lo} – ${p.hi}`));
       return { tr, sw, v, cb };
@@ -734,7 +883,7 @@ export class HmiView {
     if (this.where === 'local') {
       const H = a.st.hist.data;
       let lo = 0, hi = H.t.length; while (lo < hi) { const m = (lo + hi) >> 1; if (H.t[m] < t0) lo = m + 1; else hi = m; }
-      return { t0, t1, i0: lo, ts: H.t, cols: PENS.map((p) => H[p.k]), late: null };
+      return { t0, t1, i0: lo, ts: H.t, cols: PENS.map((p) => (p.ui ? a.uiHist?.[p.k] : H[p.k])), late: null };
     }
     const S0 = a.server.stations[a.st.sid], ts = [], cols = PENS.map(() => []), late = [];
     for (let m = Math.floor(t0 / 60); m <= Math.floor(a.net.t / 60); m++) {
@@ -755,9 +904,12 @@ export class HmiView {
     ctx.fillStyle = css('--h-tbg'); ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = css('--h-tplot'); ctx.fillRect(pl, pt, w, hgt);
     const X = (t) => pl + ((t - D.t0) / (D.t1 - D.t0)) * w;
-    // lưới
+    // lưới ngang theo vạch chia "đẹp" (1, 2, 5 × 10^n) của bút đang chọn
+    const sp = PENS[T.sel], span = sp.hi - sp.lo, raw = span / 6, p10 = 10 ** Math.floor(Math.log10(raw)), m = raw / p10;
+    const tick = (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p10, tnd = tick < 1 ? 1 : 0, Ys = (v) => pt + hgt - ((v - sp.lo) / span) * hgt;
+    const ticks = []; for (let v = Math.ceil(sp.lo / tick - 1e-9) * tick; v <= sp.hi + 1e-9; v += tick) ticks.push(v);
     ctx.strokeStyle = css('--h-tgrid'); ctx.lineWidth = 1; ctx.font = `11px ${css('--h-f')}`; ctx.fillStyle = css('--h-ink2');
-    for (let k = 0; k <= 10; k++) { const y = Math.round(pt + (hgt * k) / 10) + 0.5; ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(pl + w, y); ctx.stroke(); }
+    for (const v of ticks) { const y = Math.round(Ys(v)) + 0.5; ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(pl + w, y); ctx.stroke(); }
     const step = T.range <= 3600 ? 600 : T.range <= 8 * 3600 ? 3600 : 3 * 3600;
     ctx.textAlign = 'center';
     for (let t = Math.ceil(D.t0 / step) * step; t <= D.t1; t += step) {
@@ -765,9 +917,8 @@ export class HmiView {
       if (t >= 0) ctx.fillText(t % 86400 === 0 ? `N${Math.floor(t / 86400) + 1} 00:00` : fmtHM(t), x, pt + hgt + 16);
     }
     // trục tung theo bút đang chọn
-    const sp = PENS[T.sel];
     ctx.textAlign = 'right';
-    for (let k = 0; k <= 5; k++) { const v = sp.lo + ((sp.hi - sp.lo) * k) / 5; ctx.fillText(num(v, sp.hi - sp.lo <= 10 ? 1 : 0), pl - 8, pt + hgt - (hgt * k) / 5 + 4); }
+    for (const v of ticks) ctx.fillText(num(v, tnd), pl - 8, Ys(v) + 4);
     ctx.fillStyle = cols[T.sel]; ctx.fillRect(4, pt, 4, hgt);
     // vạch giới hạn áp lực
     const s = this.app.cfg.service, Yp = (v, p) => pt + hgt - clamp((v - p.lo) / (p.hi - p.lo), 0, 1) * hgt;
@@ -779,7 +930,9 @@ export class HmiView {
     // các bút: gom theo cột điểm ảnh (min/max) để không mất đỉnh
     ctx.save(); ctx.beginPath(); ctx.rect(pl, pt, w, hgt); ctx.clip();
     const n = D.ts.length;
-    PENS.forEach((p, k) => {
+    // bút đang chọn vẽ sau cùng (nằm trên) – áp ra mạng thường trùng PT-101 khi MV-02 mở
+    [...PENS.keys()].filter((k) => k !== T.sel).concat(T.sel).forEach((k) => {
+      const p = PENS[k];
       if (T.hide.has(k)) return;
       const V = D.cols[k]; if (!V) return;
       ctx.strokeStyle = cols[k]; ctx.lineWidth = k === T.sel ? 2.2 : 1.6; ctx.setLineDash(p.dash || []);
@@ -828,8 +981,8 @@ export class HmiView {
     T.last = now;
     T.rbtn.forEach((b, i) => b.classList.toggle('on', [3600, 8 * 3600, 86400][i] === T.range));
     setT(T.note, this.where === 'remote'
-      ? 'TRUNG TÂM: chuỗi theo phút máy chủ đã nhận qua MQTT (áp, lưu lượng, mức, công suất). Áp đặt và áp điểm bất lợi không gửi về trung tâm; dải tô nền = dữ liệu phát lại sau đồng bộ.'
-      : 'TẠI TRẠM: lịch sử gateway, mẫu 10 s.');
+      ? 'TRUNG TÂM: chuỗi theo phút máy chủ đã nhận qua MQTT (áp đầu ra, lưu lượng, mức, công suất). PT-102, áp ra mạng, áp đặt và áp điểm bất lợi không gửi về trung tâm; dải tô nền = dữ liệu phát lại sau đồng bộ.'
+      : 'TẠI TRẠM: lịch sử gateway, mẫu 10 s. PT-101/PT-102 đo áp ống góp trước van MV-02; “áp ra mạng” là áp sau MV-02 (về 0 khi van đóng).');
     this._drawTrend();
   }
 
@@ -864,16 +1017,16 @@ export class HmiView {
     const hist = this.where === 'local' ? a.st.gw.alarms.history : a.server.alarm_history.filter((x) => x.station === a.st.sid);
     if (this._changed('al', al.map((x) => x.code + x.acked + x.t).join(',') + this.where + d.dead, force)) {
       this.AL.body.replaceChildren(...(al.length ? al.map((x) => h('tr', { class: 'sev-' + x.sev + (x.acked ? ' acked' : ' unack') },
-        h('td', { class: 'mono' }, tShort(x.t)), h('td', { class: 'mono b' }, x.code), h('td', { class: 'msg' }, x.msg || '–'), h('td', {}, h('span', { class: 'h-sev ' + x.sev }, SEV_TXT[x.sev] || x.sev)),
+        h('td', { class: 'mono' }, tShort(x.t)), h('td', { class: 'mono b' }, x.code), h('td', { class: 'msg' }, viTxt(x.msg) || '–'), h('td', {}, h('span', { class: 'h-sev ' + x.sev }, SEV_TXT[x.sev] || x.sev)),
         h('td', {}, x.sys || x.code === 'STATION_OFFLINE' ? 'tự xóa khi có kết nối' : x.acked ? 'ĐÃ XÁC NHẬN' : 'CHƯA XÁC NHẬN'),
         h('td', {}, this._ackable(x) ? h('button', { class: 'h-btn sm', disabled: d.dead, onclick: () => this._ack(x.code) }, 'XÁC NHẬN') : ''))) : [h('tr', {}, h('td', { colspan: 6, class: 'empty' }, 'Không có báo động đang hoạt động.'))]));
       setT(this.AL.note, this.where === 'local' ? 'Tại trạm: xác nhận ghi ngay vào gateway. Báo động sự kiện (ví dụ lệnh bị từ chối) tự xóa khi xác nhận.'
-        : 'Trung tâm: xác nhận gửi lệnh ack_alarm qua máy chủ; mất kết nối thì lệnh xếp hàng.');
+        : 'Trung tâm: nút XÁC NHẬN gửi lệnh “xác nhận báo động” qua máy chủ; mất kết nối thì lệnh xếp hàng.');
     }
     if (this._changed('alh', hist.length + this.where, force)) {
       const rows = hist.slice(-50).reverse();
       this.AL.hist.replaceChildren(...(rows.length ? rows.map((x) => h('tr', { class: x.action === 'raise' ? 'sev-' + x.sev : 'clr' },
-        h('td', { class: 'mono' }, tShort(x.t)), h('td', {}, x.action === 'raise' ? 'XUẤT HIỆN' : 'HẾT'), h('td', { class: 'mono b' }, x.code), h('td', { class: 'msg' }, x.msg || '–'),
+        h('td', { class: 'mono' }, tShort(x.t)), h('td', {}, x.action === 'raise' ? 'XUẤT HIỆN' : 'HẾT'), h('td', { class: 'mono b' }, x.code), h('td', { class: 'msg' }, viTxt(x.msg) || '–'),
         h('td', {}, h('span', { class: 'h-sev ' + x.sev }, SEV_TXT[x.sev] || x.sev)))) : [h('tr', {}, h('td', { colspan: 5, class: 'empty' }, 'Chưa có sự kiện báo động.'))]));
     }
   }
@@ -890,8 +1043,8 @@ export class HmiView {
     const a = this.app, local = this.where === 'local';
     const cmds = commandLog(a, this.where, 30);
     if (this._changed('lc', cmds.map((c) => c.id + c.status).join(',') + this.where, force)) {
-      this.LG.cmd.replaceChildren(...(cmds.length ? cmds.map((c) => { const [cls, txt] = CMD_STATUS[c.status] || ['off', c.status]; return h('tr', {},
-        h('td', { class: 'mono' }, tShort(c.t)), h('td', { class: 'mono b' }, c.id), h('td', { class: 'mono' }, c.type || '–'), h('td', {}, h('span', { class: 'h-st ' + cls }, txt.toUpperCase())), h('td', { class: 'msg' }, c.reason || '')); })
+      this.LG.cmd.replaceChildren(...(cmds.length ? cmds.map((c) => { const [cls, txt] = this._cmdSt(c); return h('tr', {},
+        h('td', { class: 'mono' }, tShort(c.t)), h('td', { class: 'mono b' }, c.id), h('td', { title: c.type || '' }, c.type ? cmdName(c.type) : '–'), h('td', {}, h('span', { class: 'h-st ' + cls }, txt.toUpperCase())), h('td', { class: 'msg' }, viTxt(c.reason))); })
         : [h('tr', {}, h('td', { colspan: 5, class: 'empty' }, 'Chưa có lệnh.'))]));
       setT(this.LG.note, local ? 'Lệnh từ HMI-01 (mã L…) đi thẳng vào gateway, không hết hạn. Lệnh từ trung tâm (mã C…) cũng được ghi lại khi trạm thực hiện.'
         : 'Lệnh từ trung tâm (mã C…) đi qua máy chủ: “đã gửi” → trạm xác nhận “đã thực hiện / từ chối / hết hạn”. Mất kết nối: lệnh xếp hàng và hết hạn sau 60 s.');
@@ -900,7 +1053,7 @@ export class HmiView {
     if (this._changed('le', logs.length + this.where, force)) {
       const rows = logs.slice(-40).reverse(), LV = { info: 'THÔNG TIN', warning: 'CẢNH BÁO', alarm: 'BÁO ĐỘNG', safety: 'AN TOÀN', critical: 'KHẨN' };
       this.LG.ev.replaceChildren(...(rows.length ? rows.map((x) => h('tr', { class: 'lv-' + x.level }, h('td', { class: 'mono' }, tShort(x.t)),
-        h('td', {}, h('span', { class: 'h-sev ' + ({ safety: 'alarm' }[x.level] || x.level) }, LV[x.level] || x.level)), h('td', { class: 'msg' }, x.text)))
+        h('td', {}, h('span', { class: 'h-sev ' + ({ safety: 'alarm' }[x.level] || x.level) }, LV[x.level] || x.level)), h('td', { class: 'msg' }, viTxt(x.text))))
         : [h('tr', {}, h('td', { colspan: 3, class: 'empty' }, 'Chưa có sự kiện.'))]));
     }
   }
@@ -977,10 +1130,11 @@ export class HmiView {
   }
   _fpClamp(fp) {
     if (this.narrow) return;
-    const W = this.root.clientWidth, H = this.root.clientHeight, el = fp.el;
-    el.style.maxHeight = Math.max(200, H - 16) + 'px';
+    // giữ faceplate dưới dòng báo động / dải trạng thái, trong khung gốc
+    const W = this.root.clientWidth, H = this.root.clientHeight, el = fp.el, top0 = this.area.offsetTop + 4;
+    el.style.maxHeight = Math.max(200, H - top0 - 4) + 'px';
     el.style.left = clamp(el.offsetLeft, 4, Math.max(4, W - el.offsetWidth - 4)) + 'px';
-    el.style.top = clamp(el.offsetTop, 4, Math.max(4, H - Math.min(el.offsetHeight, H - 8) - 4)) + 'px';
+    el.style.top = clamp(el.offsetTop, top0, Math.max(top0, H - el.offsetHeight - 4)) + 'px';
   }
   _drag(fp) {
     let sx = 0, sy = 0, ox = 0, oy = 0, on = false;
@@ -990,8 +1144,8 @@ export class HmiView {
     });
     fp.bar.addEventListener('pointermove', (e) => {
       if (!on) return;
-      const W = this.root.clientWidth, H = this.root.clientHeight;
-      fp.el.style.left = clamp(ox + e.clientX - sx, 0, W - fp.el.offsetWidth) + 'px'; fp.el.style.top = clamp(oy + e.clientY - sy, 0, H - 36) + 'px';
+      const W = this.root.clientWidth, H = this.root.clientHeight, top0 = this.area.offsetTop;
+      fp.el.style.left = clamp(ox + e.clientX - sx, 0, W - fp.el.offsetWidth) + 'px'; fp.el.style.top = clamp(oy + e.clientY - sy, top0, Math.max(top0, H - 36)) + 'px';
     });
     const end = (e) => { if (on) { on = false; try { fp.bar.releasePointerCapture(e.pointerId); } catch (err) { /* bỏ qua */ } } };
     fp.bar.addEventListener('pointerup', end); fp.bar.addEventListener('pointercancel', end);
@@ -1003,28 +1157,69 @@ export class HmiView {
     fp.cf.replaceChildren(h('p', {}, h('b', { class: 'h-cf-ic' }, '?'), text), h('div', { class: 'h-brow' }, ok, h('button', { class: 'h-btn', onclick: () => this._cancel(fp) }, 'HỦY')));
     fp.cf.hidden = false; fp.cfT = setTimeout(() => this._cancel(fp), 15000);
     ok.focus({ preventScroll: true });
-    fp.cf.scrollIntoView?.({ block: 'nearest' });
+    // chỉ cuộn bên trong faceplate (hoặc màn hình chứa nó) – không bao giờ cuộn gốc HMI
+    if (fp.el) { this._fpClamp(fp); const b = fp.el.querySelector('.h-fp-b'); b.scrollTop = b.scrollHeight; } else {
+      const sc = fp.cf.closest('.h-scr');
+      if (sc) { const r = fp.cf.getBoundingClientRect(), R = sc.getBoundingClientRect(); if (r.bottom > R.bottom - 6) sc.scrollTop += r.bottom - R.bottom + 10; }
+    }
   }
-  _cancel(fp) { clearTimeout(fp.cfT); if (fp.cf) { fp.cf.hidden = true; fp.cf.replaceChildren(); } }
+  _cancel(fp) {
+    clearTimeout(fp.cfT);
+    if (!fp.cf) return;
+    const was = !fp.cf.hidden;
+    fp.cf.hidden = true; fp.cf.replaceChildren();
+    if (was && fp.el?.isConnected) this._fpClamp(fp);
+  }
   _askScreen(text, fn) { this._ask(this.QS, text, fn); }
-  _send(fp, type, args) { fp.last = sendCommand(this.app, this.where, type, args); }
-  _sendScr(type, args) { this.QS.last = sendCommand(this.app, this.where, type, args); }
-  /** Dòng kết quả lệnh cuối (lọc theo loại lệnh). */
-  _resLine(el, types) {
-    const c = commandLog(this.app, this.where, 20).find((x) => !types || types.includes(x.type));
-    if (!c) { setT(el, 'Lệnh cuối: chưa có'); setC(el, 'h-res'); return; }
-    const [cls, txt] = CMD_STATUS[c.status] || ['off', c.status];
-    setT(el, `Lệnh cuối ${tShort(c.t)} · ${c.id} ${c.type}: ${txt}${c.reason ? ' – ' + c.reason : ''}`); setC(el, 'h-res ' + cls);
+  _send(fp, type, args) {
+    fp.last = sendCommand(this.app, this.where, type, args);
+    if (this.where === 'remote' && type === 'set_mode') this._pend = args.mode === 'auto' ? null : { id: fp.last.id };
   }
-  /** Lý do không ra lệnh được / cảnh báo quyền – chung cho các faceplate. */
-  _authNote(d) {
-    const local = this.where === 'local';
-    if (d.dead) return ['bad', 'HMI-01 mất kết nối với mini PC MPC-01 – không gửi được lệnh. ' + this.app.st.gw_dead.note() + '.'];
-    if (d.ctl === 'auto') return ['info', 'Trạm đang TỰ ĐỘNG theo kịch bản – nhấn TAY để điều khiển bơm và van bằng tay.'];
+  _sendScr(type, args) { this.QS.last = sendCommand(this.app, this.where, type, args); }
+  /** [lớp màu, chữ] kết quả lệnh; lệnh hợp lệ nhưng không làm gì (ví dụ đặt lại khi không dừng an toàn) → trung tính. */
+  _cmdSt(c) { return c.status === 'ok' && NOOP.test(c.reason || '') ? ['off', 'không thay đổi'] : CMD_STATUS[c.status] || ['off', c.status]; }
+  /** Dòng kết quả lệnh cuối (lọc theo loại lệnh và điều kiện thêm); trả về lệnh đó. */
+  _resLine(el, types, pred = null) {
+    const c = commandLog(this.app, this.where, 20).find((x) => (!types || types.includes(x.type)) && (!pred || pred(x)));
+    if (!c) { setT(el, 'Lệnh cuối: chưa có'); setC(el, 'h-res'); return null; }
+    const [cls, txt] = this._cmdSt(c);
+    setT(el, `Lệnh cuối ${tShort(c.t)} · ${c.id} ${cmdName(c.type)}: ${txt}${c.reason ? ' – ' + viTxt(c.reason) : ''}`); setC(el, 'h-res ' + cls);
+    return c;
+  }
+  /**
+   * Trung tâm: lệnh chuyển TAY đã gửi (hoặc trạm vừa xác nhận) nhưng bản tin trạm (10 s) vẫn báo TỰ ĐỘNG → câu báo chờ; ngược lại null.
+   * Trong lúc chờ không cho bấm TAY lần nữa.
+   */
+  _pendManual(d) {
+    if (!this.ctx.remote || d.dead || d.stale || d.ctl !== 'auto') return null;
+    const S0 = this.app.server.stations[this.app.st.sid];
+    const q = Object.values(S0.pending).find((p) => p.cmd.type === 'set_mode' && (p.cmd.args.mode ?? 'manual') !== 'auto');
+    const id = q?.cmd.id ?? this._pend?.id;
+    const c = id ? commandLog(this.app, 'remote', 30).find((x) => x.id === id) : null;
+    if (c?.status === 'queued') return `Đã gửi lệnh TAY ${id} qua MQTT – chờ trạm xác nhận và bản tin trạm (10 s).`;
+    if (c?.status === 'ok' && d.t - c.t <= 25) return `Trạm đã xác nhận lệnh TAY ${id} – chờ bản tin trạm (10 s) để cập nhật trạng thái trên SCADA.`;
+    this._pend = null;
+    return null;
+  }
+  /** Lý do không ra lệnh được / cảnh báo quyền – chung cho các faceplate (station: câu riêng của bảng chế độ trạm). */
+  _authNote(d, station = false) {
+    const local = this.where === 'local', g = this.app.cfg.gateway, ttl = num(g.manual_cmd_ttl_s, 0);
+    if (d.dead) return ['bad', 'HMI-01 mất kết nối với mini PC MPC-01 – không gửi được lệnh. ' + viNum(this.app.st.gw_dead.note()) + '.'];
+    if (!local && d.stale) {
+      return ['warn', `Mất kết nối với trạm – trạng thái đang hiện là bản tin cuối lúc ${this._lastHM(d)}. Trạm đang TAY từ xa sẽ tự về TỰ ĐỘNG khi mất kết nối; `
+        + `lệnh từ trung tâm chỉ xếp hàng ở máy chủ và hết hạn sau ${ttl} s nếu trạm chưa nhận.`];
+    }
+    if (this._wait) return ['info', this._wait];
+    if (d.ctl === 'auto') {
+      return ['info', station ? 'Trạm TỰ ĐỘNG: kịch bản điều khiển bơm; lớp an toàn luôn ưu tiên. Luân phiên bơm chỉ dùng ở TỰ ĐỘNG.'
+        : 'Trạm đang TỰ ĐỘNG theo kịch bản – nhấn TAY để điều khiển bơm và van bằng tay.'];
+    }
     if (!local && d.ctl === 'local') return ['warn', 'Quyền đang ở TẠI CHỖ – mọi lệnh từ trung tâm sẽ bị trạm từ chối (tại chỗ ưu tiên).'];
     if (local && d.ctl === 'remote') return ['warn', 'Trung tâm đang điều khiển tay – thao tác tại HMI-01 sẽ giành quyền (tại chỗ ưu tiên).'];
-    if (!local && d.stale) return ['warn', 'Mất kết nối: lệnh xếp hàng ở máy chủ và hết hạn sau 60 s nếu trạm chưa nhận.'];
-    if (!local) return ['info', 'Điều khiển TAY từ xa: mỗi lệnh có hạn 60 s, quyền tự hủy khi mất kết nối. Lớp an toàn vẫn ưu tiên.'];
+    if (!local) {
+      const ls = isNum(d.lease_s) ? ` Quyền TAY còn ${d.lease_est ? '≈ ' : ''}${fmtLease(d.lease_s)}, mỗi lệnh gia hạn.` : '';
+      return ['info', `Điều khiển TAY từ xa: mỗi lệnh có hạn ${ttl} s, quyền tự hủy khi mất kết nối.${ls} Lớp an toàn vẫn ưu tiên.`];
+    }
     return ['info', 'Điều khiển TAY tại chỗ – lệnh vẫn qua lớp an toàn: liên động, giới hạn áp cao, số lần khởi động.'];
   }
   _modeBtns(fp) {
@@ -1033,57 +1228,108 @@ export class HmiView {
     return { bA, bM, el: h('div', { class: 'h-brow' }, bA, bM) };
   }
   _syncModeBtns(M, d) {
-    const man = d.ctl !== 'auto';
-    setD(M.bA, d.dead || !man); setD(M.bM, d.dead || (man && d.ctl === this.where));
-    setC(M.bA, 'h-btn' + (!d.dead && !man ? ' sel' : '')); setC(M.bM, 'h-btn' + (!d.dead && man ? ' sel man' : ''));
+    const man = d.ctl !== 'auto', q = this.ctx.stale ? ' q' : '';
+    setD(M.bA, d.dead || !man); setD(M.bM, d.dead || (man && d.ctl === this.where) || Boolean(this._wait));
+    setC(M.bA, 'h-btn' + (!d.dead && !man ? ' sel' + q : '')); setC(M.bM, 'h-btn' + (!d.dead && man ? ' sel man' + q : ''));
+    setA(M.bM, 'title', this._wait ? 'Đang chờ bản tin trạm xác nhận chế độ TAY' : 'Chuyển trạm sang điều khiển TAY');
+  }
+  /** Nút ĐẶT LẠI DỪNG AN TOÀN: tại trạm chỉ bật khi dừng an toàn/khóa đã chốt; trung tâm bật khi đã nhận báo động SAFE_STOP/LOCKOUT. */
+  _syncReset(btn, d) {
+    const remote = this.ctx.remote, need = !d.dead && (remote ? d.alarms.some((x) => x.code === 'SAFE_STOP' || x.code === 'LOCKOUT') : needsReset(this.app));
+    setD(btn, !need); setC(btn, 'h-btn' + (need ? ' warn' : ''));
+    setA(btn, 'title', d.dead ? 'Mini PC ngừng – không gửi được lệnh' : need ? (remote ? 'Gửi lệnh đặt lại dừng an toàn / mở khóa qua máy chủ' : 'Đặt lại dừng an toàn / mở khóa bảo vệ áp lực')
+      : remote ? 'Trung tâm chưa nhận báo động dừng an toàn hay khóa trạm – không cần đặt lại' : 'Trạm không ở trạng thái dừng an toàn hay khóa – không cần đặt lại');
   }
   _fp_pump(i) {
     const tag = PUMP_TAG[i], fp = { title: `${tag} · BƠM TĂNG ÁP SỐ ${i + 1}`, w: 384 };
-    const Ls = { run: this._lamp('CHẠY'), stop: this._lamp('DỪNG'), flt: this._lamp('LỖI'), mode: this._lamp('TỰ ĐỘNG'), src: this._lamp('TẠI CHỖ/TỪ XA') };
+    const Ls = { run: this._lamp('CHẠY'), stop: this._lamp('DỪNG'), flt: this._lamp('LỖI'), mode: this._lamp('TỰ ĐỘNG'), src: this._lamp('TẠI CHỖ/TỪ XA'), ilk: this._lamp('LIÊN ĐỘNG') };
     const R = { f: this._hd('Hz', true), fs: this._hd('Hz', true), a: this._hd('A'), kw: this._hd('kW'), rh: this._hd('h'), sh: this._hd('') };
     const M = this._modeBtns(fp);
-    const fval = () => clamp(Number(String(inp.value).replace(',', '.')) || 40, 25, 50);
-    const bRun = h('button', { class: 'h-btn go', onclick: () => this._ask(fp, `Xác nhận CHẠY ${tag} ở ${num(fval(), 1)} Hz?`, () => this._send(fp, 'pump_start', { pump: i, f_hz: fval() })) }, '▶ CHẠY');
+    // tần số nhập kiểu Việt Nam (42,5) hoặc 42.5; sai hoặc ngoài 25–50 Hz thì báo ngay dưới ô, không tự kẹp giá trị
+    const parseF = () => { const s = String(inp.value).trim().replace(',', '.'); return /^\d{1,3}(\.\d*)?$/.test(s) ? Number(s) : NaN; };
+    const okF = (v) => isNum(v) && v >= 25 && v <= 50;
+    const errF = (msg) => { setT(ferr, msg || ''); setH(ferr, !msg); inp.classList.toggle('bad', Boolean(msg)); inp.setAttribute('aria-invalid', String(Boolean(msg))); };
+    const chkF = () => {
+      const v = parseF();
+      if (okF(v)) { errF(null); return Math.round(v * 10) / 10; }
+      errF(isNum(v) ? `${num(v, 1)} Hz ngoài dải cho phép 25–50 Hz` : 'Giá trị không hợp lệ – nhập số từ 25 đến 50, ví dụ 42,5');
+      return null;
+    };
+    const run = () => {
+      const p = (this._d || stationData(this.app, this.where)).pumps[i];
+      if (!fp.edit && p.running) { this._ask(fp, `Xác nhận CHẠY ${tag} (giữ tần số đang chạy${isNum(p.f) ? ' ' + num(p.f, 1) + ' Hz' : ''})?`, () => this._send(fp, 'pump_start', { pump: i })); return; }
+      const v = chkF();
+      if (v === null) { inp.focus(); return; }
+      this._ask(fp, `Xác nhận CHẠY ${tag} ở ${num(v, 1)} Hz?`, () => { fp.edit = false; this._send(fp, 'pump_start', { pump: i, f_hz: v }); });
+    };
+    const write = () => {
+      const v = chkF();
+      if (v === null) { inp.focus(); return; }
+      this._ask(fp, `Xác nhận GHI tần số đặt ${tag} = ${num(v, 1)} Hz?`, () => { fp.edit = false; this._send(fp, 'pump_speed', { pump: i, f_hz: v }); });
+    };
+    const bRun = h('button', { class: 'h-btn go', onclick: run }, '▶ CHẠY');
     const bStop = h('button', { class: 'h-btn stop', onclick: () => this._ask(fp, `Xác nhận DỪNG ${tag}?`, () => this._send(fp, 'pump_stop', { pump: i })) }, '■ DỪNG');
-    const inp = h('input', { type: 'number', min: 25, max: 50, step: 0.5, value: 40, class: 'h-inp', 'aria-label': `Tần số đặt ${tag} (Hz)`,
-      oninput: () => { fp.edit = true; rng.value = fval(); }, onkeydown: (e) => { if (e.key === 'Enter') bW.click(); } });
-    const rng = h('input', { type: 'range', min: 25, max: 50, step: 0.5, value: 40, class: 'h-rng', 'aria-label': `Thanh trượt tần số ${tag}`, oninput: () => { fp.edit = true; inp.value = rng.value; } });
-    const bW = h('button', { class: 'h-btn', onclick: () => { fp.edit = false; this._send(fp, 'pump_speed', { pump: i, f_hz: fval() }); } }, 'GHI');
-    const why = h('p', { class: 'h-why' }), perm = h('ul', { class: 'h-perm' }), res = h('p', { class: 'h-res' });
+    const inp = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false', value: '40,0', class: 'h-inp', 'aria-label': `Tần số đặt ${tag} (Hz, 25–50)`,
+      oninput: () => { fp.edit = true; const v = parseF(); if (okF(v)) { rng.value = String(v); errF(null); } },
+      onblur: () => { if (fp.edit) chkF(); }, onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); write(); } } });
+    const rng = h('input', { type: 'range', min: 25, max: 50, step: 0.5, value: 40, class: 'h-rng', 'aria-label': `Thanh trượt tần số ${tag}`, oninput: () => { fp.edit = true; inp.value = num(Number(rng.value), 1); errF(null); } });
+    const bW = h('button', { class: 'h-btn', onclick: write }, 'GHI');
+    const why = h('p', { class: 'h-why' }), perm = h('ul', { class: 'h-perm' }), res = h('p', { class: 'h-res' }), ferr = h('p', { class: 'h-ferr', hidden: true, role: 'alert' });
     fp.body = h('div', {}, h('div', { class: 'h-lamprow' }, ...Object.values(Ls).map((L) => L.el)),
       h('div', { class: 'h-rogrid c3' }, this._ro('Tần số thực', R.f), this._ro('Tần số đặt', R.fs), this._ro('Dòng điện', R.a), this._ro('Công suất', R.kw), this._ro('Giờ chạy', R.rh), this._ro('Khởi động / 1 giờ', R.sh)),
       h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Chế độ trạm'), M.el),
       h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Lệnh bơm'), h('div', { class: 'h-brow' }, bRun, bStop)),
-      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Tần số đặt (25–50 Hz)'), h('div', { class: 'h-srow' }, inp, h('span', { class: 'h-hu' }, 'Hz'), rng, bW)),
+      h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Tần số đặt (25–50 Hz)'), h('div', { class: 'h-srow' }, inp, h('span', { class: 'h-hu' }, 'Hz'), rng, bW), ferr),
       why, h('div', { class: 'h-fsec' }, h('small', { class: 'h-cap' }, 'Điều kiện cho phép chạy & liên động'), perm), res);
     fp.update = (d, force) => {
-      const p = d.pumps[i], man = d.ctl !== 'auto', max = this.app.cfg.safety.max_starts_per_h, local = this.where === 'local';
+      const a = this.app, p = d.pumps[i], man = d.ctl !== 'auto', max = a.cfg.safety.max_starts_per_h, local = this.where === 'local';
       this._pumpLamps(Ls, d, i);
       const fs = this._fset(d, i);
       this._hv(R.f, p.f, 1); this._hv(R.fs, fs, 1); this._hv(R.a, p.amps, 1); this._hv(R.kw, p.kw, 2); this._hv(R.rh, p.run_h, 1);
       this._hv(R.sh, isNum(p.starts_h) ? `${p.starts_h} / ${max}` : p.starts_h, 0, { st: p.starts_h >= max ? 'alarm' : p.starts_h >= max - 1 ? 'warn' : 'ok' });
       this._syncModeBtns(M, d);
-      const off = d.dead || !man;
-      setD(bRun, off || (p.fault && !d.dead)); setD(bStop, off); setD(bW, off); setD(inp, off); setD(rng, off);
+      // tại trạm biết điều kiện chạy: điều kiện cứng đầu tiên chưa đạt (theo ưu tiên của lớp an toàn) thì khóa nút CHẠY
+      const off = d.dead || !man, blk = local && !off ? firstBlock(a, i) : null;
+      setD(bRun, off || (p.fault && !d.dead) || Boolean(blk)); setD(bStop, off); setD(bW, off); setD(inp, off); setD(rng, off);
+      setA(bRun, 'title', blk ? 'Chưa đạt điều kiện chạy: ' + blk : p.running && !fp.edit ? `Chạy ${tag} (giữ tần số đang chạy)` : `Chạy ${tag} ở tần số đặt`);
       setC(bRun, 'h-btn go' + (!d.dead && p.running ? ' act' : '')); setC(bStop, 'h-btn stop' + (!d.dead && !p.running ? ' act' : ''));
-      if (!fp.edit && document.activeElement !== inp && document.activeElement !== rng) { const v = isNum(p.f_set) ? p.f_set : isNum(fs) && fs >= 25 ? fs : 40; const s = String(Math.round(v * 2) / 2); if (inp.value !== s) { inp.value = s; rng.value = s; } }
+      if (!fp.edit && document.activeElement !== inp && document.activeElement !== rng) {
+        // mặc định: tần số đặt đã biết; trung tâm không biết thì lấy tần số đang chạy (làm tròn 0,5) thay vì 40 Hz
+        const v = isNum(p.f_set) ? p.f_set : isNum(fs) && fs >= 25 ? fs : p.running && isNum(p.f) && p.f >= 25 ? p.f : 40;
+        const r = clamp(Math.round(v * 2) / 2, 25, 50), s = num(r, 1);
+        if (inp.value !== s) { inp.value = s; rng.value = String(r); errF(null); }
+      }
+      const sf = local && !d.dead ? a.st.gw.safety : null;
       let [cls, txt] = this._authNote(d);
       if (!d.dead && man && p.fault) [cls, txt] = ['bad', `Biến tần ${tag} báo lỗi – không chạy được cho tới khi sửa xong.`];
+      else if (blk && !p.running) [cls, txt] = ['bad', `Chưa đạt điều kiện chạy: ${blk}.`];
+      else if (sf && man && p.want && !p.running && sf.last_block) [cls, txt] = ['warn', `Lệnh chạy đang bị lớp an toàn giữ: ${viTxt(sf.last_block)}.`];
       setT(why, txt); setC(why, 'h-why ' + cls);
-      const list = local && !d.dead ? permissives(this.app, i) : [];
-      if (this._changed('perm' + i, list.map((x) => +x[0]).join('') + this.where + d.dead, force)) {
-        perm.replaceChildren(...(list.length ? list.map(([ok, t]) => h('li', { class: ok ? 'ok' : 'no' }, h('i', {}, ok ? '✓' : '✗'), t))
+      // điều kiện chạy theo thứ tự ưu tiên của lớp an toàn; giới hạn tần số chỉ để biết (không chặn khởi động)
+      const list = local && !d.dead ? permissives(a, i) : [];
+      if (this._changed('perm' + i, list.map((x) => (+x[0]) + x[1]).join('|') + this.where + d.dead, force)) {
+        perm.replaceChildren(...(list.length ? list.map(([ok, t, kind]) => (kind === 'info' ? h('li', { class: 'info' + (sf?.limiting ? ' on' : '') }, h('i', {}, 'i'), t)
+          : h('li', { class: ok ? 'ok' : 'no' }, h('i', {}, ok ? '✓' : '✗'), t)))
           : [h('li', { class: 'na' }, d.dead ? 'Mini PC ngừng – chỉ còn liên động cứng: phao LSLL-101, van an toàn PSV-01, bảo vệ của biến tần.'
             : 'Trung tâm chỉ thấy báo động gửi lên – chi tiết liên động chỉ xem được tại HMI-01 ở trạm.')]));
       }
-      this._resLine(res, ['pump_start', 'pump_stop', 'pump_speed', 'set_mode']);
+      // lệnh cuối của chính bơm này; lệnh chạy đã nhận nhưng bị lớp an toàn hủy thì nói rõ, không để "đã thực hiện"
+      const c = this._resLine(res, ['pump_start', 'pump_stop', 'pump_speed', 'set_mode'], (x) => !/P-0\d/.test(x.reason || '') || x.reason.includes(tag));
+      if (sf && c && c.type === 'pump_start' && c.status === 'ok' && !p.running && p.want === false) {
+        const L = a.st.gw.logs;
+        let lg = null;
+        for (let k = L.length - 1; k >= 0 && L[k].t >= c.t; k--) if (L[k].level === 'safety' && L[k].text.includes(tag)) { lg = L[k]; break; }
+        const inner = lg?.text.match(/\(([^)]+)\)/)?.[1];
+        setT(res, `Lệnh cuối ${tShort(c.t)} · ${c.id} ${cmdName(c.type)}: lớp an toàn đã hủy – ${inner ? viTxt(inner) + ', cần lệnh chạy lại' : lg ? viTxt(lg.text) : 'cần lệnh chạy lại'}`);
+        setC(res, 'h-res critical');
+      }
     };
     return fp;
   }
   _fp_valve() {
     const fp = { title: 'MV-02 · VAN ĐIỆN ĐẦU RA', w: 340 };
     const Ls = { open: this._lamp('MỞ'), closed: this._lamp('ĐÓNG'), mov: this._lamp('ĐANG CHẠY') };
-    const R = { pos: this._hd('%', true), cmd: this._hd(''), trv: this._hd('s') };
+    const R = { pos: this._hd('%', true), cmd: this._hd('', false, true), trv: this._hd('s') };
     const M = this._modeBtns(fp);
     const bO = h('button', { class: 'h-btn go', onclick: () => this._ask(fp, 'Xác nhận MỞ van MV-02?', () => this._send(fp, 'valve', { open: true })) }, 'MỞ VAN');
     const bC = h('button', { class: 'h-btn stop', onclick: () => this._ask(fp, 'Xác nhận ĐÓNG van MV-02? Bơm sẽ bị cấm chạy khi van không mở hết.', () => this._send(fp, 'valve', { open: false })) }, 'ĐÓNG VAN');
@@ -1124,7 +1370,7 @@ export class HmiView {
       const st = this._hv(V, v, I.nd, { absent, lim: L.st });
       const faults = local && !d.dead ? [...a.st.gw.alarms.active.keys()].filter((c) => c.endsWith(tag) && /SENSOR|STUCK|RANGE/.test(c)) : [];
       const q = d.dead ? ['r', 'MẤT KẾT NỐI'] : absent ? ['', 'KHÔNG LẮP'] : st === 'na' ? ['', 'KHÔNG GỬI VỀ'] : faults.length || st === 'bad' ? ['r blink', 'LỖI TÍN HIỆU'] : this.ctx.stale ? ['a', 'DỮ LIỆU CŨ'] : ['g', 'TỐT'];
-      this._setLamp(Q, q[0], 'CHẤT LƯỢNG: ' + q[1]);
+      this._setLamp(Q, q[0], 'CHẤT LƯỢNG: ' + q[1], true);
       setT(lim, L.txt);
       setT(src, local ? (tag === 'PL-301' ? 'logger NB-IoT tại điểm bất lợi (mô phỏng)' : 'gateway GW-01 – đọc trực tiếp') : 'máy chủ – bản tin MQTT 10 s');
       const now = performance.now();
@@ -1141,9 +1387,11 @@ export class HmiView {
   _fp_station() {
     const fp = { title: 'ST-01 · CHẾ ĐỘ TRẠM', w: 380 };
     const Ls = { auto: this._lamp('TỰ ĐỘNG'), loc: this._lamp('TAY · TẠI CHỖ'), rem: this._lamp('TAY · TỪ XA'), ss: this._lamp('DỪNG AN TOÀN') };
-    const R = { mode: this._hd(''), scr: this._hd(''), lease: this._hd(''), pset: this._hd('bar') };
-    const M = this._modeBtns(fp);
-    const bReset = h('button', { class: 'h-btn warn', onclick: () => this._ask(fp, 'Xác nhận ĐẶT LẠI DỪNG AN TOÀN?', () => this._send(fp, 'reset_safe_stop', {})) }, 'ĐẶT LẠI DỪNG AN TOÀN');
+    const R = { mode: this._hd('', false, true), scr: this._hd('', false, true), lease: this._hd(''), pset: this._hd('bar') };
+    const M = this._modeBtns(fp), s = this.app.cfg.safety;
+    const bReset = h('button', { class: 'h-btn', onclick: () => this._ask(fp, this._intlk(this._d || stationData(this.app, this.where))?.k === 'lockout'
+      ? 'Xác nhận MỞ KHÓA BẢO VỆ ÁP CAO? Chỉ đặt lại khi đã tìm và xử lý nguyên nhân áp lực cao.'
+      : `Xác nhận ĐẶT LẠI DỪNG AN TOÀN? Trạm chỉ chạy lại khi chất lượng nước đã đạt liên tục ${num(s.quality_reset_hold_s / 60, 0)} phút.`, () => this._send(fp, 'reset_safe_stop', {})) }, 'ĐẶT LẠI DỪNG AN TOÀN');
     const bRot = h('button', { class: 'h-btn', onclick: () => this._ask(fp, 'Xác nhận LUÂN PHIÊN BƠM chính (đổi P-01 ↔ P-02)?', () => this._send(fp, 'rotate_pumps', {})) }, 'LUÂN PHIÊN BƠM');
     const why = h('p', { class: 'h-why' }), res = h('p', { class: 'h-res' });
     fp.body = h('div', {}, h('div', { class: 'h-lamprow' }, ...Object.values(Ls).map((L) => L.el)),
@@ -1156,16 +1404,20 @@ export class HmiView {
     fp.update = (d) => {
       const a = this.app, k = !d.dead, local = this.where === 'local';
       this._setLamp(Ls.auto, k && d.ctl === 'auto' ? 'g' : ''); this._setLamp(Ls.loc, k && d.ctl === 'local' ? 'a' : ''); this._setLamp(Ls.rem, k && d.ctl === 'remote' ? 'c' : '');
-      const ss = local ? k && (a.st.gw.safety.safe_stop || a.st.gw.safety.lockout) : d.alarms.some((x) => x.code === 'SAFE_STOP');
+      const ss = local ? k && (a.st.gw.safety.safe_stop || a.st.gw.safety.lockout) : d.alarms.some((x) => x.code === 'SAFE_STOP' || x.code === 'LOCKOUT');
       this._setLamp(Ls.ss, ss ? 'r blink' : '');
-      this._hv(R.mode, MODE_NAME[d.mode] || d.mode, 0, { live: true, st: { a: 'ok', b: 'warn', c: 'ok', d: 'alarm', x: 'alarm' }[d.mode] });
+      this._hv(R.mode, this._modeText(d), 0, { live: true, st: { ok: 'ok', info: 'ok', warn: 'warn', alarm: 'alarm' }[this._modeCls(d)] || 'ok' });
       const sc = this._script(); this._hv(R.scr, `v${sc.v} · ${sc.s}`, 0);
-      const ls = local && k && a.st.gw.manual && a.st.gw.manual.until !== null ? Math.max(0, a.st.gw.manual.until - d.t) : d.lease_s;
-      this._hv(R.lease, isNum(ls) ? `${Math.floor(ls / 60)}:${String(Math.floor(ls % 60)).padStart(2, '0')}` : d.ctl === 'remote' ? undefined : '–', 0, { st: isNum(ls) && ls < 300 ? 'warn' : 'ok' });
+      // quyền TAY từ xa còn lại: tại trạm đọc gateway; trung tâm ước tính từ lệnh tay cuối đã được xác nhận (≈)
+      const ls = d.lease_s;
+      this._hv(R.lease, isNum(ls) ? (d.lease_est ? '≈ ' : '') + fmtLease(ls) : d.ctl === 'remote' ? undefined : '–', 0, { st: isNum(ls) && ls < 300 ? 'warn' : 'ok' });
       this._hv(R.pset, d.p_set, 2);
       this._syncModeBtns(M, d);
-      setD(bReset, d.dead); setD(bRot, d.dead || d.ctl !== 'auto');
-      const [cls, txt] = this._authNote(d); setT(why, d.ctl === 'auto' && !d.dead ? 'Trạm TỰ ĐỘNG: kịch bản điều khiển bơm; lớp an toàn luôn ưu tiên. Luân phiên bơm chỉ dùng ở TỰ ĐỘNG.' : txt); setC(why, 'h-why ' + cls);
+      this._syncReset(bReset, d); setD(bRot, d.dead || d.ctl !== 'auto');
+      let [cls, txt] = this._authNote(d, true);
+      const I = this._intlk(d);
+      if (I && !this.ctx.stale && !this._wait) [cls, txt] = [I.sev, I.text + '.'];
+      setT(why, txt); setC(why, 'h-why ' + cls);
       this._resLine(res, ['set_mode', 'reset_safe_stop', 'rotate_pumps']);
     };
     return fp;
@@ -1177,6 +1429,7 @@ export class HmiView {
     const d = stationData(this.app, this.where);
     this._d = d;
     this.ctx = { d, remote: this.where === 'remote', dead: Boolean(d.dead), stale: Boolean(d.stale) && !d.dead };
+    this._wait = this._pendManual(d);
     const R = this.root;
     R.classList.toggle('h-remote', this.ctx.remote); R.classList.toggle('h-dead-on', this.ctx.dead); R.classList.toggle('h-stale', this.ctx.stale);
     this._updHeader(d); this._updAlarmBar(d); this._updState(d);
@@ -1189,8 +1442,14 @@ export class HmiView {
     const clk = fmtClock(d.t, a.cfg.sim.start_dow), m = clk.match(/^(.*) (\d\d:\d\d:\d\d)$/);
     setT(H.date, m ? m[1] : ''); setT(H.time, m ? m[2] : clk);
     setT(H.uPos, POS[this.where].name); setT(H.uRole, POS[this.where].role);
-    const man = !c.dead && d.ctl !== 'auto';
-    setH(H.man, !man); setT(H.man, d.ctl === 'local' ? 'TAY · TẠI CHỖ' : 'TAY · TỪ XA');
+    // huy hiệu TAY và liên động; dữ liệu cũ (trung tâm mất bản tin) → '?' và kiểu không chắc chắn
+    const man = !c.dead && d.ctl !== 'auto', qm = c.stale ? '? ' : '', q = c.stale ? ' q' : '';
+    setH(H.man, !man); setT(H.man, qm + (d.ctl === 'local' ? 'TAY · TẠI CHỖ' : 'TAY · TỪ XA')); setC(H.man, 'h-manbadge' + q);
+    setA(H.man, 'title', c.stale ? `Bản tin cuối lúc ${this._lastHM(d)} báo ${CTL_NAME[d.ctl]}` + (d.ctl === 'remote' ? ' – trạm tự về TỰ ĐỘNG khi mất kết nối' : '') + ', trạng thái thật có thể đã khác'
+      : 'Trạm đang ở chế độ điều khiển TAY – kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động' + (isNum(d.lease_s) && d.ctl === 'remote' ? ` · quyền từ xa còn ${d.lease_est ? '≈ ' : ''}${fmtLease(d.lease_s)}` : ''));
+    const I = this._intlk(d);
+    setH(H.intlk, !I);
+    if (I) { setT(H.intlk, qm + I.badge); setC(H.intlk, 'h-intlk ' + I.sev + q); setA(H.intlk, 'title', I.text + (I.reset ? ' – bấm để mở bảng chế độ trạm' : '')); }
     const led = (k, st, tip) => { setC(H.leds[k].i, 'h-ledi ' + st); setA(H.leds[k].s, 'title', tip); };
     const S0 = a.server.stations[a.st.sid];
     if (local) {
@@ -1219,7 +1478,7 @@ export class HmiView {
     }
     const un = this._ackable(top), hot = top.sev === 'critical' || top.sev === 'alarm';
     setC(A.el, 'h-ab ' + (hot ? 'hot' : top.sev === 'warning' ? 'warn' : 'info') + (un || top.sys ? ' un' : ' acked'));
-    setT(A.sev, SEV_TXT[top.sev] || SEV_LABEL[top.sev] || top.sev); setT(A.time, tShort(top.t)); setT(A.code, top.code); setT(A.msg, top.msg || '');
+    setT(A.sev, SEV_TXT[top.sev] || SEV_LABEL[top.sev] || top.sev); setT(A.time, tShort(top.t)); setT(A.code, top.code); setT(A.msg, viTxt(top.msg));
     setT(A.more, al.length > 1 ? `+${al.length - 1}` : ''); setH(A.ack, !un); setD(A.ack, d.dead);
   }
   _updState(d) {
@@ -1229,14 +1488,22 @@ export class HmiView {
     if (c.dead) {
       const min = Math.max(0, (d.t - gd.t0) / 60);
       const msg = `Mini PC (edge gateway GW-01) ngừng từ ${tShort(gd.t0)} (${num(min, 0)} phút). HMI-01 không còn dữ liệu – mọi giá trị hiển thị ####, lệnh từ màn hình không thực hiện được.`;
-      const fb = `Dự phòng tại trạm: ${gd.note()}.` + (gd.restarted ? ' Mini PC đã khởi động lại – đang theo dõi trước khi tiếp quản.' : '');
+      const fb = `Dự phòng tại trạm: ${viNum(gd.note())}.` + (gd.restarted ? ' Mini PC đã khởi động lại – đang theo dõi trước khi tiếp quản.' : '');
       if (showDead && this.deadMsg._k !== msg + fb) {
         this.deadMsg._k = msg + fb;
         this.deadMsg.replaceChildren(h('p', {}, msg), h('p', { class: 'fb' }, fb), h('p', {}, 'Liên động cứng vẫn hoạt động: phao LSLL-101, van an toàn PSV-01, bảo vệ của biến tần.'));
       }
-      this._stateBar('bad', `MẤT KẾT NỐI MPC-01 – DỮ LIỆU KHÔNG HỢP LỆ (####) · ${gd.note()}`, showDead ? null : ['CHI TIẾT', () => { this._deadHide = null; this.update(true); }]);
-    } else if (c.stale) {
-      this._stateBar('warn', `MẤT KẾT NỐI – DỮ LIỆU CŨ (bản tin cuối ${isNum(d.age) ? num(d.age / 60, 0) + ' phút' : '–'} trước) · lệnh từ trung tâm xếp hàng ở máy chủ, hết hạn sau 60 s`);
+      this._stateBar('bad', `MẤT KẾT NỐI MPC-01 – DỮ LIỆU KHÔNG HỢP LỆ (####) · ${viNum(gd.note())}`, showDead ? null : ['CHI TIẾT', () => { this._deadHide = null; this.update(true); }]);
+      return;
+    }
+    const I = this._intlk(d), ttl = num(a.cfg.gateway.manual_cmd_ttl_s, 0);
+    if (c.stale) {
+      const ago = isNum(d.age) ? `, ${num(d.age / 60, 0)} phút trước` : '';
+      this._stateBar('warn', `MẤT KẾT NỐI – DỮ LIỆU CŨ (bản tin cuối ${this._lastHM(d)}${ago})` + (d.ctl === 'remote' ? ' · trạm đang TAY từ xa tự về TỰ ĐỘNG khi mất kết nối' : '')
+        + ` · lệnh từ trung tâm xếp hàng ở máy chủ, hết hạn sau ${ttl} s` + (I ? ` · báo động cuối nhận được: ${I.badge}` : ''));
+    } else if (I) {
+      // liên động/cắt đã chốt: hiện ngay trên mọi màn hình, kèm nút mở bảng chế độ trạm để đặt lại
+      this._stateBar(I.sev, I.text, I.reset ? ['ĐẶT LẠI ▸', () => this._fpOpen('station', 'ST')] : null);
     } else this._stateBar(null);
   }
   _stateBar(cls, text, btn = null) {
@@ -1248,9 +1515,10 @@ export class HmiView {
   }
   _updStatus(d) {
     const B = this.SB, c = this.ctx, a = this.app;
-    setT(B.ctl, this._ctlText(d)); setC(B.ctl, d.dead ? 'alarm' : d.ctl === 'auto' ? 'ok' : 'warn');
-    setT(B.mode, MODE_NAME[d.mode] || d.mode); setC(B.mode, { a: 'ok', b: 'warn', c: 'info', d: 'alarm', x: 'alarm' }[d.mode] || '');
-    const sc = this._script(); setT(B.scr, c.dead ? '####' : `v${sc.v} · ${sc.s}`);
+    const cs = this._ctlState(d), qm = c.stale ? '? ' : '', q = c.stale ? ' q' : '';
+    setT(B.ctl, qm + cs.t + (c.stale ? ` (bản tin cuối ${this._lastHM(d)})` : '')); setC(B.ctl, cs.cls + q);
+    setT(B.mode, this._modeText(d)); setC(B.mode, this._modeCls(d) + q);
+    const sc = this._script(); setT(B.scr, c.dead ? '####' : `${qm}v${sc.v} · ${sc.s}`); setC(B.scr, q.trim());
     setT(B.pset, c.dead ? '####' : isNum(d.p_set) ? num(d.p_set, 2) + ' bar' : 'N/A');
     setT(B.kwh, c.dead ? '####' : isNum(d.kwh) ? num(d.kwh, 1) + ' kWh' : 'N/A');
     setT(B.src, this.where === 'local' ? (c.dead ? 'HMI-01 · mất kết nối GW-01' : 'HMI-01 · dữ liệu trực tiếp GW-01 (Modbus TCP)') : `SCADA · máy chủ SRV-01 (MQTT 10 s)${a.server.stations[a.st.sid].online ? '' : ' · trạm mất kết nối'}`);

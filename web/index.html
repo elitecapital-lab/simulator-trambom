@@ -17,42 +17,65 @@
 </script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand"><h1>Trạm bơm tăng áp ST-01</h1><span>Điều khiển tự động thông minh · edge gateway · tích hợp mạng lưới</span></div>
-  <div class="ctl"><label class="lbl" for="sc-select">Kịch bản</label><select id="sc-select"></select></div>
-  <div class="ctl"><span class="lbl">Giao diện</span><div class="seg" id="view-seg"><button data-view="3d">Mô phỏng 3D</button><button data-view="hmi">Màn hình HMI</button></div></div>
-  <div class="ctl"><span class="lbl">Mức</span><div class="seg" id="lvl-seg"><button data-lvl="basic">Cơ bản</button><button data-lvl="advanced">Nâng cao</button></div></div>
-  <div class="ctl"><button class="btn primary" id="btn-play">Chạy</button><button class="btn" id="btn-skip" title="Chạy nhanh thêm 1 giờ mô phỏng">+1 giờ</button><button class="btn" id="btn-reset">Chạy lại</button></div>
-  <div class="ctl"><span class="lbl">Tốc độ</span><div class="seg" id="speed-seg"></div><span class="note" id="speed-real"></span></div>
-  <div class="ctl clock" id="clock" aria-live="off">–</div>
-  <div class="modes" id="modes" aria-label="Chế độ vận hành của gateway">
-    <span class="mode m-a" data-m="a">(a) Bình thường</span><span class="mode m-b" data-m="b">(b) Tự vận hành</span><span class="mode m-c" data-m="c">(c) Đồng bộ</span><span class="mode m-d" data-m="d">(d) Cảnh báo / an toàn</span>
+<!-- Cảnh 3D (hoặc màn HMI) phủ toàn màn hình; mọi bảng khác nổi bên trên. -->
+<section class="viewport" id="vp" aria-label="Mô hình 3D trạm bơm">
+  <p id="boot" class="boot">Đang tải mô hình…</p>
+</section>
+
+<header class="topbar glass" id="topbar">
+  <div class="brand" title="Trạm bơm tăng áp ST-01 – điều khiển tự động thông minh · edge gateway · tích hợp mạng lưới">
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c3.6 4.4 6.5 7.9 6.5 11.6a6.5 6.5 0 0 1-13 0C5.5 10.4 8.4 6.9 12 2.5z"/><path class="bm-up" d="M12 17.5v-7m-3 3 3-3 3 3"/></svg>
+    <h1><b>ST-01</b><span class="brand-long"> · Trạm bơm tăng áp</span></h1>
+  </div>
+  <div class="tb-grp" id="tg-sc"><label class="lbl gl m" for="sc-select">Kịch bản</label><select id="sc-select" aria-label="Kịch bản" title="Chọn kịch bản thí nghiệm"></select></div>
+  <div class="tb-grp" id="tg-lvl"><span class="lbl gl m">Mức độ kịch bản điều khiển</span><div class="seg" id="lvl-seg" role="group" aria-label="Mức độ kịch bản điều khiển"><button data-lvl="basic" title="Điều khiển theo ngưỡng">Cơ bản</button><button data-lvl="advanced" title="Điều khiển dự báo">Nâng cao</button></div></div>
+  <div class="tb-run">
+    <button class="btn primary" id="btn-play"></button>
+    <div class="tb-grp" id="tg-run"><span class="lbl gl m">Mô phỏng</span><button class="btn" id="btn-skip" title="Chạy nhanh thêm 1 giờ mô phỏng"></button><button class="btn" id="btn-reset" title="Chạy lại kịch bản từ đầu"></button></div>
+  </div>
+  <div class="tb-grp" id="tg-speed" title="Tốc độ mô phỏng"><span class="lbl gl m">Tốc độ mô phỏng</span><div class="seg" id="speed-seg" role="group" aria-label="Tốc độ mô phỏng"></div><span class="note" id="speed-real"></span></div>
+  <div class="clock" id="clock" aria-live="off" title="Thời gian mô phỏng"><b id="clock-t">–</b><span id="clock-d"></span></div>
+  <div class="tb-grp" id="tg-modes"><span class="lbl gl m">Chế độ gateway</span>
+    <div class="modes" id="modes" aria-label="Chế độ vận hành của gateway">
+      <span class="mode m-a" data-m="a" title="(a) Bình thường – có kết nối máy chủ">(a)<span class="mn"> Bình thường</span></span><span class="mode m-b" data-m="b" title="(b) Mất mạng – gateway tự vận hành bằng kịch bản đã lưu">(b)<span class="mn"> Tự vận hành</span></span><span class="mode m-c" data-m="c" title="(c) Đồng bộ sau khi khôi phục kết nối">(c)<span class="mn"> Đồng bộ</span></span><span class="mode m-d" data-m="d" title="(d) Cảnh báo / dừng an toàn">(d)<span class="mn"> Cảnh báo / an toàn</span></span><span class="mode m-x" data-m="x" title="Mini PC (edge gateway) ngừng – biến tần tự chạy PID nội">Mini PC lỗi</span>
+    </div>
   </div>
   <div class="spacer"></div>
-  <div class="ctl"><button class="btn" id="btn-guide">Hướng dẫn</button><button class="btn" id="btn-theme">Giao diện: tự động</button></div>
+  <div class="seg view-seg" id="view-seg" role="group" aria-label="Giao diện"><button data-view="3d" title="Mô phỏng 3D toàn màn hình">3D</button><button data-view="hmi" title="Màn hình HMI vận hành">HMI</button></div>
+  <div class="tb-grp" id="tg-misc"><span class="lbl gl m">Khác</span><button class="btn icon" id="btn-guide" title="Hướng dẫn: sơ đồ khối, bảng ngưỡng, chọn kịch bản"></button><button class="btn icon" id="btn-theme"></button></div>
+  <button class="btn icon" id="btn-menu" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Thêm điều khiển"></button>
 </header>
+<div class="pop menu glass" id="menu" hidden role="dialog" aria-label="Điều khiển mô phỏng"></div>
 
-<div class="main">
-  <section class="viewport" id="vp" aria-label="Mô hình 3D trạm bơm">
-    <div class="vp-tools" id="vp-tools"></div>
-    <div class="banner" id="banner" hidden></div>
-    <div class="vp-legend"><span><i class="dot" style="background:#0ca30c"></i>bơm chạy / kết nối</span><span><i class="dot" style="background:#6d7570"></i>bơm dừng</span><span><i class="dot" style="background:#d03b3b"></i>lỗi / báo động</span><span><i class="dot" style="background:#4aa3ff"></i>dòng nước</span><span>Nhấp vào thiết bị để xem tham số</span></div>
-    <aside class="drawer" id="drawer" hidden aria-live="polite"></aside>
-    <p id="boot" class="note" style="position:absolute;left:12px;top:56px">Đang tải mô hình…</p>
-  </section>
-  <aside class="side"><nav class="tabs" id="tabs" role="tablist"></nav><div id="panes" style="display:contents"></div></aside>
-</div>
+<div class="banner" id="banner" hidden role="status"></div>
+<div class="hud" id="hud" aria-label="Chỉ số vận hành chính"></div>
+<nav class="dock glass" id="dock" aria-label="Chức năng"></nav>
 
-<div class="lower">
-  <section>
-    <div class="chart-head" style="margin-bottom:8px"><span class="lbl">Biểu đồ theo thời gian – trạm thông minh và lịch cố định chạy song song</span><div class="seg" id="win-seg"></div></div>
+<section class="sheet glass" id="sheet" data-size="m" aria-label="Biểu đồ và so sánh" inert>
+  <header class="sheet-head">
+    <button class="grip" id="sheet-grip" aria-label="Đổi cỡ bảng biểu đồ" title="Kéo để đổi cỡ · nhấp để đổi S/M/L"></button>
+    <div class="seg" id="sheet-tabs" role="tablist" aria-label="Nội dung"><button data-t="charts" role="tab">Biểu đồ</button><button data-t="kpi" role="tab">So sánh KPI</button></div>
+    <div class="seg" id="win-seg" role="group" aria-label="Khoảng thời gian"></div>
+    <div class="chips" id="chart-chips" role="group" aria-label="Chọn biểu đồ hiển thị"></div>
+    <span class="hbrk" aria-hidden="true"></span>
+    <div class="spacer"></div>
+    <div class="seg" id="size-seg" role="group" aria-label="Cỡ bảng"><button data-s="s" title="Nhỏ">S</button><button data-s="m" title="Vừa">M</button><button data-s="l" title="Lớn">L</button></div>
+    <button class="xbtn" id="sheet-x" aria-label="Đóng biểu đồ" title="Đóng (Esc)"></button>
+  </header>
+  <div class="sheet-body" id="sheet-body">
     <div class="charts" id="charts"></div>
-  </section>
-  <section class="card kpi" id="kpi"></section>
-</div>
+    <section class="kpi" id="kpi" hidden></section>
+  </div>
+</section>
 
+<aside class="side glass" id="side" aria-labelledby="side-title" inert>
+  <header class="side-head"><span class="side-ico" id="side-ico" aria-hidden="true"></span><h2 id="side-title"></h2><button class="xbtn" id="side-x" aria-label="Đóng bảng" title="Đóng (Esc)"></button></header>
+  <div class="side-body" id="panes"></div>
+</aside>
+
+<aside class="drawer glass" id="drawer" hidden aria-live="polite"></aside>
 <div class="modal" id="intro" hidden></div>
-<div id="toast" class="banner c" hidden style="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom, 0px));top:auto;right:auto;z-index:60;max-width:90vw"></div>
+<div id="toast" class="toast" hidden role="status"></div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

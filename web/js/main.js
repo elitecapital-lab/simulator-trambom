@@ -8,6 +8,7 @@ import { HmiView } from './ui/hmi.js';
 import { Intro } from './ui/intro.js';
 import { Panels } from './ui/panels.js';
 import { StationScene } from './ui/scene3d.js';
+import { ico, PANES, Shell } from './ui/shell.js';
 
 async function loadData() {
   if (window.__TRAMBOM_DATA__) return window.__TRAMBOM_DATA__;
@@ -18,6 +19,7 @@ async function loadData() {
 }
 
 const SPEEDS = [1, 10, 60, 300, 1200, 3600];
+const setText = (el, s) => { if (el.textContent !== s) el.textContent = s; };
 const WINDOWS = [['6 h', 6 * 3600], ['24 h', 86400], ['Tất cả', Infinity]];
 const MODE_BANNER = {
   x: (a) => `MINI PC NGỪNG – ${a.st.gw_dead.note()} · mất dừng an toàn theo chất lượng, ghép bơm, đo xa`,
@@ -38,22 +40,25 @@ class App {
     this.baseCfg = data.station; this.cfg = structuredClone(data.station); this.scenarios = data.scenarios; this.components = data.components;
     document.getElementById('boot')?.remove();
     this.speed = 60; this.running = false; this.acc = 0; this.win = 86400; this.studentLoaded = false;
+    this.viewMode = '3d'; this.curTab = null;
     this.panels = new Panels(this);
+    this.shell = new Shell(this);
     this._initHeader();
     this._initTabs();
-    this.scene3d = new StationScene(document.getElementById('vp'), this.components, (tag) => this.onPick(tag));
-    this.ctl3d = new Control3D(this, document.getElementById('vp'));
-    this._initViewportTools();
+    const vp = document.getElementById('vp');
+    this.scene3d = new StationScene(vp, this.components, (tag) => this.onPick(tag));
+    this.ctl3d = new Control3D(this, vp);
     this.setScope('all');
-    this.hmi = new HmiView(document.getElementById('vp'), this);
-    this.viewMode = '3d';
+    this.hmi = new HmiView(vp, this);
     document.querySelectorAll('#view-seg button').forEach((b) => b.addEventListener('click', () => this.setView(b.dataset.view)));
     this._initCharts();
     this.panels.buildKpi(document.getElementById('kpi'));
+    this._initDrawer();
     this.intro = new Intro(document.getElementById('intro'), this.cfg, this.scenarios, (sc, lvl) => this.start(sc, lvl));
     const m = location.hash.match(/^#(S\d+B?|S0)(?:-(basic|advanced))?(?:-(hmi|3d))?$/i);
     if (m) { this.intro.hide(); this.start(m[1].toUpperCase(), m[2] || 'basic'); if (m[3]) this.setView(m[3].toLowerCase()); } else { this.start('S1', 'basic', false); this.intro.show(0); }
     this._syncView();
+    this.shell.refit();
     this._last = performance.now(); this._lastUi = 0; this._lastChart = 0;
     requestAnimationFrame((t) => this.loop(t));
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.onTheme());
@@ -65,8 +70,9 @@ class App {
     sel.addEventListener('change', () => this.start(sel.value, this.level));
     document.querySelectorAll('#lvl-seg button').forEach((b) => b.addEventListener('click', () => this.start(this.scenario.id, b.dataset.lvl)));
     const sp = document.getElementById('speed-seg');
-    for (const v of SPEEDS) sp.append(h('button', { 'data-v': v, onclick: () => { this.speed = v; this._syncHeader(); } }, '×' + v));
-    document.getElementById('btn-play').addEventListener('click', () => { this.running = !this.running; this._syncHeader(); });
+    for (const v of SPEEDS) sp.append(h('button', { 'data-v': v, title: `1 giây thực = ${v} giây mô phỏng`, onclick: () => { this.speed = v; this._syncHeader(); } }, '×' + v));
+    this.playBtn = document.getElementById('btn-play');
+    this.playBtn.addEventListener('click', () => { this.running = !this.running; this._syncHeader(); });
     document.getElementById('btn-skip').addEventListener('click', () => this.skip(3600));
     document.getElementById('btn-reset').addEventListener('click', () => this.start(this.scenario.id, this.level));
     document.getElementById('btn-guide').addEventListener('click', () => this.intro.show(0, this.scenario.id, this.level));
@@ -76,44 +82,46 @@ class App {
     try { const saved = localStorage.getItem('trambom-theme'); if (saved) { ti = Math.max(0, themes.findIndex((x) => x[0] === saved)); } } catch (e) { /* bỏ qua */ }
     const applyTheme = () => {
       if (themes[ti][0]) document.documentElement.setAttribute('data-theme', themes[ti][0]); else document.documentElement.removeAttribute('data-theme');
-      tb.textContent = themes[ti][1];
+      this.shell.setTheme(tb, themes[ti][0], themes[ti][1]);
       try { localStorage.setItem('trambom-theme', themes[ti][0]); } catch (e) { /* bỏ qua */ }
       this.onTheme();
     };
     tb.addEventListener('click', () => { ti = (ti + 1) % themes.length; applyTheme(); });
     this._applyThemeInit = applyTheme;
+    this.banner = document.getElementById('banner');
+    this.banner.addEventListener('click', () => this.tab(['d', 'x'].includes(this._bnMode) ? 'alarm' : 'mon'));
   }
+  // Các bảng (Báo động, Giám sát, Thiết bị…) nằm trong khung nổi bên phải; thanh chức năng (dock) thay cho dải tab.
   _initTabs() {
-    const tabs = [['mon', 'Giám sát'], ['equip', 'Thiết bị'], ['fault', 'Sự cố'], ['script', 'Kịch bản'], ['center', 'Trung tâm'], ['log', 'Nhật ký'], ['lesson', 'Bài học']];
-    const bar = document.getElementById('tabs'), panes = document.getElementById('panes');
-    this.tabBtns = {}; this.panes = {};
-    for (const [k, label] of tabs) {
-      const b = h('button', { role: 'tab', onclick: () => this.tab(k) }, label, h('span', { class: 'badge', hidden: true }));
-      bar.append(b); this.tabBtns[k] = b;
-      const p = h('div', { class: 'pane', role: 'tabpanel', hidden: true });
-      panes.append(p); this.panes[k] = p;
-    }
+    const panes = document.getElementById('panes');
+    this.panes = {};
+    for (const k of Object.keys(PANES)) { const p = h('div', { class: 'pane', 'data-pane': k, hidden: true }); panes.append(p); this.panes[k] = p; }
+    this.shell.buildAlarmPane(this.panes.alarm);
     this.panels.buildMonitor(this.panes.mon);
     this.panels.buildEquipment(this.panes.equip);
     this.panels.buildLog(this.panes.log);
     this.panels.buildLesson(this.panes.lesson);
-    this.tab('mon');
   }
+  /** Mở bảng k trong khung nổi bên phải ('charts' / 'kpi' mở bảng biểu đồ). */
   tab(k) {
-    this.curTab = k;
-    for (const [n, b] of Object.entries(this.tabBtns)) { b.classList.toggle('on', n === k); b.setAttribute('aria-selected', n === k); this.panes[n].hidden = n !== k; }
+    if (this.viewMode === 'hmi') this.setView('3d');
+    if (k === 'charts' || k === 'kpi') { this.shell.openSheet(k); return; }
+    this.shell.openPane(k);
     this._updatePanels(true);
   }
   setView(v) {
     this.viewMode = v === 'hmi' ? 'hmi' : '3d';
-    document.getElementById('vp').classList.toggle('hmi-on', this.viewMode === 'hmi');
-    this.hmi.show(this.viewMode === 'hmi');
-    if (this.viewMode !== 'hmi') requestAnimationFrame(() => this.scene3d.resize());
+    const hmi = this.viewMode === 'hmi';
+    document.getElementById('vp').classList.toggle('hmi-on', hmi);
+    document.body.classList.toggle('view-hmi', hmi);
+    this.shell.closePop();
+    this.hmi.show(hmi);
+    if (!hmi) requestAnimationFrame(() => { this.scene3d.resize(); this.shell.update(true); this._labels(); this.updateCharts(); });
     this._syncView();
   }
   /** Nhấp vào thiết bị trong cảnh 3D: thiết bị điều khiển được thì mở bảng điều khiển nổi, còn lại mở thẻ thông tin. */
   onPick(tag) { if (!this.ctl3d.open(tag)) this.openDrawer(tag); }
-  _syncView() { document.querySelectorAll('#view-seg button').forEach((b) => b.classList.toggle('on', b.dataset.view === this.viewMode)); }
+  _syncView() { document.querySelectorAll('#view-seg button').forEach((b) => { b.classList.toggle('on', b.dataset.view === this.viewMode); b.setAttribute('aria-pressed', String(b.dataset.view === this.viewMode)); }); }
   /** Đổi tùy chọn lắp đặt thiết bị (cfg.hardware) rồi chạy lại kịch bản hiện tại. */
   applyHardware(hw) {
     this.cfg = structuredClone(this.baseCfg);
@@ -126,23 +134,11 @@ class App {
   setScope(k) {
     this.scope = k;
     this.scene3d.setScopeFilter(k, (tag) => this.scopeOf(tag));
-    this.scopeSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.scope === k));
+    this.scopeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.scope === k); b.setAttribute('aria-pressed', String(b.dataset.scope === k)); });
     if (this.panels.updateEquipment) this.panels.updateEquipment(true);
   }
-  setBadge(k, n) { const b = this.tabBtns[k]?.querySelector('.badge'); if (!b) return; b.hidden = !n; b.textContent = n; }
-  _initViewportTools() {
-    const tools = document.getElementById('vp-tools');
-    for (const [k, label] of [['overview', 'Tổng quan'], ['tank', 'Bể chứa'], ['pumps', 'Cụm bơm'], ['quality', 'Chất lượng nước'], ['cabinet', 'Tủ điều khiển'], ['network', 'Khu dân cư']]) {
-      tools.append(h('button', { class: 'btn small', onclick: () => this.scene3d.goto(k) }, label));
-    }
-    this.scopeSeg = h('div', { class: 'seg scope-seg', role: 'group', 'aria-label': 'Lọc theo phạm vi thiết bị' },
-      ...[['all', 'Tất cả'], ['hien_trang', 'Hiện trạng'], ['giai_phap', 'Giải pháp'], ['khuyen_nghi', 'Khuyến nghị']].map(([k, label]) =>
-        h('button', { 'data-scope': k, onclick: () => this.setScope(k) }, k === 'all' ? label : h('span', {}, h('i', { class: 'sdot s-' + k }), label))));
-    tools.append(this.scopeSeg);
-    const modes = ['Nhãn: ẩn', 'Nhãn: chính', 'Nhãn: tất cả'];
-    let lm = 1;
-    tools.append(h('button', { class: 'btn small', onclick: (e) => { lm = (lm + 1) % 3; this.scene3d.setLabelMode(lm); e.target.textContent = modes[lm]; } }, modes[1]));
-  }
+  /** Số báo động ('mon') / cảnh báo tập trung ('center') chưa xác nhận – hiện trên nút của thanh chức năng. */
+  setBadge(k, n) { this.shell?.setBadge(k, n); }
   _initCharts() {
     const host = document.getElementById('charts');
     const C = (o) => new TimeChart(host, o);
@@ -159,8 +155,9 @@ class App {
       cl: C({ title: 'Clo dư trong bể', subtitle: 'mg/L · QCVN 0,2–1,0', unit: 'mg/L', zero: true, refLines: [{ y: 0.2, label: '0,2' }, { y: 0.3, label: '0,3' }], series: [{ key: 'cl', label: 'Thông minh', color: '--s-smart' }, { key: 'f_cl', label: 'Lịch cố định', color: '--s-fixed' }] }),
     };
     const ws = document.getElementById('win-seg');
-    for (const [label, v] of WINDOWS) ws.append(h('button', { onclick: (e) => { this.win = v; ws.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.target)); this.updateCharts(); } , class: v === this.win ? 'on' : '' }, label));
+    for (const [label, v] of WINDOWS) ws.append(h('button', { title: label === 'Tất cả' ? 'Từ đầu mô phỏng' : label + ' gần nhất', onclick: (e) => { this.win = v; ws.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.target)); this.updateCharts(); }, class: v === this.win ? 'on' : '' }, label));
     new ResizeObserver(() => this.updateCharts()).observe(host);
+    this.shell.buildChartChips();
   }
   onTheme() { this.scene3d?.applyTheme(); for (const c of Object.values(this.charts || {})) c.refreshColors(); this.updateCharts(); }
 
@@ -172,7 +169,7 @@ class App {
     this.server = this.net.server; this.st = this.net.smart[0]; this.fx = this.net.fixed[0];
     this.studentLoaded = false;
     this.spans = []; this._spanIdx = 0;
-    document.getElementById('sc-select').value = this.scenario.id;
+    { const sel = document.getElementById('sc-select'); sel.value = this.scenario.id; sel.title = this.scenario.name; }
     this.panes.fault.replaceChildren(); this.panels.buildFaults(this.panes.fault);
     this.panes.script.replaceChildren(); this.panels.buildScript(this.panes.script);
     this.panes.center.replaceChildren(); this.panels.buildCenter(this.panes.center);
@@ -219,32 +216,44 @@ class App {
     return { plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
   }
   _syncHeader() {
-    document.getElementById('btn-play').textContent = this.running ? 'Tạm dừng' : 'Chạy';
+    this.shell.setPlay(this.playBtn, this.running);
     document.querySelectorAll('#speed-seg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === this.speed));
     document.querySelectorAll('#lvl-seg button').forEach((b) => b.classList.toggle('on', b.dataset.lvl === this.level));
     if (!this.st) return;
-    document.getElementById('clock').textContent = fmtClock(this.st.t, this.cfg.sim.start_dow);
+    const clk = fmtClock(this.st.t, this.cfg.sim.start_dow), cm = clk.match(/^(.*\S)\s+(\d\d:\d\d:\d\d)$/);
+    setText(document.getElementById('clock-t'), cm ? cm[2] : clk); setText(document.getElementById('clock-d'), cm ? cm[1] : '');
     const real = this.running ? Math.round(this._stepsRate ?? 0) : 0;
-    document.getElementById('speed-real').textContent = this.running && real < this.speed * 0.8 ? `thực ×${real}` : '';
+    setText(document.getElementById('speed-real'), this.running && real < this.speed * 0.8 ? `thực ×${real}` : '');
     const mode = this.st.gw_dead ? 'x' : this.st.gw.mode();
     document.querySelectorAll('#modes .mode').forEach((m) => m.classList.toggle('on', m.dataset.m === mode));
-    const bn = document.getElementById('banner');
+    // tên chế độ / ngày đổi độ rộng thanh trên → xếp lại cho vừa một hàng
+    const fitKey = mode + (cm ? cm[1] : '');
+    if (fitKey !== this._fitKey) { this._fitKey = fitKey; this.shell.refit?.(); }
+    // dải thông báo chế độ (b/c/d/x) – chỉ dựng lại khi nội dung đổi
+    const bn = this.banner;
+    this._bnMode = mode;
     if (mode === 'a') bn.hidden = true;
-    else { bn.hidden = false; bn.className = 'banner ' + (mode === 'x' ? 'd' : mode); bn.textContent = MODE_BANNER[mode](this); }
+    else {
+      const cls = 'banner ' + (mode === 'x' ? 'd' : mode), txt = MODE_BANNER[mode](this);
+      if (bn.className !== cls) bn.className = cls;
+      if (bn._t !== txt) { bn._t = txt; bn.replaceChildren(ico('alert'), h('span', { class: 'bn-t' }, txt), h('span', { class: 'bn-more' }, 'Chi tiết')); bn.title = txt + ' – nhấp để xem chi tiết'; }
+      bn.hidden = false;
+    }
   }
   _updatePanels(force) {
     if (!this.st) return;
-    const P = this.panels;
+    const P = this.panels, cur = this.viewMode === 'hmi' ? null : this.curTab;
     P.updateMonitor();
-    if (force || this.curTab === 'fault') P.updateFaults();
-    if (this.curTab === 'script') P.updateScript();
-    if (this.curTab === 'center' || force) P.updateCenter();
-    if (this.curTab === 'log') P.updateLog();
-    P.updateKpi();
+    if (force || cur === 'fault') P.updateFaults();
+    if (cur === 'script') P.updateScript();
+    if (cur === 'center' || force) P.updateCenter();
+    if (cur === 'log') P.updateLog();
+    if (force || this.shell.kpiVisible()) P.updateKpi();
     if (this.hmi?.visible) this.hmi.update(force);
     this.ctl3d?.update(force);
+    this.shell.update(force);
     if (this.drawerTag) this.openDrawer(this.drawerTag, true);
-    this._labels();
+    if (this.viewMode !== 'hmi') this._labels();
   }
   _labels() {
     const g = this.st.gw, pl = this.st.plant, sig = g.sig || {}, sc = this.scene3d, A = g.alarms.active;
@@ -298,13 +307,20 @@ class App {
       'RT-01': [['Kết nối', g.comms.state], ['Dữ liệu lên', fmt(this.st.link.bytes_up / 1e6, 2, 'MB')], ['SMS đã gửi', String(g.comms.stats.sms)]],
       'WDR-01': [['Rơ-le', this.st.gw_dead ? 'nhả' : 'giữ'], ['Dự phòng', this.st.gw_dead ? this.st.gw_dead.note() : (this.cfg.hardware.VFD_PID_fallback ? 'sẵn sàng: PID nội ' + fmt(this.cfg.fallback.p_set_bar, 1, 'bar') : 'không lắp – I/O giữ lệnh cuối')]],
       'EM-101': [['Công suất', fmt(pl.kw, 2, 'kW')], ['Điện năng', fmt(this.st.kpi.energy_kwh, 1, 'kWh')]],
-      'HMI-01': [['Quyền điều khiển', g.controlSrc()], ['Mở màn HMI', 'nút "Màn hình HMI" trên thanh trên cùng']],
+      'HMI-01': [['Quyền điều khiển', g.controlSrc()], ['Mở màn HMI', 'nút "HMI" trên thanh trên cùng']],
     };
     pl.pumps.forEach((pu, i) => { L['VFD-0' + (i + 1)] = [['Trạng thái', pu.fault ? 'lỗi' : pu.running ? 'chạy' : 'dừng'], ['Tần số', fmt(pu.f, 1, 'Hz')], ['Dòng điện', fmt(pu.amps, 1, 'A')], ['Công suất', fmt(pu.kw, 2, 'kW')], ['Nguồn lệnh', this.st.gw_dead ? (this.st.gw_dead.enabled ? 'PID nội (watchdog)' : 'giữ lệnh cuối của I/O') : 'mini PC qua Modbus RTU']]; });
     pl.pumps.forEach((pu, i) => { L[pu.tag] = [['Trạng thái', pu.fault ? 'lỗi' : pu.running ? 'chạy' : 'dừng'], ['Tần số', fmt(pu.f, 1, 'Hz')], ['Lưu lượng', fmt(pu.q, 1, 'm³/h')], ['Cột áp', fmt(pu.h, 1, 'm')], ['Công suất', fmt(pu.kw, 2, 'kW')], ['Dòng điện', fmt(pu.amps, 1, 'A')], ['Số lần khởi động', String(pu.starts)], ['Giờ chạy', fmt(pu.run_s / 3600, 1, 'h')]]; });
     return L[tag] || [];
   }
+  _initDrawer() {
+    // đang nhấn chuột trong thẻ thông tin thì tạm không làm mới (tránh mất cú nhấp khi nội dung được dựng lại)
+    const d = document.getElementById('drawer');
+    d.addEventListener('pointerdown', () => { this._drawerHold = true; });
+    for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, () => { this._drawerHold = false; });
+  }
   openDrawer(tag, refresh = false) {
+    if (refresh && this._drawerHold) return;
     const d = document.getElementById('drawer');
     const el = this.panels.componentInfo(tag);
     if (!el) return;
@@ -316,11 +332,12 @@ class App {
   toast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg; t.hidden = false;
-    clearTimeout(this._toastT); this._toastT = setTimeout(() => { t.hidden = true; }, 2600);
+    clearTimeout(this._toastT); this._toastT = setTimeout(() => { t.hidden = true; }, 3200);
   }
   // ---------- biểu đồ ----------
+  /** Vẽ lại biểu đồ – bỏ qua khi bảng biểu đồ đang đóng (vẽ lại ngay khi mở). */
   updateCharts() {
-    if (!this.st || !this.charts) return;
+    if (!this.st || !this.charts || !this.shell.chartsVisible()) return;
     const H = this.st.hist.data, F = this.fx.hist.data;
     const n = H.t.length;
     // vùng nền: mất mạng / chế độ (d)
@@ -355,6 +372,6 @@ class App {
 
 loadData().then((d) => { window.app = new App(d); }).catch((e) => {
   console.error(e);
-  const boot = document.getElementById('boot') ?? document.getElementById('vp').appendChild(h('p', { id: 'boot', class: 'note', style: 'position:absolute;left:12px;top:56px' }));
+  const boot = document.getElementById('boot') ?? document.getElementById('vp').appendChild(h('p', { id: 'boot', class: 'boot' }));
   boot.textContent = 'Không tải được cấu hình (' + e.message + '). Hãy chạy máy chủ web tĩnh từ thư mục gốc: python -m trambom web';
 });

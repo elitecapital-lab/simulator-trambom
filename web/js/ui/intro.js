@@ -117,7 +117,7 @@ export class Intro {
               <div>
                 <span class="lbl">Mức độ kịch bản điều khiển</span>
                 <div class="lvl" style="margin-top:6px">
-                  <label><input type="radio" name="lvl" value="basic" checked> <b>Cơ bản – điều khiển theo ngưỡng</b><small>Áp đặt theo lưu lượng, PI, ghép bơm khi bơm chính max tần số, dừng theo mức nước. Bài tập: hoàn thiện kịch bản theo ngưỡng (student/kich_ban_nguong.py hoặc tab Kịch bản).</small></label>
+                  <label><input type="radio" name="lvl" value="basic" checked> <b>Cơ bản – điều khiển theo ngưỡng</b><small>Áp đặt theo lưu lượng, PI, ghép bơm khi bơm chính max tần số, dừng theo mức nước. Bài tập: hoàn thiện kịch bản theo ngưỡng (student/kich_ban_nguong.py hoặc mục Kịch bản trên thanh chức năng bên phải).</small></label>
                   <label><input type="radio" name="lvl" value="advanced"> <b>Nâng cao – điều khiển dự báo</b><small>Mẫu sử dụng 168 giờ (giờ × ngày) học trực tuyến, biên áp theo độ bất định, bù trước, ghép bơm theo mô hình, dự báo cạn bể, phát hiện rò rỉ ban đêm, biểu quyết cảm biến áp.</small></label>
                 </div>
                 <p class="note">Phương án lịch cố định luôn chạy song song với cùng nhu cầu và sự cố để so sánh trực tiếp.</p>

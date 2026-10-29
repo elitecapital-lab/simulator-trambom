@@ -1,4 +1,4 @@
-// Các bảng bên phải + bảng so sánh KPI. Cập nhật ~4 lần/giây từ main.js.
+// Các bảng của khung nổi bên phải (mở từ thanh chức năng) + bảng so sánh KPI. Cập nhật ~4 lần/giây từ main.js.
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
 import { TEMPLATE_SOLUTION, TEMPLATE_TODO } from './student-template.js';
 import { TwinSim } from '../sim/engine.js';
@@ -115,7 +115,7 @@ export class Panels {
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Mini PC (edge gateway) – thiết bị của giải pháp'), h('div', { class: 'row' }, this.gwBtn = B('Mini PC treo (watchdog)', () => {
         const s = a.net.smart[a.net.by_id[sel.value]];
         ev({ type: s.gw_dead ? 'gateway_restore' : 'gateway_fail' });
-      }, 'danger')), h('p', { class: 'note' }, 'Khi mini PC ngừng, rơ-le watchdog chuyển biến tần sang PID nội (nếu có lắp – xem tab Thiết bị). Mất: dừng an toàn theo chất lượng, ghép bơm, đo xa.')),
+      }, 'danger')), h('p', { class: 'note' }, 'Khi mini PC ngừng, rơ-le watchdog chuyển biến tần sang PID nội (nếu có lắp – xem mục Thiết bị). Mất: dừng an toàn theo chất lượng, ghép bơm, đo xa.')),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Chất lượng nước nguồn – chế độ (d)'), h('div', { class: 'grid2' },
         B('Nước nguồn đục 12 NTU (3 h)', () => ev({ type: 'inflow_quality', param: 'ntu', value: 12, until_h: hrs(3) })),
         B('Clo nguồn giảm 0,05 mg/L (12 h)', () => ev({ type: 'inflow_quality', param: 'cl', value: 0.05, until_h: hrs(12) })),
@@ -191,7 +191,7 @@ export class Panels {
           h('button', { class: 'btn', onclick: () => { const p = patch(); if (!Object.keys(p).length) return a.toast('Chưa thay đổi tham số nào'); a.st.gw.localEdit(p, a.st.t, 'Học viên tại HMI', 'thử nghiệm'); a.toast('Đã sửa tại HMI trạm'); } }, 'Sửa tại HMI trạm'),
           h('button', { class: 'btn primary', onclick: () => { const p = patch(); const strat = this.stratSel.value !== a.st.gw.script.strategy ? this.stratSel.value : null; if (!Object.keys(p).length && !strat) return a.toast('Chưa thay đổi tham số nào'); a.server.publishScript('ST-01', p, a.st.t, 'Học viên (trung tâm)', 'thử nghiệm', strat); a.toast('Đã phát hành từ trung tâm'); } }, 'Phát hành từ trung tâm'),
           h('button', { class: 'btn', onclick: load }, 'Đọc lại')),
-        h('p', { class: 'note' }, 'Thử: ngắt mạng ở tab Sự cố, sửa cùng một tham số tại HMI và từ trung tâm với hai giá trị khác nhau, rồi khôi phục mạng để xem luật hợp nhất 3 chiều.')),
+        h('p', { class: 'note' }, 'Thử: ngắt mạng ở mục Sự cố, sửa cùng một tham số tại HMI và từ trung tâm với hai giá trị khác nhau, rồi khôi phục mạng để xem luật hợp nhất 3 chiều.')),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Lệnh từ trung tâm (có thời hạn)'),
         h('div', { class: 'row' }, 'Ghi đè P_set', ov, 'bar trong', ovTtl, 'phút',
           h('button', { class: 'btn small', onclick: () => cmd('set_override', { p_set_bar: Number(ov.value), ttl_s: Number(ovTtl.value) * 60 }, 3600) }, 'Gửi')),
@@ -220,7 +220,7 @@ export class Panels {
       if (!fn) throw new Error('không tìm thấy hàm dieuKhien');
       a.st.gw.custom_fn = fn; a.st.gw.ctrl.custom_mem = {}; a.studentLoaded = true;
       a.st.gw.alarms.clear(a.st.t, 'SCRIPT_ERROR');
-      this.codeStatus.textContent = 'Đã nạp kịch bản học viên. So sánh KPI bên dưới với lịch cố định.';
+      this.codeStatus.textContent = 'Đã nạp kịch bản học viên. Mở mục So sánh trên thanh chức năng để đối chiếu KPI với lịch cố định.';
     } catch (e) {
       this.codeStatus.textContent = e instanceof EvalError || /unsafe-eval|Content Security/i.test(e.message)
         ? 'Trang đang chạy trong khung nhúng chặn biên dịch mã (CSP). Hãy chạy bản cục bộ: python -m trambom web'
@@ -332,10 +332,10 @@ export class Panels {
         h('p', { class: 'note' }, 'Các sự kiện định sẵn: ' + (sc.events.length ? sc.events.map((e) => `${tShort(e.t_h * 3600)} ${e.type}`).join(' · ') : 'không có'))),
       sc.questions.length ? h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Câu hỏi phân tích (Bloom: Áp dụng – Phân tích · DOK 3)'), h('ol', {}, ...sc.questions.map((q) => h('li', {}, q)))) : '',
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Nhiệm vụ theo mức độ'),
-        h('p', {}, h('b', {}, 'Cơ bản: '), 'hoàn thiện kịch bản theo ngưỡng (tab Kịch bản → Mẫu bài tập, hoặc student/kich_ban_nguong.py rồi chạy python -m trambom check-student). Đạt khi áp đúng dải ≥ 98 %, tiết kiệm ≥ 20 % điện và không chạy khô.'),
+        h('p', {}, h('b', {}, 'Cơ bản: '), 'hoàn thiện kịch bản theo ngưỡng (mục Kịch bản → Mẫu bài tập, hoặc student/kich_ban_nguong.py rồi chạy python -m trambom check-student). Đạt khi áp đúng dải ≥ 98 %, tiết kiệm ≥ 20 % điện và không chạy khô.'),
         h('p', {}, h('b', {}, 'Nâng cao: '), 'triển khai điều khiển dự báo (student/kich_ban_du_bao.py), so sánh với kịch bản dựng sẵn ở S10; sau đó viết bộ điều phối trung tâm cho 4 trạm (student/mang_luoi_nang_cao.py) dùng logger áp điểm bất lợi.')),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Gợi ý quan sát'),
-        h('ul', {}, h('li', {}, 'Nền xám trên biểu đồ: thời gian mất mạng; nền hồng: chế độ (d).'), h('li', {}, 'Biểu đồ "Dữ liệu tại máy chủ" cho thấy khoảng trống khi mất mạng và phần được lấp lại sau đồng bộ (màu khác).'),
+        h('ul', {}, h('li', {}, 'Nền xám trên biểu đồ: thời gian mất mạng; nền hồng: chế độ (d).'), h('li', {}, 'Biểu đồ "Dữ liệu tại máy chủ" (bật nút "Máy chủ" trong mục Biểu đồ) cho thấy khoảng trống khi mất mạng và phần được lấp lại sau đồng bộ (màu khác).'),
           h('li', {}, 'Nhấp vào thiết bị trong cảnh 3D để xem tham số vật lý và dải làm việc.'))),
     );
   }
@@ -394,7 +394,7 @@ export class Panels {
     this.hwBox = h('div');
     this.wiOut = h('div');
     pane.append(
-      h('p', { class: 'note' }, 'Phân biệt rõ thiết bị nhà máy ĐÃ CÓ, thiết bị GIẢI PHÁP đưa vào (mini PC tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ) và thiết bị KHUYẾN NGHỊ để hệ thống vận hành trơn tru. Nút lọc trên khung 3D tô màu đúng nhóm.'),
+      h('p', { class: 'note' }, 'Phân biệt rõ thiết bị nhà máy ĐÃ CÓ, thiết bị GIẢI PHÁP đưa vào (mini PC tiếp nhận – xử lý – điều khiển tín hiệu tại chỗ) và thiết bị KHUYẾN NGHỊ để hệ thống vận hành trơn tru. Nút Hiển thị trên thanh chức năng lọc và tô màu đúng nhóm trong cảnh 3D.'),
       h('div', { class: 'sec' }, this.eqCounts),
       this.hwDetails = h('details', { class: 'sec hw-details' }, h('summary', { class: 'lbl' }, 'Thử bỏ bớt thiết bị – mô phỏng “nếu không lắp”'),
         h('p', { class: 'note' }, 'Bỏ chọn rồi bấm "Áp dụng" để chạy lại kịch bản hiện tại; hoặc bấm "So sánh" để chạy nhanh hai phương án có/không lắp trên kịch bản gợi ý.'), this.hwBox),
@@ -420,7 +420,7 @@ export class Panels {
   whatIf(opt, scId, level) {
     const a = this.app;
     const sc = a.scenarios.find((s) => s.id === scId);
-    if (!sc || scId === 'S0') { this.wiOut.replaceChildren(h('p', { class: 'note' }, 'Chưa có kịch bản riêng cho tùy chọn này – hãy bỏ chọn rồi tiêm lỗi pH ở tab Sự cố.')); return; }
+    if (!sc || scId === 'S0') { this.wiOut.replaceChildren(h('p', { class: 'note' }, 'Chưa có kịch bản riêng cho tùy chọn này – hãy bỏ chọn rồi tiêm lỗi pH ở mục Sự cố.')); return; }
     const token = (this._wiToken = (this._wiToken ?? 0) + 1); // lần bấm mới hủy lần chạy cũ
     const mk = (inst) => { const cfg = structuredClone(a.cfg); cfg.hardware[opt] = inst; return new TwinSim(cfg, sc, level, { withFixed: false }); };
     const sims = [mk(true), mk(false)];

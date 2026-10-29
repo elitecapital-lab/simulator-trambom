@@ -15,6 +15,17 @@ export const CMD_STATUS = {
   expired_server: ['warning', 'hết hạn ở máy chủ'], duplicate: ['off', 'trùng'],
 };
 export const PUMP_NAME = ['P-01', 'P-02'];
+/** Tên lệnh cho người vận hành (không hiện mã nội bộ như pump_speed). */
+export const CMD_TXT = {
+  set_mode: 'Đổi chế độ', pump_start: 'Chạy bơm', pump_stop: 'Dừng bơm', pump_speed: 'Đặt tần số', valve: 'Đóng/mở van MV-02',
+  reset_safe_stop: 'Đặt lại dừng an toàn', rotate_pumps: 'Luân phiên bơm', ack_alarm: 'Xác nhận báo động', set_override: 'Ghi đè áp đặt',
+  publish_script: 'Phát hành kịch bản', clear_override: 'Hủy ghi đè', set_params: 'Đổi tham số',
+};
+export const cmdName = (type) => CMD_TXT[type] || type || '–';
+/** Chuỗi do lõi mô phỏng tạo (thông báo báo động, lý do lệnh, note()) dùng dấu chấm thập phân – đổi sang dấu phẩy. */
+export const viNum = (s) => (s === null || s === undefined ? '' : String(s).replace(/(\d)\.(\d)/g, '$1,$2'));
+/** Thời gian còn lại dạng mm:ss (dùng chung cho HUD, HMI, thẻ 3D). */
+export const fmtLease = (sec) => { if (sec === null || sec === undefined || !(sec >= 0)) return '–'; const s = Math.floor(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /**
  * Ảnh chụp dữ liệu trạm theo vị trí vận hành. Trường nào vị trí đó không thấy thì là undefined
@@ -38,6 +49,13 @@ export function stationData(app, where) {
   }
   const S0 = app.server.stations[st.sid], r = S0.last || {};
   const alarms = [...app.server.alarms.values()].filter((x) => x.station === st.sid);
+  // trung tâm không nhận hạn quyền qua đo xa: ước tính từ lệnh tay cuối cùng trạm đã xác nhận (mỗi lệnh gia hạn quyền)
+  let lease = null;
+  if (r.ctl === 'remote') {
+    const types = {};
+    for (const c of S0.cmd_log) if (c.type) types[c.id] = c.type;
+    for (let i = S0.cmd_log.length - 1; i >= 0; i--) { const c = S0.cmd_log[i]; if (c.status === 'ok' && MANUAL_CMDS.includes(types[c.id])) { lease = Math.max(0, c.t + app.cfg.gateway.manual_lease_s - t); break; } }
+  }
   const fault = (tag) => alarms.some((x) => x.code === 'PUMP_FAULT_' + tag);
   return {
     where, t, dead: false, stale: !S0.online, age: r.t1 !== undefined ? t - r.t1 : null, p1: r.p, p2: undefined, q: r.q, q_in: r.q_in, level: r.level,
@@ -46,7 +64,7 @@ export function stationData(app, where) {
       tag: PUMP_NAME[i], running: (f ?? 0) > 0.5, f, kw: undefined, amps: undefined, fault: fault(PUMP_NAME[i]),
       run_h: undefined, starts: undefined, starts_h: undefined, f_set: null, want: null,
     })),
-    mode: S0.online ? (r.mode || 'a') : 'b', ctl: r.ctl || 'auto', comms: S0.online ? 'online' : 'offline', alarms, installed: null, lease_s: null,
+    mode: S0.online ? (r.mode || 'a') : 'b', ctl: r.ctl || 'auto', comms: S0.online ? 'online' : 'offline', alarms, installed: null, lease_s: lease, lease_est: lease !== null,
   };
 }
 
@@ -90,22 +108,33 @@ export function sortedAlarms(list) {
 
 /**
  * Điều kiện cho phép chạy bơm idx (0/1) – chỉ tính được tại chỗ (trung tâm không thấy chi tiết liên động).
- * Trả về [[đạt, mô tả], ...] hoặc [] khi mini PC ngừng.
+ * Thứ tự theo ưu tiên của lớp an toàn (safety.js): khóa/cắt áp cao > dừng an toàn chất lượng > mức bể > van MV-02,
+ * rồi điều kiện riêng của bơm. Trả về [[đạt, mô tả, loại]]; loại 'hard' chặn lệnh chạy, 'info' chỉ để biết
+ * (giới hạn tần số do áp cao không chặn khởi động). Mini PC ngừng → [].
  */
 export function permissives(app, idx) {
   const st = app.st, g = st.gw, pl = st.plant, t = app.net.t, cfg = app.cfg;
   if (st.gw_dead) return [];
   const sf = g.safety, pu = pl.pumps[idx], fmt1 = (v) => v.toFixed(1).replace('.', ',');
   return [
-    [pl.outlet_frac >= 0.95, 'Van MV-02 mở hết (mở van trước, chạy bơm sau)'],
-    [!sf.level_trip && !st.sensors.lsll, `Mức bể an toàn (> ${fmt1(cfg.safety.level_ll_m)} m, phao LSLL không báo cạn)`],
-    [!sf.safe_stop, 'Không dừng an toàn do chất lượng nước' + (sf.safe_stop ? ` (${sf.safe_reason})` : '')],
-    [!sf.trip_active && !sf.lockout, 'Không cắt/khóa do áp lực rất cao'],
-    [!pu.fault, `Biến tần ${pu.tag} không báo lỗi`],
-    [g.pm.startsLastHour(idx, t) < cfg.safety.max_starts_per_h, `Số lần khởi động ${pu.tag} < ${cfg.safety.max_starts_per_h}/giờ`],
-    [!sf.limiting, sf.limiting ? `Đang giới hạn tần số ≤ ${fmt1(sf.f_cap)} Hz do áp cao` : 'Không bị giới hạn tần số do áp cao'],
+    [!sf.trip_active && !sf.lockout, sf.lockout ? 'Đang khóa sau nhiều lần cắt áp cao – cần đặt lại' : sf.trip_active ? 'Đang cắt bơm do áp lực rất cao – chờ tự khởi động lại' : 'Không cắt/khóa do áp lực rất cao', 'hard'],
+    [!sf.safe_stop, sf.safe_stop ? `Đang dừng an toàn do ${sf.safe_reason} – cần lệnh đặt lại` : 'Không dừng an toàn do chất lượng nước', 'hard'],
+    [!sf.level_trip && !st.sensors.lsll, `Mức bể an toàn (> ${fmt1(cfg.safety.level_ll_m)} m, phao LSLL không báo cạn)`, 'hard'],
+    [pl.outlet_frac >= 0.95, 'Van MV-02 mở hết (mở van trước, chạy bơm sau)', 'hard'],
+    [!pu.fault, `Biến tần ${pu.tag} không báo lỗi`, 'hard'],
+    [g.pm.startsLastHour(idx, t) < cfg.safety.max_starts_per_h, `Số lần khởi động ${pu.tag} < ${cfg.safety.max_starts_per_h}/giờ`, 'hard'],
+    [true, sf.limiting ? `Đang giới hạn tần số ≤ ${fmt1(sf.f_cap)} Hz do áp cao (vẫn chạy được)` : 'Không bị giới hạn tần số do áp cao', 'info'],
   ];
 }
+
+/** Điều kiện chạy đầu tiên chưa đạt (chặn lệnh chạy) hoặc null. */
+export function firstBlock(app, idx) {
+  const f = permissives(app, idx).find((x) => x[2] === 'hard' && !x[0]);
+  return f ? f[1] : null;
+}
+
+/** Trạm có đang ở trạng thái cần lệnh đặt lại dừng an toàn không (chỉ biết tại chỗ). */
+export function needsReset(app) { const sf = app.st.gw.safety; return !app.st.gw_dead && (sf.safe_stop || sf.lockout); }
 
 /** Nhật ký lệnh theo vị trí vận hành, mới nhất trước: [{ t, id, type, status, reason }]. */
 export function commandLog(app, where, n = 8) {

@@ -167,6 +167,7 @@ class App {
     this.level = level;
     this.net = new NetworkSim(this.cfg, level, { withFixed: 'all', events: this.scenario.events.map((e) => ({ ...e, station: 'ST-01' })) });
     this.server = this.net.server; this.st = this.net.smart[0]; this.fx = this.net.fixed[0];
+    this.uiHist = { t: [], p1: [], p2: [] };
     this.studentLoaded = false;
     this.spans = []; this._spanIdx = 0;
     { const sel = document.getElementById('sc-select'); sel.value = this.scenario.id; sel.title = this.scenario.name; }
@@ -191,8 +192,17 @@ class App {
   }
   skip(sec) {
     const n = Math.round(sec / this.net.dt);
-    for (let i = 0; i < n; i++) this.net.step();
+    for (let i = 0; i < n; i++) this._step();
     this.updateCharts(); this._updatePanels(true);
+  }
+  /**
+   * Một bước mô phỏng. Lịch sử của lõi (hist) chỉ lưu áp ra mạng sau MV-02 (p_out); giao diện cần thêm số đo PT-101/PT-102
+   * (áp ống góp, vẫn còn khi MV-02 đóng) nên ghi kèm vào app.uiHist, cùng chỉ số với hist.data.t.
+   */
+  _step() {
+    this.net.step();
+    const H = this.st.hist.data, U = this.uiHist;
+    while (U.t.length < H.t.length) { const sig = this.st.gw.sig || {}; U.t.push(H.t[U.t.length]); U.p1.push(sig.p1 ?? NaN); U.p2.push(sig.p2 ?? NaN); }
   }
   loop(ts) {
     const realDt = Math.min(0.1, (ts - this._last) / 1000);
@@ -202,7 +212,7 @@ class App {
       const t0 = performance.now();
       let steps = 0;
       const budget = this.speed >= 1200 ? 26 : this.speed >= 300 ? 18 : 12;
-      while (this.acc >= this.net.dt && performance.now() - t0 < budget) { this.net.step(); this.acc -= this.net.dt; steps++; }
+      while (this.acc >= this.net.dt && performance.now() - t0 < budget) { this._step(); this.acc -= this.net.dt; steps++; }
       if (this.acc > this.speed * 0.5) this.acc = 0;
       this._stepsRate = (this._stepsRate ?? 0) * 0.9 + 0.1 * (steps / Math.max(realDt, 1e-3));
     }

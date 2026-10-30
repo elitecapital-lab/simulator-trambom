@@ -1,21 +1,20 @@
-// Màn "Mạng lưới": trung tâm giám sát SYSTEM nhìn toàn bộ các trạm bơm ở Hà Nội. Năm màn trong một khung:
-// bản đồ · danh sách trạm · báo động & tự xử lý · hiệu quả · kịch bản & triển khai. Nhấp một trạm → chi tiết 3D / HMI như trước.
+// Màn "Mạng lưới": trung tâm giám sát SYSTEM nhìn toàn bộ các trạm bơm ở Hà Nội. Bốn màn trong một khung:
+// danh sách trạm (kiểu Thẻ / Bảng) · báo động & tự xử lý · hiệu quả · kịch bản & triển khai. Nhấp một trạm → chi tiết 3D / HMI như trước.
 import { fleetTotals, stationSummary } from '../sim/fleet.js';
 import { h, fmt } from './dom.js';
-import { MapScreen } from './fleet-map.js';
 import { AlarmScreen, ListScreen, PerfScreen, RolloutScreen } from './fleet-screens.js';
 import { ico } from './shell.js';
 
-const TABS = [['map', 'Bản đồ', 'city'], ['list', 'Danh sách trạm', 'list'], ['alarm', 'Báo động & tự xử lý', 'bell'], ['perf', 'Hiệu quả', 'compare'], ['roll', 'Kịch bản & triển khai', 'code']];
+const TABS = [['list', 'Danh sách trạm', 'list'], ['alarm', 'Báo động & tự xử lý', 'bell'], ['perf', 'Hiệu quả', 'compare'], ['roll', 'Kịch bản & triển khai', 'code']];
 const SAMPLE_S = 300; // lấy mẫu chuỗi thời gian toàn mạng mỗi 5 phút mô phỏng
 
 export class FleetView {
   constructor(host, app) {
-    this.app = app; this.visible = false; this.tab = 'map'; this.sel = null; this.rows = []; this.byId = {}; this.tot = null;
+    this.app = app; this.visible = false; this.tab = 'list'; this.sel = null; this.rows = []; this.byId = {}; this.tot = null;
     this._resetHist();
     this.root = h('div', { class: 'fleet', hidden: true, 'aria-label': 'Mạng lưới trạm bơm tăng áp Hà Nội' });
     host.append(this.root);
-    this.screens = { map: new MapScreen(this), list: new ListScreen(this), alarm: new AlarmScreen(this), perf: new PerfScreen(this), roll: new RolloutScreen(this) };
+    this.screens = { list: new ListScreen(this), alarm: new AlarmScreen(this), perf: new PerfScreen(this), roll: new RolloutScreen(this) };
     this.tabBtns = {};
     const bar = h('nav', { class: 'fl-tabs', role: 'tablist', 'aria-label': 'Các màn của mạng lưới' }, ...TABS.map(([k, label, icon]) => {
       const b = h('button', { class: 'fl-tab', role: 'tab', type: 'button', 'data-k': k, onclick: () => this.setTab(k) }, ico(icon), h('span', {}, label), h('i', { class: 'fl-badge', hidden: true }));
@@ -25,10 +24,10 @@ export class FleetView {
     this.body = h('div', { class: 'fl-body' }, ...Object.entries(this.screens).map(([k, s]) => { s.el.classList.add('fl-screen'); s.el.dataset.k = k; s.el.hidden = k !== this.tab; return s.el; }));
     this.root.append(bar, this.kpis, this.body);
     this._buildKpis();
-    this.setTab('map');
+    this.setTab('list');
   }
   _resetHist() { this.hist = { t: [], kw: [], f_kw: [], q: [], f_q: [], ok: [], f_ok: [] }; this._next = 0; }
-  reset() { this.sel = null; this._resetHist(); this.screens?.alarm.reset(); this._ak = null; for (const s of Object.values(this.screens ?? {})) { s._k = s._ak = s._fk = s._bk = s._sk = s._lk = null; } this.rows = []; this.byId = {}; if (this.visible) this.update(true); }
+  reset() { this.sel = null; this._resetHist(); this.screens?.alarm.reset(); this._ak = null; for (const s of Object.values(this.screens ?? {})) { s._k = s._ck = s._ak = s._fk = s._bk = s._sk = s._lk = null; } this.rows = []; this.byId = {}; if (this.visible) this.update(true); }
   /** Lấy mẫu chuỗi thời gian toàn mạng (gọi mỗi bước mô phỏng; chỉ ghi khi tới kỳ). */
   sample(t) {
     if (t < this._next) return;
@@ -44,18 +43,17 @@ export class FleetView {
   }
   show(on) {
     this.visible = on; this.root.hidden = !on;
-    if (on) { this.update(true); requestAnimationFrame(() => { this.screens.map._fit(); this.screens.perf._draw(); }); }
+    if (on) { this.update(true); requestAnimationFrame(() => this.screens.perf._draw()); }
   }
   setTab(k) {
     this.tab = k;
     for (const [n, s] of Object.entries(this.screens)) s.el.hidden = n !== k;
     for (const [n, b] of Object.entries(this.tabBtns)) { b.classList.toggle('on', n === k); b.setAttribute('aria-selected', String(n === k)); b.tabIndex = n === k ? 0 : -1; }
-    if (this.visible) { this.update(true); requestAnimationFrame(() => { if (k === 'map') this.screens.map._fit(); if (k === 'perf') this.screens.perf._draw(); }); }
+    if (this.visible) { this.update(true); requestAnimationFrame(() => { if (k === 'perf') this.screens.perf._draw(); }); }
   }
-  /** Chọn một trạm (không mở chi tiết); fly: đưa bản đồ tới trạm. */
-  select(sid, fly = false) {
+  /** Chọn một trạm (không mở chi tiết): thẻ / dòng của trạm được tô và cột chi tiết hiện số đo của trạm đó. */
+  select(sid) {
     this.sel = sid;
-    if (sid && fly) { this.setTab('map'); this.screens.map.flyTo(sid); }
     this.update(true);
   }
   _buildKpis() {

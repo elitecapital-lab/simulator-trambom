@@ -3,8 +3,8 @@
 Mô phỏng tương tác hệ thống điều khiển tự động cho một trạm bơm tăng áp nhỏ **không người trực** phục vụ khu dân cư,
 dành cho sinh viên các học phần Tự động hóa, Hệ thống nhúng/IoT và Kỹ thuật cấp thoát nước.
 
-- **Màn Mạng lưới (mở đầu)**: trung tâm giám sát của SYSTEM quản lý và giám sát tự động **16 trạm bơm giả lập ở Hà Nội** – bản đồ
-  Hà Nội, danh sách trạm, báo động & dòng "hệ thống tự xử lý", hiệu quả toàn mạng và phát hành kịch bản tập trung. Mỗi trạm là một
+- **Màn Mạng lưới (mở đầu)**: trung tâm giám sát của SYSTEM quản lý và giám sát tự động **16 trạm bơm giả lập ở Hà Nội** – danh sách
+  trạm (kiểu thẻ hoặc bảng), báo động & dòng "hệ thống tự xử lý", hiệu quả toàn mạng và phát hành kịch bản tập trung. Mỗi trạm là một
   mô phỏng thật (sự cố rải trên nhiều trạm); nhấp một trạm để xuống chi tiết 3D / HMI như bên dưới. Xem [08](docs/08-mang-luoi-ha-noi.md).
 - **Bản web 3D toàn màn hình** (Three.js, chạy trong trình duyệt) gồm:
   - mô hình trạm bơm: bể chứa, 2 bơm biến tần, đường ống, van, đồng hồ áp lực, cảm biến lưu lượng, mức nước, chất lượng nước (clo dư, độ đục, pH), bình tích áp;
@@ -59,7 +59,7 @@ Cách dùng giao diện:
 
 | Muốn | Thao tác |
 |---|---|
-| Xem toàn mạng, chọn một trạm | Màn **Mạng lưới**: nhấp marker trên bản đồ (hoặc dòng trong danh sách), **Mở mô phỏng 3D** / **Mở HMI** |
+| Xem toàn mạng, chọn một trạm | Màn **Mạng lưới**: nhấp thẻ (hoặc dòng trong bảng; nút **Thẻ \| Bảng** đổi kiểu xem), **Mở mô phỏng 3D** / **Mở HMI** |
 | Đổi trạm khi đang xem chi tiết | Ô chọn trạm và nút ‹ › trên thanh trên cùng |
 | Chạy, tạm dừng, tua nhanh, đổi kịch bản | Thanh trên cùng (màn hình hẹp: nút ☰) |
 | Xem biểu đồ, so sánh với lịch cố định | Nút **Biểu đồ** / **So sánh** trên thanh chức năng (tấm trượt từ dưới lên, cỡ S/M/L); bấm một thẻ chỉ số để mở đúng biểu đồ đó |
@@ -142,7 +142,7 @@ Bảng đầy đủ cho từng kịch bản: [docs/ket-qua/README.md](docs/ket-q
 | [04 – Độ tin cậy khi mất kết nối](docs/04-do-tin-cay-mat-ket-noi.md) | Rủi ro, giới hạn của kịch bản đã lưu, chiến lược dự phòng, kế hoạch kiểm thử |
 | [05 – Hướng dẫn học tập](docs/05-huong-dan-hoc-tap.md) | Mục tiêu Bloom/DOK, trình tự bài thực hành, phân hóa cơ bản/nâng cao, thang đánh giá |
 | [06 – So sánh điện năng và chất lượng dịch vụ](docs/06-so-sanh-dien-nang-chat-luong.md) | Bảng tổng hợp lịch cố định so với điều khiển thông minh và phân tích |
-| [08 – Mạng lưới Hà Nội](docs/08-mang-luoi-ha-noi.md) | Màn Mạng lưới: năm màn giám sát và điều hành nhiều trạm, 16 trạm giả lập ở Hà Nội, kịch bản sự cố H1, cấu trúc `config/hanoi.json`, giả định |
+| [08 – Mạng lưới Hà Nội](docs/08-mang-luoi-ha-noi.md) | Màn Mạng lưới: bốn màn giám sát và điều hành nhiều trạm, 16 trạm giả lập ở Hà Nội, kịch bản sự cố H1, cấu trúc `config/hanoi.json`, giả định |
 | [07 – Hiện trạng và giải pháp](docs/07-hien-trang-va-giai-phap.md) | Phân biệt thiết bị hiện trạng / giải pháp / khuyến nghị; hai tủ CP-01 và CP-02; cấu hình mini PC; danh sách I/O; phân cấp dự phòng khi mini PC hỏng; điều khiển tay từ xa và tại chỗ; giá trị từng thiết bị theo mô phỏng "có lắp / không lắp"; lộ trình triển khai |
 
 ## Cấu trúc thư mục

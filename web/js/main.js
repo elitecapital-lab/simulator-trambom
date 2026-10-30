@@ -89,7 +89,7 @@ class App {
   _initHeader() {
     const sel = document.getElementById('sc-select');
     for (const s of this.scenarios) sel.append(h('option', { value: s.id }, s.name));
-    // bài học (S0…S13) chạy trên ST-01 nên chuyển sang xem chi tiết trạm; H1 là bản đồ mạng lưới
+    // bài học (S0…S13) chạy trên ST-01 nên chuyển sang xem chi tiết trạm; H1 là màn mạng lưới
     sel.addEventListener('change', () => { this.start(sel.value, this.level); if (sel.value !== 'H1' && this.viewMode === 'fleet') this.setView('3d'); else if (sel.value === 'H1' && this.fleet) this.setView('fleet'); });
     // chuyển nhanh giữa các trạm khi đang xem chi tiết (3D / HMI)
     const ss = document.getElementById('st-select');

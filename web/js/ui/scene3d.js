@@ -883,7 +883,7 @@ export class StationScene {
     const tag = this._hitAt(e.clientX - r.left, e.clientY - r.top);
     if (tag && this.onPick) this.onPick(tag);
   }
-  /** Bay từ xa và cao xuống góc nhìn đang dùng (khi vào chi tiết trạm từ bản đồ mạng lưới). */
+  /** Bay từ xa và cao xuống góc nhìn đang dùng (khi vào chi tiết trạm từ màn mạng lưới). */
   flyIn() {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const v = this._presetView(this.view0 || 'overview');

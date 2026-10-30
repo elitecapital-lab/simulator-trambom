@@ -262,8 +262,8 @@ export class Panels {
   // ---------------- Trung tâm điều hành ----------------
   buildCenter(pane) {
     this.map = h('div', { class: 'netmap' });
-    if (this.app.fleet) this.map = h('div', { class: 'netmap-go' }, h('button', { class: 'btn primary', onclick: () => this.app.setView('fleet') }, 'Mở màn Mạng lưới (bản đồ Hà Nội)'),
-      h('p', { class: 'note' }, 'Bản đồ, danh sách, báo động tập trung và hiệu quả của toàn mạng. Nhấp một dòng trong bảng dưới đây để xem chi tiết trạm đó.'));
+    if (this.app.fleet) this.map = h('div', { class: 'netmap-go' }, h('button', { class: 'btn primary', onclick: () => this.app.setView('fleet') }, 'Mở màn Mạng lưới (danh sách các trạm Hà Nội)'),
+      h('p', { class: 'note' }, 'Danh sách trạm, báo động tập trung và hiệu quả của toàn mạng. Nhấp một dòng trong bảng dưới đây để xem chi tiết trạm đó.'));
     this.stTable = h('tbody');
     this.totals = h('div', { class: 'hero' });
     this.centralAlarms = h('div');

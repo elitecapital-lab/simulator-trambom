@@ -6,9 +6,9 @@ trên màn này là bản đo xa mà trung tâm *thực sự* nhận được (�
 HMI y như bản một trạm.
 
 > Toàn bộ vị trí, số hộ, sự cố là **dữ liệu giả lập để trình diễn** (khu vực chỉ mang tính minh họa, không phải điểm triển khai
-> thật). Tuyến ống là sơ đồ minh họa, không phải bản vẽ hạ tầng cấp nước thật. Nền cách điệu (khi không có OpenStreetMap) không theo tỉ lệ.
+> thật).
 
-![Màn Mạng lưới – bản đồ Hà Nội, trạm ST-09 đang dừng an toàn do nước nguồn đục](ket-qua/img/mang-luoi-ban-do.png)
+![Màn Mạng lưới – danh sách 16 trạm kiểu Thẻ, trạm ST-03 đang báo động do pH nguồn vượt ngưỡng](ket-qua/img/mang-luoi-danh-sach.png)
 
 ## Mở và điều hướng
 
@@ -17,33 +17,31 @@ HMI y như bản một trạm.
 | Vào màn Mạng lưới | Mở `…/web/` (mặc định), nút **Mạng lưới** trên thanh trên, hoặc bấm logo SYSTEM |
 | Mở thẳng một trạm | `…/web/#ST-05` (3D), `…/web/#ST-05-hmi` (HMI); mở toàn mạng: `#H1` hoặc `#fleet` |
 | Mở bài học một trạm như trước | `…/web/#S4-advanced` (các bài S0…S13 vẫn chạy trên ST-01) |
-| Xem chi tiết trạm | Bản đồ: nhấp marker rồi **Mở mô phỏng 3D** / **Mở HMI** (hoặc nhấp đúp marker); danh sách: nhấp đúp dòng |
+| Xem chi tiết trạm | Nhấp thẻ (hoặc dòng trong bảng) rồi **Mở mô phỏng 3D** / **Mở HMI** ở cột phải; nhấp đúp thẻ hoặc dòng, hoặc nhấp mã trạm, để mở thẳng |
 | Đổi trạm khi đang xem chi tiết | Ô chọn trạm và hai nút ‹ › trên thanh trên |
-| Gây sự cố để xem hệ thống phản ứng | Thẻ trạm trên bản đồ → **Giả lập sự cố tại trạm này**, hoặc mục **Sự cố** ở màn chi tiết |
+| Gây sự cố để xem hệ thống phản ứng | Chọn một thẻ → **Giả lập sự cố tại trạm này** ở cột phải, hoặc mục **Sự cố** ở màn chi tiết |
 
 Tốc độ mặc định ×300 (1 giờ mô phỏng ≈ 12 giây) để thấy hết kịch bản sự cố trong vài phút; chỉnh bằng dải ×1…×3600 trên thanh trên.
 
-## Năm màn
+## Bốn màn
 
-1. **Bản đồ** – mỗi trạm một marker: xanh bình thường, vàng cảnh báo, đỏ báo động (có vòng nhấp nháy), xanh dương đang đồng bộ,
-   xám mất kết nối (dấu ✕). Tô màu theo *Trạng thái / Áp lực / Lưu lượng / Công suất / Mức bể*. Kéo để dời, lăn chuột hoặc nút +/− để
-   phóng. Cột phải liệt kê trạm (trạm cần chú ý lên đầu, kèm lý do) và thẻ trạm đang chọn (số đo, đường áp 6 giờ, chế độ, kịch bản,
-   nút mở chi tiết). Ba lớp bật/tắt ở góc trên trái:
-   - **Đường ống** – mạng ống truyền tải minh họa (ống chính đông–tây, ba trục bắc–nam, nhánh vuông góc vào từng trạm) vẽ như sơ đồ
-     đường ống: vỏ và lõi ống, mối nối, van trên mỗi nhánh, dòng chảy chạy theo hướng nước. Tốc độ dòng theo lưu lượng nước vào bể của
-     trạm; nguồn ngừng cấp (ví dụ ST-12 mất nước nguồn) thì nhánh chuyển xám, "cạn".
-   - **Liên kết dữ liệu** – đường đo xa 4G từ trạm về trung tâm; mặc định chỉ hiện của trạm đang chọn (mất mạng: đỏ đứt).
-   - **Nền OpenStreetMap** – ô bản đồ mã nguồn mở © OpenStreetMap contributors (Web Mercator nên marker trùng khít nền). Cần Internet;
-     không tải được (không mạng, trang nhúng chặn ảnh ngoài) thì tự dùng sơ đồ cách điệu (sông Hồng, sông Đuống, hồ Tây…) và báo một dòng.
-2. **Danh sách trạm** – bảng 16 trạm: trạng thái, chế độ gateway (a/b/c/d), áp, lưu lượng, mức bể, công suất, clo/đục/pH, tiết kiệm
-   điện so với lịch cố định, báo động, đường áp 6 giờ. Lọc theo trạng thái, tìm kiếm, sắp theo cột.
-3. **Báo động & tự xử lý** – báo động tập trung (xác nhận, "Đặt lại" dừng an toàn) và dòng sự kiện "hệ thống đã tự xử lý": tự chuyển
+1. **Danh sách trạm** – màn mở đầu, có hai kiểu xem; nút **Thẻ | Bảng** ở góc phải nhớ lựa chọn cho lần mở sau. Thanh lọc theo trạng
+   thái và ô tìm kiếm dùng chung cho cả hai kiểu.
+   - **Thẻ** (mặc định) – mỗi trạm một thẻ: mã trạm, khu vực, trạng thái, áp ra, áp bất lợi (logger PL-301), lưu lượng, công suất,
+     đường áp 6 giờ và một dòng lý do (đang bình thường / báo động nào / mất kết nối bao lâu). Trạm bình thường để trung tính; báo
+     động viền đỏ, cảnh báo viền vàng, đang đồng bộ viền xanh, mất kết nối viền nét đứt và số liệu xám (số đo cuối cùng máy chủ nhận).
+     Thẻ xếp cố định theo mã trạm nên không nhảy chỗ khi trạng thái đổi. Cột phải gồm thẻ chi tiết của trạm đang chọn (đủ số đo, đường
+     áp 6 giờ, chế độ, kịch bản, **Mở mô phỏng 3D** / **Mở HMI**, **Giả lập sự cố tại trạm này**) và danh sách **Cần chú ý** (trạm
+     nặng nhất lên đầu, kèm lý do). Màn hẹp: cột phải chuyển lên trên lưới thẻ.
+   - **Bảng** – 16 trạm: trạng thái, chế độ gateway (a/b/c/d), áp, lưu lượng, mức bể, công suất, clo/đục/pH, tiết kiệm điện so với
+     lịch cố định, báo động, đường áp 6 giờ. Sắp theo cột.
+2. **Báo động & tự xử lý** – báo động tập trung (xác nhận, "Đặt lại" dừng an toàn) và dòng sự kiện "hệ thống đã tự xử lý": tự chuyển
    bơm dự phòng, dừng an toàn, tự vận hành khi mất mạng, PID nội biến tần khi mini PC treo, đồng bộ lại, lệnh từ trung tâm. Các thẻ
    tổng hợp cho biết bao nhiêu báo động tự hết, bao nhiêu cần điều độ viên, các trạm đã tự vận hành bao nhiêu phút và số bản ghi đệm
    được phát lại đủ.
-4. **Hiệu quả** – điện năng tiết kiệm (kWh, %, tiền theo giá giả định), suất điện năng, rò rỉ, thời gian đạt dải áp, thời gian phát hiện
+3. **Hiệu quả** – điện năng tiết kiệm (kWh, %, tiền theo giá giả định), suất điện năng, rò rỉ, thời gian đạt dải áp, thời gian phát hiện
    sự cố so với lịch cố định; biểu đồ công suất, lưu lượng, số trạm đạt dải áp toàn mạng; xếp hạng tiết kiệm theo trạm.
-5. **Kịch bản & triển khai** – phát hành kịch bản từ trung tâm tới tất cả / các trạm đã chọn / các trạm bình thường: đổi sang điều khiển dự
+4. **Kịch bản & triển khai** – phát hành kịch bản từ trung tâm tới tất cả / các trạm đã chọn / các trạm bình thường: đổi sang điều khiển dự
    báo, hạ áp đặt tối đa, tăng biên áp khi mất mạng, hoặc **thử giá trị sai** để thấy gateway từ chối. Bảng cho biết từng trạm đã áp
    dụng phiên bản nào; trạm đang mất mạng nhận khi đồng bộ lại (bản tin retained).
 
@@ -81,16 +79,13 @@ Các bài học S0…S13 không có sự cố nền này: chúng chạy riêng t
   `households`. **ST-01…ST-04 giữ đúng tham số vật lý trong `station.json`** (kiểm thử `tests/test_fleet_js.py`), nên kết quả bài học
   và tài liệu cũ không đổi.
 - `scenario` – kịch bản H1 (mỗi sự kiện có thêm trường `station`).
-- `map` – hộp kinh/vĩ độ của bản đồ; `tariff_vnd_per_kwh` – giá điện bình quân **giả định** để quy đổi tiền.
+- `map` – hộp kinh/vĩ độ bao các trạm (kiểm thử dữ liệu dùng; giao diện không còn vẽ bản đồ); `tariff_vnd_per_kwh` – giá điện bình quân **giả định** để quy đổi tiền.
 
 Bản web ghép `hanoi.json` vào cấu hình bằng `web/js/sim/fleet.js` (`applyFleet`). Lõi Python và `station.json` giữ nguyên (4 trạm), nên
 `python -m trambom …` không đổi. Thêm một trạm: thêm một mục vào `sites[]` với `id` mới, `seed_offset` riêng, toạ độ trong `map`.
 
 ## Giả định và giới hạn
 
-- Nền OpenStreetMap chỉ hiện khi trình duyệt tải được ô bản đồ từ `tile.openstreetmap.org` (chạy cục bộ có Internet). Bản nhúng vào trang
-  chặn ảnh ngoài (ví dụ artifact của claude.ai) luôn dùng nền cách điệu. Ô bản đồ tải khi xem, không lưu trong kho mã; tuân thủ
-  [chính sách ô bản đồ OSM](https://operations.osmfoundation.org/policies/tiles/) (dùng nhẹ, có ghi công).
 - Các trạm cùng một kiểu (2 bơm 5,5 kW, bể ≈ 190 m³); khác nhau ở nhu cầu, độ cao điểm bất lợi và hạt giống ngẫu nhiên.
 - Số đo lấy từ bản đo xa MQTT (chu kỳ 10 s). Hai thông tin đi đường khác: áp điểm bất lợi do logger NB-IoT PL-301 đo (độc lập với 4G
   của gateway) và việc "mini PC ngừng" (router 4G còn sống nhưng không còn nhịp tim MQTT).

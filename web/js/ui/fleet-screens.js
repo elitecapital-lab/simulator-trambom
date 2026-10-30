@@ -1,13 +1,11 @@
-// Các màn của khu Mạng lưới (ngoài bản đồ): danh sách trạm, báo động & tự xử lý, hiệu quả, kịch bản & triển khai.
+// Các màn của khu Mạng lưới: danh sách trạm (kiểu Thẻ / Bảng), báo động & tự xử lý, hiệu quả, kịch bản & triển khai.
 // Mọi số liệu lấy từ mô phỏng của từng trạm và từ MÁY CHỦ (đúng những gì trung tâm thực sự nhìn thấy).
 import { FLEET_STATUS, SAVINGS_MIN_S } from '../sim/fleet.js';
 import { TimeChart } from './charts.js';
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
 import { MODE_NAME, STRAT_NAME, viNum, viText } from './ops.js';
 import { modeChipTxt } from './panels.js';
-
-export const CHIP = { ok: 'good', sync: 'info', offline: 'off', warn: 'warning', crit: 'critical' };
-const statusChip = (r) => h('span', { class: 'chip ' + CHIP[r.status] }, FLEET_STATUS[r.status].label);
+import { pressureTrail, reason, StationPanel, statusChip } from './fleet-detail.js';
 const T = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
 const stBtn = (f, sid, label) => h('button', { class: 'linkbtn mono', type: 'button', title: 'Mở chi tiết ' + sid, onclick: (e) => { e.stopPropagation(); f.app.openStation(sid); } }, label ?? sid);
 
@@ -17,27 +15,72 @@ const COLS = [
   ['p', 'Áp ra (bar)', (r) => r.p, 'n'], ['pc', 'Áp bất lợi (bar) · logger', (r) => r.p_crit, 'n'], ['q', 'Lưu lượng (m³/h)', (r) => r.q, 'n'], ['lv', 'Mức bể (m)', (r) => r.level, 'n'],
   ['kw', 'Công suất (kW)', (r) => r.kw, 'n'], ['wq', 'Clo / đục / pH', (r) => r.cl, 'n'], ['sv', 'Tiết kiệm điện *', (r) => r.saving_pct ?? -1e3, 'n'], ['al', 'Báo động', (r) => r.alarms, 'n'], ['sp', 'Áp ra 6 giờ', null, 'l'],
 ];
+const VIEW_KEY = 'trambom-fleet-view'; // kiểu xem danh sách trạm: 'cards' | 'table'
+const SVGNS = 'http://www.w3.org/2000/svg';
+/** Đường áp ra 6 giờ gần nhất dạng polyline trong khung w×hh (thang 1…4,6 bar). */
+const sparkPts = (app, r, w, hh, n) => pressureTrail(app, r, n).map((v, j) => (v === null ? null : `${(j * w / n).toFixed(1)},${(hh - 1 - Math.max(0, Math.min(1, (v - 1) / 3.6)) * (hh - 2)).toFixed(1)}`)).filter(Boolean).join(' ');
+const sparkEl = (cls, w, hh) => {
+  const svg = document.createElementNS(SVGNS, 'svg'), line = document.createElementNS(SVGNS, 'polyline');
+  svg.setAttribute('viewBox', `0 0 ${w} ${hh}`); svg.setAttribute('class', cls); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('aria-hidden', 'true'); svg.append(line);
+  return { svg, line };
+};
+
 export class ListScreen {
   constructor(fleet) {
-    this.f = fleet; this.sort = { key: 'status', dir: -1 }; this.filter = 'all'; this.q = ''; this.rowEls = new Map();
+    this.f = fleet; this.sort = { key: 'status', dir: -1 }; this.filter = 'all'; this.q = ''; this.rowEls = new Map(); this.cardEls = new Map();
+    this.view = 'cards';
+    try { if (localStorage.getItem(VIEW_KEY) === 'table') this.view = 'table'; } catch (e) { /* bỏ qua */ }
     this.chips = h('div', { class: 'seg fl-fseg', role: 'group', 'aria-label': 'Lọc theo trạng thái' });
     this.search = h('input', { type: 'search', class: 'fl-search', placeholder: 'Tìm trạm, khu vực…', 'aria-label': 'Tìm trạm', oninput: (e) => { this.q = e.target.value.trim().toLowerCase(); this._k = null; this.update(this.f); } });
+    this.viewSeg = h('div', { class: 'seg fl-vseg', role: 'group', 'aria-label': 'Kiểu xem danh sách trạm' },
+      ...[['cards', 'Thẻ'], ['table', 'Bảng']].map(([k, l]) => h('button', { type: 'button', 'data-v': k, onclick: () => { this.setView(k); this.update(this.f); } }, l)));
     this.head = h('tr', {}, ...COLS.map(([k, label, fn, al]) => h('th', { class: al === 'n' ? 'n' : '', 'aria-sort': 'none', scope: 'col' },
       fn ? h('button', { type: 'button', class: 'fl-th', onclick: () => { this.sort = { key: k, dir: this.sort.key === k ? -this.sort.dir : (k === 'status' || k === 'al' ? -1 : 1) }; this._k = null; this.update(this.f); } }, label, h('i', { class: 'arr' })) : label)));
     this.body = h('tbody');
     this.count = h('span', { class: 'fl-count' });
+    this.cards = h('div', { class: 'fl-cards' });
+    this.cardWrap = h('div', { class: 'fl-cardwrap' }, this.cards);
+    this.panel = new StationPanel(fleet, (sid) => this.reveal(sid));
+    this.tableWrap = h('div', { class: 'fl-tw' }, h('table', { class: 'fl-table' }, h('thead', {}, this.head), this.body));
+    this.foot = h('p', { class: 'note' }, '* So với lịch cố định chạy song song cùng nhu cầu và cùng sự cố. Âm khi lịch cố định ngừng cấp nước do sự cố nên tốn ít điện hơn nhưng mất dịch vụ. Áp bất lợi do logger NB-IoT PL-301 đo, độc lập với 4G của gateway.');
     this.el = h('div', { class: 'fl-list' },
-      h('div', { class: 'fl-tools' }, this.chips, this.search, this.count),
-      h('div', { class: 'fl-tw' }, h('table', { class: 'fl-table' }, h('thead', {}, this.head), this.body)),
-      h('p', { class: 'note' }, '* So với lịch cố định chạy song song cùng nhu cầu và cùng sự cố. Âm khi lịch cố định ngừng cấp nước do sự cố nên tốn ít điện hơn nhưng mất dịch vụ. Áp bất lợi do logger NB-IoT PL-301 đo, độc lập với 4G của gateway.'));
+      h('div', { class: 'fl-tools' }, this.chips, this.search, this.count, this.viewSeg),
+      h('div', { class: 'fl-main' }, this.cardWrap, this.panel.el, this.tableWrap), this.foot);
+    this.setView(this.view);
+  }
+  /** Chuyển giữa kiểu Thẻ (lưới thẻ + cột chi tiết) và kiểu Bảng (bảng sắp xếp được); nhớ lựa chọn cho lần mở sau. */
+  setView(v) {
+    this.view = v;
+    try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* bỏ qua */ }
+    this.el.classList.toggle('v-cards', v === 'cards'); this.el.classList.toggle('v-table', v === 'table');
+    this.cardWrap.hidden = this.panel.el.hidden = v !== 'cards';
+    this.tableWrap.hidden = this.foot.hidden = v !== 'table';
+    this.viewSeg.querySelectorAll('button').forEach((b) => { const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    this._k = this._ck = null;
+  }
+  /** Cuộn thẻ của trạm vừa chọn (từ danh sách cần chú ý) vào vùng nhìn thấy. */
+  reveal(sid) { this.cardEls.get(sid)?.card.scrollIntoView({ block: 'nearest' }); }
+  _match(r) { return (this.filter === 'all' || r.status === this.filter) && (!this.q || `${r.sid} ${r.site.area} ${r.site.district} ${r.site.kind}`.toLowerCase().includes(this.q)); }
+  _card(r) {
+    const c = {};
+    const m = (k, label, unit) => { c[k] = h('b'); return h('div', { class: 'fl-cv' }, h('span', {}, label), h('div', {}, c[k], h('small', {}, unit))); };
+    const sp = sparkEl('fl-spark', 200, 26); c.line = sp.line;
+    c.chip = h('span', { class: 'fl-cst' }); c.why = h('p', { class: 'fl-why' });
+    const card = c.card = h('article', { class: 'fl-card', tabindex: 0, title: 'Nhấp để chọn · nhấp đúp hoặc Enter để mở chi tiết' },
+      h('div', { class: 'fl-ch' }, h('div', { class: 'fl-id' }, stBtn(this.f, r.sid), h('small', {}, `${r.site.area} · ${r.site.district}`)), c.chip),
+      h('div', { class: 'fl-cm' }, m('p', 'Áp ra', 'bar'), m('pc', 'Áp bất lợi', 'bar'), m('q', 'Lưu lượng', 'm³/h'), m('kw', 'Công suất', 'kW')),
+      sp.svg, c.why);
+    card.addEventListener('click', () => this.f.select(r.sid));
+    card.addEventListener('dblclick', () => this.f.app.openStation(r.sid));
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === card) this.f.app.openStation(r.sid); });
+    return c;
   }
   _row(r) {
     const c = {};
     const td = (k, cls = '') => (c[k] = h('td', { class: cls }));
     const tr = h('tr', { class: 'rowgo', tabindex: 0, title: 'Nhấp để chọn · nhấp đúp hoặc Enter để mở chi tiết' }, td('status'), td('sid', 'mono'), td('area'), td('mode'), td('p', 'n'), td('pc', 'n'), td('q', 'n'), td('lv', 'n'), td('kw', 'n'), td('wq', 'n'), td('sv', 'n'), td('al', 'n'), td('sp', 'sp'));
     c.sid.append(stBtn(this.f, r.sid)); c.area.textContent = `${r.site.area} · ${r.site.district}`;
-    c.spark = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); c.spark.setAttribute('viewBox', '0 0 90 22'); c.spark.setAttribute('class', 'fl-spark'); c.spark.setAttribute('preserveAspectRatio', 'none');
-    c.line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline'); c.spark.append(c.line); c.sp.append(c.spark);
+    const sp = sparkEl('fl-spark', 90, 22); c.line = sp.line; c.sp.append(sp.svg);
     tr.addEventListener('click', () => this.f.select(r.sid));
     tr.addEventListener('dblclick', () => this.f.app.openStation(r.sid));
     tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === tr) this.f.app.openStation(r.sid); });
@@ -52,12 +95,29 @@ export class ListScreen {
       this.chips.replaceChildren(...[['all', 'Tất cả'], ['crit', 'Báo động'], ['warn', 'Cảnh báo'], ['offline', 'Mất kết nối'], ['sync', 'Đồng bộ'], ['ok', 'Bình thường']].map(([k, l]) =>
         h('button', { class: k === this.filter ? 'on' : '', 'aria-pressed': String(k === this.filter), onclick: () => { this.filter = k; this._fk = null; this._k = null; this.update(this.f); } }, `${l} `, h('b', {}, String(by[k])))));
     }
+    const list = rows.filter((r) => this._match(r));
+    T(this.count, `${list.length}/${rows.length} trạm`);
+    if (this.view === 'cards') { this._updCards(f, list); this.panel.update(f); } else this._updTable(f, list);
+  }
+  _updCards(f, list) {
+    // thứ tự cố định theo mã trạm (không theo mức độ) để thẻ không nhảy chỗ khi trạng thái đổi; trạm cần chú ý đã được nêu ở cột bên phải
+    for (const r of list) {
+      let c = this.cardEls.get(r.sid); if (!c) { c = this._card(r); this.cardEls.set(r.sid, c); }
+      c.card.dataset.st = r.status; c.card.classList.toggle('cur', f.sel === r.sid); c.card.classList.toggle('stale', !r.online);
+      if (c.chip._k !== r.status) { c.chip._k = r.status; c.chip.replaceChildren(statusChip(r)); }
+      T(c.p, fmt(r.p, 2)); T(c.pc, fmt(Math.max(0, r.p_crit), 2)); T(c.q, fmt(r.q, 1)); T(c.kw, fmt(r.kw, 2));
+      c.p.classList.toggle('bad', Number.isFinite(r.p) && r.online && r.p > 4.0); c.pc.classList.toggle('bad', Number.isFinite(r.p_crit) && r.p_crit < 1.4 && r.online);
+      T(c.why, reason(f.app, r)); c.why.classList.toggle('ok', r.status === 'ok');
+      c.line.setAttribute('points', sparkPts(f.app, r, 200, 26, 48));
+    }
+    const key = list.map((r) => r.sid).join(',');
+    if (key !== this._ck) { this._ck = key; this.cards.replaceChildren(...list.map((r) => this.cardEls.get(r.sid).card)); if (!list.length) this.cards.append(h('p', { class: 'note' }, 'Không có trạm nào khớp bộ lọc.')); }
+  }
+  _updTable(f, list) {
     const { key, dir } = this.sort, col = COLS.find((c) => c[0] === key), get = col[2] ?? (() => 0);
-    let list = rows.filter((r) => (this.filter === 'all' || r.status === this.filter) && (!this.q || `${r.sid} ${r.site.area} ${r.site.district} ${r.site.kind}`.toLowerCase().includes(this.q)));
     list = [...list].sort((x, y) => { const a = get(x), b = get(y); const c = typeof a === 'string' ? a.localeCompare(b) : (Number.isFinite(a) ? a : -1e9) - (Number.isFinite(b) ? b : -1e9); return (c || x.sid.localeCompare(y.sid)) * dir; });
     const ok = list.map((r) => r.sid).join(',');
     this.head.querySelectorAll('th').forEach((th, i) => th.setAttribute('aria-sort', COLS[i][0] === key ? (dir > 0 ? 'ascending' : 'descending') : 'none'));
-    T(this.count, `${list.length}/${rows.length} trạm`);
     for (const r of list) {
       let c = this.rowEls.get(r.sid); if (!c) { c = this._row(r); this.rowEls.set(r.sid, c); }
       c.tr.classList.toggle('cur', f.sel === r.sid);
@@ -70,10 +130,7 @@ export class ListScreen {
       c.tr.classList.toggle('stale', stale);
       c.p.classList.toggle('bad', Number.isFinite(r.p) && r.online && (r.p > 4.0)); c.pc.classList.toggle('bad', Number.isFinite(r.p_crit) && r.p_crit < 1.4 && r.online);
       c.al.classList.toggle('bad', r.crit > 0);
-      // đường áp ra 6 giờ gần nhất
-      const hs = f.app.net.smart[r.i].hist.data, t1 = hs.t.length, t0 = Math.max(0, t1 - 2160), step = Math.max(1, Math.floor((t1 - t0) / 40)), pts = [];
-      for (let i = t0, j = 0; i < t1; i += step, j++) { const v = hs.p_out[i]; if (Number.isFinite(v)) pts.push(`${(j * 90 / 40).toFixed(1)},${(21 - Math.max(0, Math.min(1, (v - 1) / 3.6)) * 20).toFixed(1)}`); }
-      c.line.setAttribute('points', pts.join(' '));
+      c.line.setAttribute('points', sparkPts(f.app, r, 90, 22, 40)); // đường áp ra 6 giờ gần nhất
     }
     if (ok !== this._k) { this._k = ok; this.body.replaceChildren(...list.map((r) => this.rowEls.get(r.sid).tr)); if (!list.length) this.body.append(h('tr', {}, h('td', { colspan: COLS.length, class: 'note' }, 'Không có trạm nào khớp bộ lọc.'))); }
   }

@@ -75,7 +75,7 @@ export class StationPanel {
         h('div', { class: 'fd-mg' }, V('p', 'Áp ra', 'bar'), V('pc', 'Áp bất lợi', 'bar'), V('q', 'Lưu lượng', 'm³/h'), V('lv', 'Mức bể', 'm'), V('kw', 'Công suất', 'kW'), V('wq', 'Clo · đục · pH')),
         h('div', { class: 'fd-sp' }, h('small', {}, 'Áp ra 6 giờ gần nhất'), this.cardSpark),
         h('div', { class: 'fd-info' }, this.cardMeta = h('small', {})),
-        h('div', { class: 'fd-act' }, h('button', { class: 'btn primary', type: 'button', onclick: () => a.openStation(r.sid, '3d') }, 'Mở mô phỏng 3D'), h('button', { class: 'btn', type: 'button', onclick: () => a.openStation(r.sid, 'hmi') }, 'Mở HMI')),
+        h('div', { class: 'fd-act' }, h('button', { class: 'btn primary', type: 'button', onclick: () => a.openStation(r.sid, '3d') }, 'Mở 3D'), h('button', { class: 'btn', type: 'button', onclick: () => a.openStation(r.sid, 'hmi') }, 'Mở HMI')),
         h('details', { class: 'fd-try' }, h('summary', {}, 'Giả lập sự cố tại trạm này'), h('div', { class: 'fd-grid2' },
           inj('Ngắt 4G', { type: 'link_down' }), inj('Khôi phục 4G', { type: 'link_up' }), inj('Vỡ ống 10 m³/h', { type: 'burst', q_m3h: 10, until_h: hrs(4) }), inj('Nước nguồn đục', { type: 'inflow_quality', param: 'ntu', value: 12, until_h: hrs(3) }),
           inj('Hỏng bơm P-01', { type: 'pump_fault', pump: 0 }), inj('Sửa bơm P-01', { type: 'pump_repair', pump: 0 }), inj('Mini PC treo', { type: 'gateway_fail' }), inj('Khởi động lại mini PC', { type: 'gateway_restore' }))));

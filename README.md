@@ -59,7 +59,7 @@ Cách dùng giao diện:
 
 | Muốn | Thao tác |
 |---|---|
-| Xem toàn mạng, chọn một trạm | Màn **Mạng lưới**: nhấp thẻ (hoặc dòng trong bảng; nút **Thẻ \| Bảng** đổi kiểu xem), **Mở mô phỏng 3D** / **Mở HMI** |
+| Xem toàn mạng, chọn một trạm | Màn **Mạng lưới**: nhấp thẻ (hoặc dòng trong bảng; nút **Thẻ \| Bảng** đổi kiểu xem), **Mở 3D** / **Mở HMI** |
 | Đổi trạm khi đang xem chi tiết | Ô chọn trạm và nút ‹ › trên thanh trên cùng |
 | Chạy, tạm dừng, tua nhanh, đổi kịch bản | Thanh trên cùng (màn hình hẹp: nút ☰) |
 | Xem biểu đồ, so sánh với lịch cố định | Nút **Biểu đồ** / **So sánh** trên thanh chức năng (tấm trượt từ dưới lên, cỡ S/M/L); bấm một thẻ chỉ số để mở đúng biểu đồ đó |

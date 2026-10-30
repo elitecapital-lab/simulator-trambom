@@ -17,7 +17,7 @@ HMI y như bản một trạm.
 | Vào màn Mạng lưới | Mở `…/web/` (mặc định), nút **Mạng lưới** trên thanh trên, hoặc bấm logo SYSTEM |
 | Mở thẳng một trạm | `…/web/#ST-05` (3D), `…/web/#ST-05-hmi` (HMI); mở toàn mạng: `#H1` hoặc `#fleet` |
 | Mở bài học một trạm như trước | `…/web/#S4-advanced` (các bài S0…S13 vẫn chạy trên ST-01) |
-| Xem chi tiết trạm | Nhấp thẻ (hoặc dòng trong bảng) rồi **Mở mô phỏng 3D** / **Mở HMI** ở cột phải; nhấp đúp thẻ hoặc dòng, hoặc nhấp mã trạm, để mở thẳng |
+| Xem chi tiết trạm | Nhấp thẻ (hoặc dòng trong bảng) rồi **Mở 3D** / **Mở HMI** ở cột phải; nhấp đúp thẻ hoặc dòng, hoặc nhấp mã trạm, để mở thẳng |
 | Đổi trạm khi đang xem chi tiết | Ô chọn trạm và hai nút ‹ › trên thanh trên |
 | Gây sự cố để xem hệ thống phản ứng | Chọn một thẻ → **Giả lập sự cố tại trạm này** ở cột phải, hoặc mục **Sự cố** ở màn chi tiết |
 
@@ -31,7 +31,7 @@ Tốc độ mặc định ×300 (1 giờ mô phỏng ≈ 12 giây) để thấy 
      đường áp 6 giờ và một dòng lý do (đang bình thường / báo động nào / mất kết nối bao lâu). Trạm bình thường để trung tính; báo
      động viền đỏ, cảnh báo viền vàng, đang đồng bộ viền xanh, mất kết nối viền nét đứt và số liệu xám (số đo cuối cùng máy chủ nhận).
      Thẻ xếp cố định theo mã trạm nên không nhảy chỗ khi trạng thái đổi. Cột phải gồm thẻ chi tiết của trạm đang chọn (đủ số đo, đường
-     áp 6 giờ, chế độ, kịch bản, **Mở mô phỏng 3D** / **Mở HMI**, **Giả lập sự cố tại trạm này**) và danh sách **Cần chú ý** (trạm
+     áp 6 giờ, chế độ, kịch bản, **Mở 3D** / **Mở HMI**, **Giả lập sự cố tại trạm này**) và danh sách **Cần chú ý** (trạm
      nặng nhất lên đầu, kèm lý do). Màn hẹp: cột phải chuyển lên trên lưới thẻ.
    - **Bảng** – 16 trạm: trạng thái, chế độ gateway (a/b/c/d), áp, lưu lượng, mức bể, công suất, clo/đục/pH, tiết kiệm điện so với
      lịch cố định, báo động, đường áp 6 giờ. Sắp theo cột.

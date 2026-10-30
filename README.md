@@ -72,8 +72,8 @@ Triển khai cho cả lớp: bật GitHub Pages (hoặc chép cả kho lên mộ
 Không cần máy chủ ứng dụng: toàn bộ mô phỏng chạy trong trình duyệt của học viên.
 
 Muốn gửi một file duy nhất (LMS, email): `npm install --no-save esbuild` rồi
-`node tools/build_single_page.mjs dist/tram-bom-st01.html` (Three.js tải từ CDN), hoặc thêm `--local` và chép kèm
-`web/vendor/` để chạy không cần Internet.
+`node tools/build_single_page.mjs dist/tram-bom-st01.html` (Three.js tải từ CDN), thêm `--local` và chép kèm
+`web/vendor/` để chạy không cần Internet, hoặc thêm `--standalone` để nhúng luôn Three.js (một file ≈ 1,3 MB, mở thẳng được).
 
 ### Mô phỏng Python (không giao diện)
 

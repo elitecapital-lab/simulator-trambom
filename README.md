@@ -1,8 +1,11 @@
-# Mô phỏng 3D trạm bơm tăng áp thông minh (ST-01)
+# SYSTEM · Giám sát và mô phỏng 3D trạm bơm tăng áp thông minh
 
 Mô phỏng tương tác hệ thống điều khiển tự động cho một trạm bơm tăng áp nhỏ **không người trực** phục vụ khu dân cư,
 dành cho sinh viên các học phần Tự động hóa, Hệ thống nhúng/IoT và Kỹ thuật cấp thoát nước.
 
+- **Màn Mạng lưới (mở đầu)**: trung tâm giám sát của SYSTEM quản lý và giám sát tự động **16 trạm bơm giả lập ở Hà Nội** – bản đồ
+  Hà Nội, danh sách trạm, báo động & dòng "hệ thống tự xử lý", hiệu quả toàn mạng và phát hành kịch bản tập trung. Mỗi trạm là một
+  mô phỏng thật (sự cố rải trên nhiều trạm); nhấp một trạm để xuống chi tiết 3D / HMI như bên dưới. Xem [08](docs/08-mang-luoi-ha-noi.md).
 - **Bản web 3D toàn màn hình** (Three.js, chạy trong trình duyệt) gồm:
   - mô hình trạm bơm: bể chứa, 2 bơm biến tần, đường ống, van, đồng hồ áp lực, cảm biến lưu lượng, mức nước, chất lượng nước (clo dư, độ đục, pH), bình tích áp;
   - **tủ động lực hiện trạng CP-01** và **tủ mới CP-02** (mini PC chạy edge gateway, I/O từ xa, router 4G, UPS, màn HMI);
@@ -48,13 +51,16 @@ Lệnh này chạy máy chủ web tĩnh tại `http://127.0.0.1:8000/web/` và m
 `/web/`. Không mở trực tiếp `index.html` bằng `file://` vì trình duyệt chặn ES module. Three.js được đóng gói sẵn trong
 `web/vendor/` nên chạy được khi không có Internet (phông chữ sẽ dùng phông hệ thống).
 
-Mở thẳng một kịch bản: `http://127.0.0.1:8000/web/#S4-advanced`. Mở thẳng màn hình HMI: `#S12-basic-hmi`. Nút
-**3D | HMI** trên thanh trên cùng chuyển qua lại hai giao diện.
+Mặc định mở màn **Mạng lưới** (Hà Nội, 16 trạm). Mở thẳng một trạm: `http://127.0.0.1:8000/web/#ST-05` (3D) hoặc `#ST-05-hmi`.
+Mở thẳng một kịch bản bài học (chạy trên ST-01): `#S4-advanced`; màn hình HMI của bài: `#S12-basic-hmi`. Nút
+**Mạng lưới | 3D | HMI** trên thanh trên cùng chuyển qua lại ba giao diện; bấm logo SYSTEM để về màn Mạng lưới.
 
 Cách dùng giao diện:
 
 | Muốn | Thao tác |
 |---|---|
+| Xem toàn mạng, chọn một trạm | Màn **Mạng lưới**: nhấp marker trên bản đồ (hoặc dòng trong danh sách), **Mở mô phỏng 3D** / **Mở HMI** |
+| Đổi trạm khi đang xem chi tiết | Ô chọn trạm và nút ‹ › trên thanh trên cùng |
 | Chạy, tạm dừng, tua nhanh, đổi kịch bản | Thanh trên cùng (màn hình hẹp: nút ☰) |
 | Xem biểu đồ, so sánh với lịch cố định | Nút **Biểu đồ** / **So sánh** trên thanh chức năng (tấm trượt từ dưới lên, cỡ S/M/L); bấm một thẻ chỉ số để mở đúng biểu đồ đó |
 | Điều khiển bơm, van trong 3D | Bấm vào bơm/van (hoặc nút **Điều khiển TAY**) → bảng điều khiển nổi; ở TỰ ĐỘNG các nút lệnh bị khóa cho tới khi chuyển TAY |
@@ -66,8 +72,8 @@ Triển khai cho cả lớp: bật GitHub Pages (hoặc chép cả kho lên mộ
 Không cần máy chủ ứng dụng: toàn bộ mô phỏng chạy trong trình duyệt của học viên.
 
 Muốn gửi một file duy nhất (LMS, email): `npm install --no-save esbuild` rồi
-`node tools/build_single_page.mjs dist/tram-bom-st01.html` (Three.js tải từ CDN), hoặc thêm `--local` và chép kèm
-`web/vendor/` để chạy không cần Internet.
+`node tools/build_single_page.mjs dist/tram-bom-st01.html` (Three.js tải từ CDN), thêm `--local` và chép kèm
+`web/vendor/` để chạy không cần Internet, hoặc thêm `--standalone` để nhúng luôn Three.js (một file ≈ 1,3 MB, mở thẳng được).
 
 ### Mô phỏng Python (không giao diện)
 
@@ -90,7 +96,7 @@ python -m pytest -q
 
 Gồm kiểm thử mô hình vật lý (đường đặc tính, luật tương tự, bảo toàn khối lượng, van an toàn), gateway (phát hiện mất mạng,
 nén bộ đệm không mất dữ liệu, lệnh hết hạn, từ chối kịch bản sai, dừng an toàn, biểu quyết cảm biến), hợp nhất xung đột,
-mọi kịch bản, mẫu bài học viên, và đối chiếu Python–JavaScript (cần Node.js).
+mọi kịch bản, mẫu bài học viên, đối chiếu Python–JavaScript và mạng lưới Hà Nội (dữ liệu `hanoi.json`, sự cố hiện đúng trạm; cần Node.js).
 
 ## Bốn chế độ vận hành được mô phỏng
 
@@ -136,15 +142,18 @@ Bảng đầy đủ cho từng kịch bản: [docs/ket-qua/README.md](docs/ket-q
 | [04 – Độ tin cậy khi mất kết nối](docs/04-do-tin-cay-mat-ket-noi.md) | Rủi ro, giới hạn của kịch bản đã lưu, chiến lược dự phòng, kế hoạch kiểm thử |
 | [05 – Hướng dẫn học tập](docs/05-huong-dan-hoc-tap.md) | Mục tiêu Bloom/DOK, trình tự bài thực hành, phân hóa cơ bản/nâng cao, thang đánh giá |
 | [06 – So sánh điện năng và chất lượng dịch vụ](docs/06-so-sanh-dien-nang-chat-luong.md) | Bảng tổng hợp lịch cố định so với điều khiển thông minh và phân tích |
+| [08 – Mạng lưới Hà Nội](docs/08-mang-luoi-ha-noi.md) | Màn Mạng lưới: năm màn giám sát và điều hành nhiều trạm, 16 trạm giả lập ở Hà Nội, kịch bản sự cố H1, cấu trúc `config/hanoi.json`, giả định |
 | [07 – Hiện trạng và giải pháp](docs/07-hien-trang-va-giai-phap.md) | Phân biệt thiết bị hiện trạng / giải pháp / khuyến nghị; hai tủ CP-01 và CP-02; cấu hình mini PC; danh sách I/O; phân cấp dự phòng khi mini PC hỏng; điều khiển tay từ xa và tại chỗ; giá trị từng thiết bị theo mô phỏng "có lắp / không lắp"; lộ trình triển khai |
 
 ## Cấu trúc thư mục
 
 ```
 config/      station.json (tham số, ngưỡng, kịch bản điều khiển, tùy chọn lắp đặt `hardware`), scenarios.json,
-             components.json (danh mục 56 thiết bị có phân loại hiện trạng / giải pháp / khuyến nghị) – dùng chung Python & web
+             components.json (danh mục 56 thiết bị có phân loại hiện trạng / giải pháp / khuyến nghị) – dùng chung Python & web;
+             hanoi.json (16 trạm giả lập ở Hà Nội + kịch bản sự cố H1) – chỉ bản web
 trambom/     lõi mô phỏng Python: physics, sensors, gateway, control, safety, comms, server, baseline, kpi, engine, network
-web/         bản 3D: index.html, css/, js/sim (lõi JS), js/ui (cảnh 3D, biểu đồ, bảng), vendor/three (Three.js r160, MIT)
+web/         bản web: index.html, assets/ (logo SYSTEM), css/, js/sim (lõi JS, fleet.js ghép mạng lưới), js/ui (cảnh 3D, HMI, màn Mạng lưới
+             fleet*.js, biểu đồ, bảng), vendor/three (Three.js r160, MIT)
 student/     mẫu bài tập (theo ngưỡng, dự báo, điều phối mạng lưới) và loi_giai/ (lời giải tham khảo cho giảng viên)
 tests/       pytest
 tools/       sinh tài liệu, chạy lõi JS bằng Node, định dạng JSON

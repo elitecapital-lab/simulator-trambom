@@ -85,7 +85,7 @@ export class HmiView {
     this.TR = { range: 3600, sel: 0, hide: new Set([1]), hx: null, last: 0 }; // PT-102 thường trùng PT-101 – ẩn nét, vẫn hiện giá trị
     this.skin = 'dark';
     try { if (localStorage.getItem('trambom-hmi-skin') === 'light') this.skin = 'light'; } catch (e) { /* bỏ qua */ }
-    this.root = h('div', { class: 'hmi', hidden: true, 'aria-label': 'Màn hình HMI/SCADA trạm bơm ST-01' });
+    this.root = h('div', { class: 'hmi', hidden: true, 'aria-label': 'Màn hình HMI/SCADA trạm bơm' });
     host.append(this.root);
     this._build();
     new ResizeObserver(() => this._resize()).observe(this.root);
@@ -198,8 +198,7 @@ export class HmiView {
 
   _header() {
     const H = this.H = {};
-    const logo = S('svg', { viewBox: '0 0 32 32', class: 'h-logo', 'aria-hidden': 'true' }, S('circle', { cx: 16, cy: 16, r: 15, class: 'h-logo-c' }),
-      S('path', { d: 'M16 5.5c4.2 5.6 7.4 9.1 7.4 13a7.4 7.4 0 0 1-14.8 0c0-3.9 3.2-7.4 7.4-13z', class: 'h-logo-d' }), S('path', { d: 'M12.4 18.8a3.7 3.7 0 0 0 3.6 3.5', class: 'h-logo-s' }));
+    const logo = h('img', { class: 'h-logo', src: 'assets/system-logo.png', alt: 'SYSTEM', width: 30, height: 30 });
     H.title = h('div', { class: 'h-ttl', 'aria-live': 'polite' });
     H.man = h('span', { class: 'h-manbadge', hidden: true, title: 'Trạm đang ở chế độ điều khiển TAY – kịch bản tự động tạm ngưng, lớp an toàn vẫn hoạt động' }, 'TAY');
     H.intlk = h('button', { class: 'h-intlk', hidden: true, onclick: () => this._fpOpen('station', 'ST') }, '');
@@ -218,7 +217,7 @@ export class HmiView {
       ...['local', 'remote'].map((w) => h('button', { role: 'menuitemradio', 'data-w': w, onclick: () => { H.menu.hidden = true; this.setWhere(w); } },
         icon(ICON.user), h('span', {}, h('b', {}, POS[w].name), h('small', {}, POS[w].role + ' – ' + POS[w].desc)))));
     return h('header', { class: 'h-hdr' },
-      h('div', { class: 'h-brand' }, logo, h('div', { class: 'h-bfull' }, h('small', {}, 'HỆ THỐNG SCADA CẤP NƯỚC'), h('b', {}, 'TRẠM BƠM TĂNG ÁP ST-01 · DMA-A')), h('b', { class: 'h-bshort' }, 'ST-01')),
+      h('div', { class: 'h-brand' }, logo, h('div', { class: 'h-bfull' }, h('small', {}, 'SYSTEM · HỆ THỐNG SCADA CẤP NƯỚC'), H.bname = h('b', {}, 'TRẠM BƠM TĂNG ÁP ST-01 · DMA-A')), H.bshort = h('b', { class: 'h-bshort' }, 'ST-01')),
       H.title,
       h('div', { class: 'h-hright' }, H.intlk, H.man, h('div', { class: 'h-leds', role: 'group', 'aria-label': 'Trạng thái truyền thông' }, led('gw', 'GW'), led('lte', '4G'), led('srv', 'MÁY CHỦ')),
         H.alm, h('div', { class: 'h-clock' }, H.date, H.time), H.user, H.skin),
@@ -413,7 +412,7 @@ export class HmiView {
       S('pattern', { id: 'hmiG-hatch', width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, S('rect', { width: 10, height: 10, class: 'h-hatchbg' }), S('rect', { width: 3, height: 10, class: 'h-hatch' })));
   }
   _buildOverview(host) {
-    const svg = S('svg', { viewBox: `0 ${VB.y} ${VB.w} ${VB.h}`, class: 'h-pid', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Sơ đồ công nghệ trạm bơm tăng áp ST-01' });
+    const svg = S('svg', { viewBox: `0 ${VB.y} ${VB.w} ${VB.h}`, class: 'h-pid', preserveAspectRatio: 'xMidYMid meet', role: 'group', 'aria-label': 'Sơ đồ công nghệ trạm bơm tăng áp' });
     const O = this.O, cfg = this.app.cfg, add = (...els) => svg.append(...els);
     const txt = (x, y, s, cls = 'h-tag', anchor = null) => S('text', { x, y, class: cls, 'text-anchor': anchor, text: s });
     // chữ trạng thái có tiền tố '?' (chất lượng không chắc chắn khi dữ liệu cũ)
@@ -1380,7 +1379,7 @@ export class HmiView {
     return fp;
   }
   _fp_station() {
-    const fp = { title: 'ST-01 · CHẾ ĐỘ TRẠM', w: 380 };
+    const fp = { title: this.app.st.sid + ' · CHẾ ĐỘ TRẠM', w: 380 };
     const Ls = { auto: this._lamp('TỰ ĐỘNG'), loc: this._lamp('TAY · TẠI CHỖ'), rem: this._lamp('TAY · TỪ XA'), ss: this._lamp('DỪNG AN TOÀN') };
     const R = { mode: this._hd('', false, true), scr: this._hd('', false, true), lease: this._hd(''), pset: this._hd('bar') };
     const M = this._modeBtns(fp), s = this.app.cfg.safety;
@@ -1434,6 +1433,7 @@ export class HmiView {
   }
   _updHeader(d) {
     const a = this.app, H = this.H, local = this.where === 'local', c = this.ctx;
+    setT(H.bname, `TRẠM BƠM TĂNG ÁP ${a.st.sid} · ${a.st.station.zone ?? ''}${a.st.station.site ? ' · ' + a.st.station.site.area.toUpperCase() : ''}`); setT(H.bshort, a.st.sid);
     const clk = fmtClock(d.t, a.cfg.sim.start_dow), m = clk.match(/^(.*) (\d\d:\d\d:\d\d)$/);
     setT(H.date, m ? m[1] : ''); setT(H.time, m ? m[2] : clk);
     setT(H.uPos, POS[this.where].name); setT(H.uRole, POS[this.where].role);
@@ -1454,7 +1454,7 @@ export class HmiView {
       led('srv', c.dead ? 'x' : { online: 'g', resync: 'y', offline: 'r' }[d.comms] || 'x', c.dead ? 'Máy chủ: không biết' : 'Máy chủ: ' + ({ online: 'trực tuyến', resync: 'đang đồng bộ', offline: 'mất kết nối' }[d.comms] || d.comms));
     } else {
       led('gw', S0.online ? 'g' : 'x', S0.online ? 'GW-01: gửi bản tin đều' : 'GW-01: không biết – mất bản tin');
-      led('lte', S0.online ? 'g' : 'r', S0.online ? '4G trạm ST-01: trực tuyến' : '4G trạm ST-01: MẤT KẾT NỐI (LWT)');
+      led('lte', S0.online ? 'g' : 'r', S0.online ? `4G trạm ${a.st.sid}: trực tuyến` : `4G trạm ${a.st.sid}: MẤT KẾT NỐI (LWT)`);
       led('srv', 'g', 'Máy chủ SRV-01: đang chạy');
     }
     const al = this._alarms(d), un = al.filter((x) => this._ackable(x) || x.sys).length;

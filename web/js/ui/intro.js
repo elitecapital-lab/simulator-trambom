@@ -48,7 +48,7 @@ function arrow(x1, y1, x2, y2, label = '', cls = '') {
   return `<g class="bd-arr ${cls}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#ah)"/>${label ? `<text x="${mx + 6}" y="${my + 4}" class="bd-s">${label}</text>` : ''}</g>`;
 }
 
-export function blockDiagramSVG() {
+export function blockDiagramSVG(nStations = 4) {
   const s = [];
   s.push(`<svg viewBox="0 0 1100 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sơ đồ khối hệ thống điều khiển trạm bơm tăng áp">`);
   s.push(`<style>
@@ -59,7 +59,7 @@ export function blockDiagramSVG() {
     #ah path{fill:var(--ink-2)}
   </style><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>`);
   s.push(layer(8, 108, '5 · Tích hợp mạng lưới'));
-  s.push(box(150, 30, 210, 76, 'Các trạm ST-02 … ST-04', ['cùng giao thức, cùng máy chủ', 'tổng điện năng toàn mạng']));
+  s.push(box(150, 30, 210, 76, `Các trạm ST-02 … ST-${String(nStations).padStart(2, '0')}`, ['cùng giao thức, cùng máy chủ', 'tổng điện năng toàn mạng']));
   s.push(box(380, 30, 230, 76, 'Logger áp điểm bất lợi', ['NB-IoT, chu kỳ 15 phút', 'hiệu chỉnh r_est từ trung tâm']));
   s.push(box(630, 30, 220, 76, 'Bảng điều khiển trung tâm', ['lưu lượng, áp lực các trạm', 'cảnh báo tập trung, NRW']));
   s.push(box(870, 30, 210, 76, 'GIS / mô hình thủy lực', ['EPANET/WNTR (mở rộng)', 'kế hoạch cắt nước']));
@@ -101,12 +101,12 @@ export class Intro {
     this.root = root; this.cfg = cfg; this.scenarios = scenarios; this.onStart = onStart; this.step = 0;
     root.innerHTML = `
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="intro-title">
-        <header><h2 id="intro-title">Trước khi bắt đầu</h2><div class="spacer"></div>
+        <header><img class="intro-logo" src="assets/system-logo.png" alt="SYSTEM" width="30" height="30"><h2 id="intro-title">Hướng dẫn · SYSTEM</h2><div class="spacer"></div>
           <nav class="steps" aria-label="Các bước"><button data-s="0">1 · Sơ đồ khối</button><button data-s="1">2 · Bảng ngưỡng</button><button data-s="2">3 · Mức độ &amp; kịch bản</button></nav></header>
         <div class="body">
           <section data-p="0">
             <div class="prose"><p>Hệ thống gồm năm tầng. <b>Edge gateway</b> tự ra quyết định tại trạm; máy chủ chỉ giám sát, phát hành kịch bản và gửi lệnh có thời hạn. Khi mất mạng, gateway vẫn chạy kịch bản đã lưu và lưu đệm dữ liệu. <b>Lớp an toàn</b> luôn đứng sau kịch bản và có quyền ghi đè.</p></div>
-            <div class="diagram">${blockDiagramSVG()}</div>
+            <div class="diagram">${blockDiagramSVG(cfg.stations.length)}</div>
           </section>
           <section data-p="1" hidden>
             <div class="prose"><p>Các ngưỡng được đọc trực tiếp từ <code>config/station.json</code> – cùng file với mô phỏng Python. Thứ tự ưu tiên khi xung đột: an toàn người &amp; thiết bị → chất lượng nước → áp lực dịch vụ → tuổi thọ thiết bị → điện năng.</p></div>

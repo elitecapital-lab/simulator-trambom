@@ -114,11 +114,16 @@ select { max-width: 100%; }
 /* ---------- cảnh 3D / HMI (lớp dưới cùng) ---------- */
 .viewport { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--scene-bg); }
 .viewport canvas { display: block; }
+.boot img { display: block; margin: 0 auto 8px; object-fit: contain; }
 .boot { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; color: var(--ink-2); font-size: 14px; text-align: center; max-width: calc(100% - 32px); }
 .viewport.hmi-on { top: var(--topbar-h); overflow: auto; background: var(--bg); overscroll-behavior: contain; }
 .viewport.hmi-on > canvas, .viewport.hmi-on > div:not(.hmi) { display: none !important; }
 body.view-hmi { background: var(--bg); }
 body.view-hmi .hud, body.view-hmi .dock, body.view-hmi .side, body.view-hmi .sheet, body.view-hmi .banner, body.view-hmi .dtip { display: none !important; }
+.viewport.fleet-on { top: var(--topbar-h); overflow: hidden; background: var(--bg); }
+.viewport.fleet-on > canvas, .viewport.fleet-on > div:not(.fleet) { display: none !important; }
+body.view-fleet { background: var(--bg); }
+body.view-fleet .hud, body.view-fleet .dock, body.view-fleet .side, body.view-fleet .sheet, body.view-fleet .banner, body.view-fleet .dtip, body.view-fleet .drawer { display: none !important; }
 .tag3d { font: 600 11px/1.15 var(--f-mono); padding: 3px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--ink);
   border: 1px solid var(--line); white-space: nowrap; pointer-events: auto; cursor: pointer; }
 .tag3d b { font-family: var(--f-label); letter-spacing: 0.04em; font-size: 11px; color: var(--ink-2); margin-right: 4px; } /* ≥ 4,5:1 trên nền nhãn ở cả hai giao diện */
@@ -130,17 +135,24 @@ body.view-hmi .hud, body.view-hmi .dock, body.view-hmi .side, body.view-hmi .she
   position: fixed; z-index: 30; inset: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 52px;
   padding: calc(7px + var(--st)) calc(12px + var(--sr)) 7px calc(12px + var(--sl)); border-width: 0 0 1px; border-radius: 0;
 }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; margin-right: 2px; }
-.brand-mark { width: 26px; height: 26px; flex: none; fill: var(--accent); }
-.brand-mark .bm-up { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.brand h1 { font: 600 17px/1 var(--f-label); letter-spacing: 0.02em; white-space: nowrap; }
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; margin-right: 2px; padding: 2px 8px 2px 2px; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.brand:hover { background: var(--hover); }
+.brand-logo { width: 30px; height: 30px; flex: none; object-fit: contain; }
+/* chữ SYSTEM: chữ hoa đậm dùng hai màu của logo (xanh lá → xanh dương) */
+.brand-co { font: 700 18px/1 var(--f-label); letter-spacing: 0.14em; background: linear-gradient(90deg, #2f9e44, #2a78d6); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: 2px; }
+.brand h1 { font: 600 17px/1 var(--f-label); letter-spacing: 0.02em; white-space: nowrap; padding-left: 9px; border-left: 1px solid var(--line); }
 .brand h1 b { font-weight: 700; }
 .brand-long { color: var(--ink-2); }
+#st-select { width: clamp(118px, 9vw, 160px); text-overflow: ellipsis; }
+/* máy tính: ô chọn trạm đã ghi mã trạm nên bỏ dòng ST-xx cạnh logo ở màn chi tiết (điện thoại giữ lại vì ô chọn nằm trong menu) */
+@media (min-width: 721px) { body:not(.view-fleet) .brand h1 { display: none; } }
+#tg-st { gap: 3px; }
+#tg-st .btn.icon { width: 28px; min-height: 34px; font-size: 18px; line-height: 1; }
 .tb-grp, .tb-run { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .topbar .gl.m, .topbar .bt { display: none; }
 .topbar .btn { min-height: 34px; }
-#sc-select { width: clamp(170px, 17vw, 300px); text-overflow: ellipsis; }
-#btn-play { width: 116px; justify-content: center; } /* bề rộng cố định: Chạy ↔ Tạm dừng không làm thanh trên xếp lại */
+#sc-select { width: clamp(130px, 12vw, 260px); text-overflow: ellipsis; }
+#btn-play { min-width: 116px; justify-content: center; } /* bề rộng cố định: Chạy ↔ Tạm dừng không làm nút đổi cỡ */
 #btn-play.running { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
 #btn-play.running:hover { border-color: var(--ink-2); }
 #speed-seg button { padding: 5px 6px; font: 500 12.5px var(--f-mono); }
@@ -173,6 +185,8 @@ body.view-hmi .hud, body.view-hmi .dock, body.view-hmi .side, body.view-hmi .she
 .topbar .tb-hide { display: none !important; }
 /* màn HMI có đồng hồ, chế độ và tên trạm riêng: thanh trên chỉ giữ điều khiển mô phỏng, mảnh hơn để HMI gần toàn màn hình */
 body.view-hmi #clock, body.view-hmi #tg-modes, body.view-hmi .brand-long { display: none !important; }
+/* màn Mạng lưới: chế độ gateway và ô chọn trạm là của từng trạm nên chỉ hiện ở màn chi tiết */
+body.view-fleet #tg-modes, body.view-fleet #tg-st { display: none !important; }
 body.view-hmi .topbar { min-height: 42px; padding-top: calc(4px + var(--st)); padding-bottom: 4px; }
 body.view-hmi .topbar .btn, body.view-hmi .topbar select { min-height: 30px; padding-top: 3px; padding-bottom: 3px; }
 body.view-hmi .topbar .seg button { min-height: 28px; padding-top: 3px; padding-bottom: 3px; }
@@ -189,12 +203,24 @@ body.view-hmi .topbar .btn.icon { width: 30px; }
 .menu .tb-grp { flex-wrap: wrap; align-items: center; }
 .menu .gl { display: block; flex-basis: 100%; }
 .menu .bt { display: inline; }
-.menu #sc-select { width: 100%; }
+.menu #sc-select, .menu #st-select { width: 100%; }
+.menu #tg-st { flex-wrap: wrap; } .menu #tg-st .btn.icon { width: 34px; }
 .menu .btn.icon { width: auto; padding: 5px 10px; }
 .menu .mode .mn { display: inline; }
 .menu .modes.compact .mode:not(.on):not(.m-x) { display: inline-block; }
 .btn.icon.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .menu .modes { gap: 4px; }
+/* nút mở cửa sổ "Giả lập" trên thanh trên: biểu tượng + chữ + chấm trạng thái (sáng khi đang chạy) và tốc độ; hẹp thì chỉ còn biểu tượng và chấm */
+.sim-btn { gap: 7px; padding-inline: 10px; }
+.sim-btn .sim-st { display: inline-flex; align-items: center; gap: 6px; }
+.sim-v { min-width: 3.4ch; font: 500 12.5px var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.sim-btn.on .sim-v { color: inherit; }
+/* cửa sổ "Giả lập": mỗi mục có biểu tượng riêng; Chạy / +1 giờ / Chạy lại thành một hàng */
+.ico-s { width: 14px; height: 14px; margin-right: 6px; flex: none; }
+.pop-sim .gl { display: flex; align-items: center; }
+.pop-sim .tb-run { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.pop-sim .tb-run .gl { grid-column: 1 / -1; }
+.pop-sim #btn-play { width: 100%; }
 .cam-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .cam-btn { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--surface); cursor: pointer; min-height: 52px; }
@@ -504,6 +530,9 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
 .dialog { background: var(--surface); border-radius: 12px; width: min(1100px, 100%); box-shadow: var(--shadow); margin: 24px 0; }
 .dialog header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .dialog header h2 { font: 700 22px/1.1 var(--f-label); letter-spacing: 0.02em; }
+.intro-logo { width: 30px; height: 30px; object-fit: contain; flex: none; }
+.rowgo { cursor: pointer; } .kv tr.rowgo:hover td, .kv tr.rowgo.cur td { background: var(--hover); }
+.netmap-go { display: grid; gap: 4px; }
 .steps { display: flex; gap: 4px; flex-wrap: wrap; }
 .steps button { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 13px; }
 .steps button.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
@@ -568,10 +597,13 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
   .topbar { gap: 6px; min-height: 50px; padding: calc(6px + var(--st)) calc(8px + var(--sr)) 6px calc(8px + var(--sl)); flex-wrap: nowrap; }
   .brand { gap: 6px; margin-right: 0; }
   .brand-long { display: none; }
-  .brand-mark { width: 22px; height: 22px; }
+  .brand-logo { width: 26px; height: 26px; }
+  .brand-co { font-size: 15px; }
+  /* điện thoại: chỉ còn logo + một dòng chữ (ST-xx ở màn chi tiết; màn Mạng lưới đã có nút chuyển ghi rõ) để thanh trên vừa một hàng */
+  body.view-fleet .brand h1 { display: none; } body:not(.view-fleet) .brand-co { display: none; }
+  .brand h1 { padding-left: 0; border-left: 0; }
   .brand h1 { font-size: 18px; }
-  #btn-play { min-width: 0; width: 38px; padding: 0; }
-  .bt-play { display: none; }
+  .sim-btn { padding-inline: 8px; gap: 5px; } .sim-t, .sim-v { display: none; }
   .clock { width: auto; min-width: 0; }
   .clock b { font-size: 14.5px; }
   .clock span { font-size: 10px; }
@@ -641,3 +673,4 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
   .side, .side.open, .sheet, .sheet.open, .lg-fill, .lg-mk, .ag-v, .vb-fill, .hud-toggle .chev { transition: none !important; }
   .live.on, .card.flash { animation: none !important; }
 }
+@media (max-width: 520px) { .brand-co { display: none; } } /* quá hẹp: chỉ còn logo */

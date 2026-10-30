@@ -6,7 +6,7 @@ trên màn này là bản đo xa mà trung tâm *thực sự* nhận được (�
 HMI y như bản một trạm.
 
 > Toàn bộ vị trí, số hộ, sự cố là **dữ liệu giả lập để trình diễn** (khu vực chỉ mang tính minh họa, không phải điểm triển khai
-> thật). Bản đồ là sơ đồ cách điệu, không theo tỉ lệ.
+> thật). Tuyến ống là sơ đồ minh họa, không phải bản vẽ hạ tầng cấp nước thật. Nền cách điệu (khi không có OpenStreetMap) không theo tỉ lệ.
 
 ![Màn Mạng lưới – bản đồ Hà Nội, trạm ST-09 đang dừng an toàn do nước nguồn đục](ket-qua/img/mang-luoi-ban-do.png)
 
@@ -25,10 +25,16 @@ Tốc độ mặc định ×300 (1 giờ mô phỏng ≈ 12 giây) để thấy 
 
 ## Năm màn
 
-1. **Bản đồ** – sơ đồ Hà Nội (sông Hồng, sông Đuống, sông Nhuệ, hồ Tây…), mỗi trạm một marker: xanh bình thường, vàng cảnh báo, đỏ
-   báo động (có vòng nhấp nháy), xanh dương đang đồng bộ, xám mất kết nối (dấu ✕, đường truyền gạch đứt đỏ). Tô màu theo
-   *Trạng thái / Áp lực / Lưu lượng / Công suất / Mức bể*. Kéo để dời, lăn chuột hoặc nút +/− để phóng. Cột phải liệt kê trạm
-   cần chú ý kèm lý do, và thẻ trạm đang chọn (số đo, đường áp 6 giờ, chế độ, kịch bản, nút mở chi tiết).
+1. **Bản đồ** – mỗi trạm một marker: xanh bình thường, vàng cảnh báo, đỏ báo động (có vòng nhấp nháy), xanh dương đang đồng bộ,
+   xám mất kết nối (dấu ✕). Tô màu theo *Trạng thái / Áp lực / Lưu lượng / Công suất / Mức bể*. Kéo để dời, lăn chuột hoặc nút +/− để
+   phóng. Cột phải liệt kê trạm (trạm cần chú ý lên đầu, kèm lý do) và thẻ trạm đang chọn (số đo, đường áp 6 giờ, chế độ, kịch bản,
+   nút mở chi tiết). Ba lớp bật/tắt ở góc trên trái:
+   - **Đường ống** – mạng ống truyền tải minh họa (ống chính đông–tây, ba trục bắc–nam, nhánh vuông góc vào từng trạm) vẽ như sơ đồ
+     đường ống: vỏ và lõi ống, mối nối, van trên mỗi nhánh, dòng chảy chạy theo hướng nước. Tốc độ dòng theo lưu lượng nước vào bể của
+     trạm; nguồn ngừng cấp (ví dụ ST-12 mất nước nguồn) thì nhánh chuyển xám, "cạn".
+   - **Liên kết dữ liệu** – đường đo xa 4G từ trạm về trung tâm; mặc định chỉ hiện của trạm đang chọn (mất mạng: đỏ đứt).
+   - **Nền OpenStreetMap** – ô bản đồ mã nguồn mở © OpenStreetMap contributors (Web Mercator nên marker trùng khít nền). Cần Internet;
+     không tải được (không mạng, trang nhúng chặn ảnh ngoài) thì tự dùng sơ đồ cách điệu (sông Hồng, sông Đuống, hồ Tây…) và báo một dòng.
 2. **Danh sách trạm** – bảng 16 trạm: trạng thái, chế độ gateway (a/b/c/d), áp, lưu lượng, mức bể, công suất, clo/đục/pH, tiết kiệm
    điện so với lịch cố định, báo động, đường áp 6 giờ. Lọc theo trạng thái, tìm kiếm, sắp theo cột.
 3. **Báo động & tự xử lý** – báo động tập trung (xác nhận, "Đặt lại" dừng an toàn) và dòng sự kiện "hệ thống đã tự xử lý": tự chuyển
@@ -82,8 +88,11 @@ Bản web ghép `hanoi.json` vào cấu hình bằng `web/js/sim/fleet.js` (`app
 
 ## Giả định và giới hạn
 
+- Nền OpenStreetMap chỉ hiện khi trình duyệt tải được ô bản đồ từ `tile.openstreetmap.org` (chạy cục bộ có Internet). Bản nhúng vào trang
+  chặn ảnh ngoài (ví dụ artifact của claude.ai) luôn dùng nền cách điệu. Ô bản đồ tải khi xem, không lưu trong kho mã; tuân thủ
+  [chính sách ô bản đồ OSM](https://operations.osmfoundation.org/policies/tiles/) (dùng nhẹ, có ghi công).
 - Các trạm cùng một kiểu (2 bơm 5,5 kW, bể ≈ 190 m³); khác nhau ở nhu cầu, độ cao điểm bất lợi và hạt giống ngẫu nhiên.
 - Số đo lấy từ bản đo xa MQTT (chu kỳ 10 s). Hai thông tin đi đường khác: áp điểm bất lợi do logger NB-IoT PL-301 đo (độc lập với 4G
   của gateway) và việc "mini PC ngừng" (router 4G còn sống nhưng không còn nhịp tim MQTT).
-- "Tiết kiệm điện" so với lịch cố định chạy song song; có thể âm ở trạm mà lịch cố định ngừng cấp nước do sự cố (tốn ít điện hơn nhưng mất dịch vụ).
+- "Tiết kiệm điện" so với lịch cố định chạy song song, chỉ hiện sau 6 giờ mô phỏng (lịch cố định tắt bơm ban đêm nên vài giờ đầu cho tỉ lệ vô nghĩa); có thể âm ở trạm mà lịch cố định ngừng cấp nước do sự cố (tốn ít điện hơn nhưng mất dịch vụ).
 - Tiền điện chỉ để minh họa; mô hình chưa có giá điện theo giờ.

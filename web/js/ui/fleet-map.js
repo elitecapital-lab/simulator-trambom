@@ -1,6 +1,6 @@
 // Bản đồ Hà Nội cách điệu (SVG, không cần tải ô bản đồ) + các trạm. Hình học là SƠ ĐỒ MINH HỌA: sông, hồ vẽ gần đúng để
 // định hướng, không theo tỉ lệ. Kéo để dời, lăn chuột / nút +− để thu phóng; marker giữ cỡ cố định khi thu phóng.
-import { FLEET_STATUS, mapXY } from '../sim/fleet.js';
+import { FLEET_STATUS, mapAspect, mapXY } from '../sim/fleet.js';
 import { h, fmt } from './dom.js';
 import { MODE_NAME, viNum } from './ops.js';
 
@@ -40,6 +40,15 @@ const GEO = {
   center: { lon: 105.840, lat: 21.0345 },
 };
 
+// Mạng ống truyền tải MINH HỌA: một ống chính đông–tây và ba trục bắc–nam; mỗi trạm nối vào trục gần nhất bằng nhánh vuông góc.
+// (Sơ đồ tuyến ống, không phải bản vẽ hạ tầng thật.)
+const PIPES = {
+  trunk: { lon0: 105.660, lon1: 106.020, lat: 21.025 },
+  ribs: [{ lon: 105.800, lat0: 21.105, lat1: 20.925 }, { lon: 105.850, lat0: 21.130, lat1: 20.900 }, { lon: 105.920, lat0: 21.078, lat1: 20.972 }],
+};
+const OSM_URL = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+const LAYERS_KEY = 'trambom-map-layers';
+
 function smooth(pts) {
   if (pts.length < 3) return 'M' + pts.map((p) => p.join(' ')).join('L');
   let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
@@ -75,14 +84,17 @@ export const STATUS_VAR = { ok: 'var(--good)', sync: 'var(--accent)', offline: '
 export class MapScreen {
   constructor(fleet) {
     this.fleet = fleet; this.app = fleet.app; this.mode = 'status'; this.k = 1; this.vx = 0; this.vy = 0;
+    this.layers = { pipes: true, links: false, osm: true };
+    try { Object.assign(this.layers, JSON.parse(localStorage.getItem(LAYERS_KEY) || '{}')); } catch (e) { /* bỏ qua */ }
+    this.tileEls = new Map(); this.tok = 0; this.terr = 0; this.tz = null;
     const a = this.app, map = a.cfg.fleet.map;
-    this.H = Math.round(W * (map.lat1 - map.lat0) / ((map.lon1 - map.lon0) * Math.cos(21.03 * Math.PI / 180)));
+    this.map = map; this.H = Math.round(W * mapAspect(map));
     this.P = (lon, lat) => { const m = mapXY(map, lon, lat); return [m.x * W, m.y * this.H]; };
     this.el = h('div', { class: 'fl-map' });
     this.stage = h('div', { class: 'fm-stage' });
     this.svg = S('svg', { class: 'fm-svg', viewBox: `0 0 ${W} ${this.H}`, role: 'img', 'aria-label': 'Sơ đồ minh họa Hà Nội và các trạm bơm' });
     this.tip = h('div', { class: 'fm-tip', hidden: true });
-    this.stage.append(this.svg, this.tip, this._tools(), this._legend());
+    this.stage.append(this.svg, this.tip, this._tools(), this._layerBox(), this._legend());
     this.side = h('div', { class: 'fm-side' });
     this.el.append(this.stage, this.side);
     this._draw();
@@ -97,17 +109,21 @@ export class MapScreen {
       S('pattern', { id: 'fm-grid', width: 50, height: 50, patternUnits: 'userSpaceOnUse' }, S('path', { d: 'M50 0H0V50', class: 'fm-gridl' })),
       S('filter', { id: 'fm-glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, S('feGaussianBlur', { stdDeviation: 3 })));
     this.world = S('g', { class: 'fm-world' });
+    this.tiles = S('g', { class: 'fm-tiles' });
     const bg = S('rect', { x: -400, y: -400, width: W + 800, height: H + 800, class: 'fm-land' });
-    const grid = S('rect', { x: -400, y: -400, width: W + 800, height: H + 800, fill: 'url(#fm-grid)' });
+    const grid = S('rect', { x: -400, y: -400, width: W + 800, height: H + 800, fill: 'url(#fm-grid)', class: 'fm-gridrect' });
     const lakes = GEO.lakes.map((l) => S('path', { d: closed(l.pts.map((p) => P(...p))), class: 'fm-water', id: 'lake-' + l.id }));
     const rivers = GEO.rivers.map((r) => S('path', { d: smooth(r.pts.map((p) => P(...p))), class: 'fm-river', 'stroke-width': r.w }));
     const areas = GEO.areas.map(([lo, la, t, z]) => { const [x, y] = P(lo, la); return S('text', { x, y, class: 'fm-area', 'data-z': z, text: t }); });
     const rl = [['Sông Hồng', 105.8795, 20.9700, -78], ['Sông Đuống', 105.935, 21.0805, -4], ['Hồ Tây', 105.8215, 21.0575, 0]].map(([t, lo, la, rot]) => { const [x, y] = P(lo, la); return S('text', { x, y, class: 'fm-wl', transform: `rotate(${rot} ${x} ${y})`, text: t }); });
     this.links = S('g', { class: 'fm-links' }); this.pkts = S('g', { class: 'fm-pkts' }); this.marks = S('g', { class: 'fm-marks' });
-    this.world.append(bg, grid, ...lakes, ...rivers, ...areas, ...rl, this.links, this.pkts, this.marks);
+    this.geo = S('g', { class: 'fm-geo' }, ...lakes, ...rivers, ...areas, ...rl); // nền cách điệu: ẩn khi có bản đồ OpenStreetMap
+    this.pipes = S('g', { class: 'fm-pipes' }); this.valves = [];
+    this.world.append(bg, grid, this.tiles, this.geo, this.pipes, this.links, this.pkts, this.marks);
     svg.append(defs, this.world);
     // trung tâm SYSTEM
     const [cx, cy] = P(GEO.center.lon, GEO.center.lat); this.c = [cx, cy];
+    this._drawPipes(P);
     this.center = S('g', { class: 'fm-hq', 'data-fixed': 1 }, S('circle', { r: 22, class: 'fm-hq-r' }), S('circle', { r: 16, class: 'fm-hq-c' }),
       S('image', { href: 'assets/system-logo.png', x: -12, y: -12, width: 24, height: 24 }), S('text', { y: 33, class: 'fm-hq-t', text: 'TRUNG TÂM SYSTEM' }));
     this.marks.append(this.center);
@@ -136,9 +152,114 @@ export class MapScreen {
       g.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this._tipMove(e); });
       g.addEventListener('pointerleave', () => { this.tip.hidden = true; });
       this.marks.append(g);
-      this.nodes[s.id] = { g, x, y, dot, ring, sel, val, x1, link, pkt, lab };
+      this.nodes[s.id] = { g, x, y, dot, ring, sel, val, x1, link, pkt, lab, pipe: this.branches[s.id] };
     }
+    this._applyLayers();
     this._place();
+  }
+  /** Ống chính, các trục và nhánh vào từng trạm: vỏ + lõi + dòng chảy; van trên mỗi nhánh; mối nối tại các điểm giao. */
+  _drawPipes(P) {
+    const T = PIPES.trunk, [tx0, ty] = P(T.lon0, T.lat), [tx1] = P(T.lon1, T.lat);
+    const spines = [{ id: 'trunk', a: [tx0, ty], b: [tx1, ty], w: 1 }];
+    PIPES.ribs.forEach((r, i) => { const [x, y0] = P(r.lon, r.lat0), [, y1] = P(r.lon, r.lat1); spines.push({ id: 'rib' + i, a: [x, y0], b: [x, y1], w: 1 }); });
+    const pipe = (d, cls, w) => {
+      const g = S('g', { class: 'fm-pipe ' + cls }, S('path', { d, class: 'fm-pedge', 'stroke-width': w + 3 }), S('path', { d, class: 'fm-pcore', 'stroke-width': w }), S('path', { d, class: 'fm-pflow' }));
+      this.pipes.append(g); return g;
+    };
+    const f1 = (n) => n.toFixed(1), junc = [];
+    for (const sp of spines) pipe(`M${f1(sp.a[0])} ${f1(sp.a[1])}L${f1(sp.b[0])} ${f1(sp.b[1])}`, 'main', 5);
+    // giao điểm trục bắc–nam với ống chính
+    for (const sp of spines.slice(1)) junc.push([sp.a[0], ty]);
+    // nhánh: từ điểm nối trên trục tới trạm (nước chảy từ trục vào trạm)
+    this.branches = {};
+    for (const s of this.app.cfg.stations) {
+      const [sx, sy] = P(s.site.lon, s.site.lat), cand = [];
+      if (sx >= tx0 && sx <= tx1) cand.push({ len: Math.abs(sy - ty), j: [sx, ty] });
+      for (const sp of spines.slice(1)) { const top = Math.min(sp.a[1], sp.b[1]), bot = Math.max(sp.a[1], sp.b[1]); if (sy >= top && sy <= bot) cand.push({ len: Math.abs(sx - sp.a[0]), j: [sp.a[0], sy] }); }
+      cand.sort((p, q) => p.len - q.len);
+      const c = cand[0] ?? { len: 0, j: [sx, sy] };
+      const g = pipe(`M${f1(c.j[0])} ${f1(c.j[1])}L${f1(sx)} ${f1(sy)}`, 'branch', 3);
+      this.branches[s.id] = g;
+      junc.push(c.j);
+      // van chặn trên nhánh (giữa nhánh), quay theo hướng ống
+      const v = S('g', { class: 'fm-valve' }, S('path', { d: 'M-5-4L5 4V-4L-5 4Z' }));
+      this.valves.push({ el: v, x: (c.j[0] + sx) / 2, y: (c.j[1] + sy) / 2, a: (Math.atan2(sy - c.j[1], sx - c.j[0]) * 180) / Math.PI, len: c.len });
+      this.pipes.append(v);
+    }
+    this.joints = junc.map(([x, y]) => { const c = S('circle', { class: 'fm-joint', r: 3.2 }); this.pipes.append(c); return { el: c, x, y }; });
+    // đầu nguồn hai phía
+    this.sources = [[tx0, 'Ống truyền tải từ phía Tây', 'start'], [tx1, 'Ống truyền tải từ phía Đông', 'end']].map(([x, t, anchor]) => {
+      const g = S('g', { class: 'fm-src' }, S('circle', { r: 7 }), S('text', { y: -12, 'text-anchor': anchor, text: t }));
+      this.pipes.append(g); return { el: g, x, y: ty };
+    });
+  }
+  /** Bật/tắt các lớp: ống, đường truyền dữ liệu, nền OpenStreetMap. */
+  _applyLayers() {
+    this.pipes.style.display = this.layers.pipes ? '' : 'none';
+    this.tiles.style.display = this.layers.osm ? '' : 'none';
+    this._osmState();
+    if (this.layers.osm) this._tilesSoon();
+    this.updateLinks();
+  }
+  /** Đường truyền dữ liệu: chỉ hiện khi bật lớp, hoặc của trạm đang chọn. */
+  updateLinks() {
+    const sel = this.fleet.sel, on = this.layers.links;
+    for (const [sid, n] of Object.entries(this.nodes)) {
+      const show = on || sel === sid;
+      n.link.style.display = show ? '' : 'none';
+      n.link.classList.toggle('sel', sel === sid);
+      n.pkt.style.display = show && MOTION && n.up ? '' : 'none';
+    }
+  }
+  _layerBox() {
+    const L = [['pipes', 'Đường ống', 'Tuyến ống truyền tải minh họa, nhánh vào từng trạm (dòng chảy theo lưu lượng vào)'], ['links', 'Liên kết dữ liệu', 'Đường truyền đo xa 4G từ mỗi trạm về trung tâm'], ['osm', 'Nền OpenStreetMap', 'Bản đồ mã nguồn mở OpenStreetMap (cần Internet); không có thì dùng sơ đồ cách điệu']];
+    this.osmNote = h('span', { class: 'fm-onote', hidden: true });
+    return h('div', { class: 'fm-layers', role: 'group', 'aria-label': 'Lớp bản đồ' }, ...L.map(([k, label, tip]) => h('label', { title: tip },
+      h('input', { type: 'checkbox', checked: this.layers[k], onchange: (e) => { this.layers[k] = e.target.checked; if (k === 'osm' && e.target.checked) { this.osmProbe = undefined; this.terr = 0; this.tilesBlocked = false; } try { localStorage.setItem(LAYERS_KEY, JSON.stringify(this.layers)); } catch (er) { /* bỏ qua */ } this._applyLayers(); } }), label)), this.osmNote);
+  }
+  // ---------- nền OpenStreetMap (ô Web Mercator) ----------
+  _tilesSoon() { if (!this._tq) this._tq = requestAnimationFrame(() => { this._tq = 0; this._tilesUpdate(); }); }
+  _tilesUpdate() {
+    if (!this.layers.osm || this.tilesBlocked || !this.sw) return;
+    // thử MỘT ô trước: không có Internet / bị chặn thì dừng ngay (tránh hàng chục yêu cầu lỗi), có thì tải đủ ô trong khung
+    if (this.osmProbe === undefined) {
+      this.osmProbe = 'testing';
+      const img = new Image();
+      img.onload = () => { this.osmProbe = 'ok'; this._tilesSoon(); };
+      img.onerror = () => { this.osmProbe = 'fail'; this.tilesBlocked = true; this._osmState(); };
+      img.src = OSM_URL(11, 1626, 901); // ô z11 phủ Hà Nội
+      return;
+    }
+    if (this.osmProbe !== 'ok') return;
+    const m = this.map, lonR = m.lon1 - m.lon0, vb = this.svg.viewBox.baseVal, base = this.sw / vb.width; // pixel màn hình / đơn vị bản đồ
+    const z = Math.max(10, Math.min(18, Math.round(Math.log2(base * W * 360 / lonR / 256))));
+    const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)), my0 = mercY(m.lat0), my1 = mercY(m.lat1), n = 2 ** z;
+    // khung nhìn (đơn vị bản đồ) → chỉ số ô cần vẽ
+    const tx = (wx) => ((m.lon0 + wx / W * lonR) + 180) / 360 * n, ty = (wy) => (1 - (my1 - wy / this.H * (my1 - my0)) / Math.PI) / 2 * n;
+    const x0 = Math.floor(tx(vb.x)), x1 = Math.floor(tx(vb.x + vb.width)), y0 = Math.max(0, Math.floor(ty(vb.y))), y1 = Math.min(n - 1, Math.floor(ty(vb.y + vb.height)));
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 90) return; // vô lý (khung chưa đo xong): bỏ qua lượt này
+    if (z !== this.tz) { for (const e of this.tileEls.values()) e.remove(); this.tileEls.clear(); this.tz = z; }
+    const want = new Set(), wx = (xi) => ((xi / n * 360 - 180) - m.lon0) / lonR * W, wy = (yi) => (my1 - Math.PI * (1 - 2 * yi / n)) / (my1 - my0) * this.H, size = 360 / n / lonR * W;
+    for (let yi = y0; yi <= y1; yi++) for (let xi = x0; xi <= x1; xi++) {
+      const key = `${z}/${((xi % n) + n) % n}/${yi}`; want.add(key);
+      if (this.tileEls.has(key)) continue;
+      const img = S('image', { x: wx(xi).toFixed(2), y: wy(yi).toFixed(2), width: (size + 0.35).toFixed(2), height: (size + 0.35).toFixed(2), preserveAspectRatio: 'none', 'data-t': key });
+      img.setAttribute('href', OSM_URL(z, ((xi % n) + n) % n, yi));
+      img.addEventListener('load', () => { this.tok++; this._osmState(); });
+      img.addEventListener('error', () => { this.terr++; img.remove(); this.tileEls.delete(key); this._osmState(); });
+      this.tiles.append(img); this.tileEls.set(key, img);
+    }
+    for (const [key, el] of this.tileEls) if (!want.has(key)) { el.remove(); this.tileEls.delete(key); }
+  }
+  /** Có ô tải được → ẩn nền cách điệu; mọi ô đều lỗi (không Internet / bị chặn) → giữ nền cách điệu và báo một dòng. */
+  _osmState() {
+    const on = this.layers.osm, fail = on && (this.osmProbe === 'fail' || (this.tok === 0 && this.terr >= 3));
+    if (fail) this.tilesBlocked = true;
+    const shown = on && this.tok > 0;
+    this.svg.classList.toggle('osm-on', shown);
+    this.osmNote.hidden = !fail; this.osmNote.textContent = fail ? 'Không tải được OpenStreetMap (cần Internet) – dùng sơ đồ cách điệu.' : '';
+    if (this.attr) this.attr.hidden = !shown;
+    if (!on) this.tilesBlocked = false;
   }
   /** Marker, nhãn giữ cỡ màn hình cố định: đặt lại phép biến đổi mỗi khi thu phóng. */
   _place() {
@@ -148,6 +269,9 @@ export class MapScreen {
     this.svg.style.setProperty('--fm-k', this.k.toFixed(3));
     for (const t of this.svg.querySelectorAll('.fm-area')) t.classList.toggle('on', this.k >= +t.dataset.z);
     for (const n of Object.values(this.nodes)) n.pkt.setAttribute('r', (2.6 / this.k).toFixed(2)); // gói tin giữ cỡ màn hình khi thu phóng
+    for (const v of this.valves) { v.el.setAttribute('transform', `translate(${v.x.toFixed(1)} ${v.y.toFixed(1)}) rotate(${v.a.toFixed(1)}) scale(${inv.toFixed(3)})`); v.el.style.display = v.len * this.k > 26 ? '' : 'none'; }
+    for (const j of this.joints) j.el.setAttribute('r', (3.2 / this.k).toFixed(2));
+    for (const so of this.sources) so.el.setAttribute('transform', `translate(${so.x.toFixed(1)} ${so.y.toFixed(1)}) scale(${inv.toFixed(3)})`);
     // lưới và độ dày sông thu phóng theo bản đồ; chữ nền giữ cỡ tương đối
   }
   // ---------- thu phóng / kéo ----------
@@ -167,6 +291,7 @@ export class MapScreen {
     this.svg.setAttribute('viewBox', `${this.vx.toFixed(1)} ${this.vy.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
     this._unit = vw / this.sw; // đơn vị bản đồ / pixel
     this._place();
+    if (this.layers.osm) this._tilesSoon();
   }
   zoom(f, cx = 0.5, cy = 0.5) {
     const base = Math.min(this.sw / W, this.sh / this.H), vw0 = this.sw / (base * this.k), vh0 = this.sh / (base * this.k);
@@ -200,7 +325,7 @@ export class MapScreen {
     this.legend = h('div', { class: 'fm-legend' });
     return h('div', { class: 'fm-bar' },
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Tô màu theo' }, ...COLOR_MODES.map(([k, l]) => h('button', { 'data-m': k, class: k === this.mode ? 'on' : '', onclick: () => this.setMode(k) }, l))),
-      this.legend, h('span', { class: 'fm-note' }, 'Sơ đồ minh họa · vị trí trạm là giả lập'));
+      this.legend, h('span', { class: 'fm-note' }, this.attr = h('a', { class: 'fm-attr', href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener', hidden: true }, '© OpenStreetMap contributors'), h('span', { class: 'sch' }, 'Sơ đồ minh họa · vị trí trạm là giả lập')));
   }
   setMode(m) {
     this.mode = m;
@@ -256,7 +381,10 @@ export class MapScreen {
       n.ring.classList.toggle('pulse', r.status === 'crit' || r.status === 'warn');
       n.x1.style.display = r.online ? 'none' : '';
       if (n.val._t !== sub) { n.val._t = sub; n.val.textContent = sub; }
-      n.link.dataset.state = r.online ? 'up' : 'down'; n.pkt.style.display = MOTION && r.online && !r.dead ? '' : 'none';
+      n.link.dataset.state = r.online ? 'up' : 'down'; n.up = r.online && !r.dead;
+      // ống vào trạm: dòng chảy theo lưu lượng nước vào bể (FT-100); nguồn ngừng cấp thì ống "cạn"
+      const qin = f.app.net.smart[r.i].plant.q_in, fl = qin < 0.5 ? 'dry' : qin < 8 ? 'slow' : qin < 18 ? 'mid' : 'fast';
+      if (n.pipe && n.pipe._fl !== fl) { n.pipe._fl = fl; n.pipe.setAttribute('class', 'fm-pipe branch ' + fl); }
     }
     this.center.classList.toggle('alert', rows.some((r) => r.status === 'crit'));
     // danh sách trạm: trạm cần chú ý lên đầu (kèm lý do), trạm bình thường hiện số đo chính
@@ -271,6 +399,7 @@ export class MapScreen {
           h('i', { class: 'dot', style: `background:${STATUS_VAR[r.status]}` }), h('span', { class: 'fm-rt' }, h('b', {}, `${r.sid} · ${r.site.area}`), h('small', {}, sub(r))),
           r.status === 'ok' ? h('span') : h('span', { class: `chip ${r.status === 'crit' ? 'critical' : r.status === 'warn' ? 'warning' : r.status === 'sync' ? 'info' : 'off'}` }, FLEET_STATUS[r.status].label))));
     }
+    this.updateLinks();
     this._updCard(f, byId);
   }
   _updCard(f, byId) {

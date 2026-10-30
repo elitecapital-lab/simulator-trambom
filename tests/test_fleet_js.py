@@ -74,3 +74,26 @@ def test_js_fleet_runs_and_incidents_show_on_the_right_stations():
     # sau khi hết sự cố, mọi trạm quay lại bình thường hoặc đang xử lý – tiết kiệm điện vẫn dương toàn mạng
     assert r["totals"]["saved_pct"] > 10
     assert r["totals"]["households"] == sum(s["households"] for s in d["sites"])
+
+
+@pytest.mark.skipif(NODE is None, reason="cần Node.js để chạy bản JavaScript")
+def test_map_projection_is_web_mercator_like_osm_tiles():
+    """Marker trạm phải trùng khít nền OpenStreetMap: phép chiếu của bản đồ là Web Mercator (EPSG:3857), kiểm tra bằng công thức độc lập."""
+    import math
+
+    d = hanoi()
+    m = d["map"]
+    script = ("import { mapXY, mapAspect } from './web/js/sim/fleet.js';"
+              f"const m = {json.dumps(m)}, sites = {json.dumps(d['sites'])};"
+              "console.log(JSON.stringify({ a: mapAspect(m), p: sites.map((s) => mapXY(m, s.lon, s.lat)) }));")
+    out = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=True, cwd=ROOT)
+    r = json.loads(out.stdout)
+
+    def merc(lat):  # y của Web Mercator (đơn vị bán kính)
+        return math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+
+    ry = merc(m["lat1"]) - merc(m["lat0"])
+    assert abs(r["a"] - ry / math.radians(m["lon1"] - m["lon0"])) < 1e-9
+    for s, p in zip(d["sites"], r["p"]):
+        assert abs(p["x"] - (s["lon"] - m["lon0"]) / (m["lon1"] - m["lon0"])) < 1e-9
+        assert abs(p["y"] - (merc(m["lat1"]) - merc(s["lat"])) / ry) < 1e-9

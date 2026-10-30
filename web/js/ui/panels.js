@@ -303,7 +303,7 @@ export class Panels {
     const tot = net.totals();
     this.totals.replaceChildren(
       h('div', {}, h('b', {}, fmt(tot.smart_kwh, 0)), h('span', {}, `kWh thông minh · lịch cố định ${fmt(tot.fixed_kwh, 0)}`)),
-      h('div', {}, h('b', {}, tot.fixed_kwh > 0 ? fmt(100 * (1 - tot.smart_kwh / tot.fixed_kwh), 0) + ' %' : '–'), h('span', {}, 'tiết kiệm điện toàn mạng')),
+      h('div', {}, h('b', {}, tot.fixed_kwh > 0 && net.t >= 6 * 3600 ? fmt(100 * (1 - tot.smart_kwh / tot.fixed_kwh), 0) + ' %' : '–'), h('span', {}, 'tiết kiệm điện toàn mạng')),
       h('div', {}, h('b', {}, fmt(tot.smart_nrw_pct, 1) + ' %'), h('span', {}, `rò rỉ / nước cấp · cố định ${fmt(tot.fixed_nrw_pct, 1)} %`)));
     this.stTable.replaceChildren(...net.smart.map((s) => {
       const st = srv.stations[s.sid], l = st.last || {};

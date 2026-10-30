@@ -1,6 +1,6 @@
 // Các màn của khu Mạng lưới (ngoài bản đồ): danh sách trạm, báo động & tự xử lý, hiệu quả, kịch bản & triển khai.
 // Mọi số liệu lấy từ mô phỏng của từng trạm và từ MÁY CHỦ (đúng những gì trung tâm thực sự nhìn thấy).
-import { FLEET_STATUS } from '../sim/fleet.js';
+import { FLEET_STATUS, SAVINGS_MIN_S } from '../sim/fleet.js';
 import { TimeChart } from './charts.js';
 import { h, fmt, SEV_LABEL, tShort } from './dom.js';
 import { MODE_NAME, STRAT_NAME, viNum, viText } from './ops.js';
@@ -15,7 +15,7 @@ const stBtn = (f, sid, label) => h('button', { class: 'linkbtn mono', type: 'but
 const COLS = [
   ['status', 'Trạng thái', (r) => FLEET_STATUS[r.status].rank, 'l'], ['sid', 'Trạm', (r) => r.sid, 'l'], ['area', 'Khu vực', (r) => r.site.area, 'l'], ['mode', 'Chế độ', (r) => r.mode, 'l'],
   ['p', 'Áp ra (bar)', (r) => r.p, 'n'], ['pc', 'Áp bất lợi (bar) · logger', (r) => r.p_crit, 'n'], ['q', 'Lưu lượng (m³/h)', (r) => r.q, 'n'], ['lv', 'Mức bể (m)', (r) => r.level, 'n'],
-  ['kw', 'Công suất (kW)', (r) => r.kw, 'n'], ['wq', 'Clo / đục / pH', (r) => r.cl, 'n'], ['sv', 'Tiết kiệm điện *', (r) => (r.fixed_kwh > 0 ? 1 - r.energy_kwh / r.fixed_kwh : -1), 'n'], ['al', 'Báo động', (r) => r.alarms, 'n'], ['sp', 'Áp ra 6 giờ', null, 'l'],
+  ['kw', 'Công suất (kW)', (r) => r.kw, 'n'], ['wq', 'Clo / đục / pH', (r) => r.cl, 'n'], ['sv', 'Tiết kiệm điện *', (r) => r.saving_pct ?? -1e3, 'n'], ['al', 'Báo động', (r) => r.alarms, 'n'], ['sp', 'Áp ra 6 giờ', null, 'l'],
 ];
 export class ListScreen {
   constructor(fleet) {
@@ -66,7 +66,7 @@ export class ListScreen {
       if (c.mode._k !== mode + r.online) { c.mode._k = mode + r.online; c.mode.replaceChildren(h('span', { class: 'chip ' + ({ a: 'good', b: 'warning', c: 'info', d: 'critical', x: 'critical' }[mode]) }, ...modeChipTxt(MODE_NAME[mode].split(' – ')[0].replace('Mini PC lỗi · PID biến tần', 'Mini PC lỗi')))); }
       const stale = !r.online; // trung tâm chỉ có số liệu cũ khi trạm mất kết nối
       for (const [k, v] of [['p', fmt(r.p, 2)], ['pc', fmt(Math.max(0, r.p_crit), 2)], ['q', fmt(r.q, 1)], ['lv', fmt(r.level, 2)], ['kw', fmt(r.kw, 2)], ['wq', `${fmt(r.cl, 2)} / ${fmt(r.ntu, 2)} / ${fmt(r.ph, 1)}`],
-        ['sv', r.fixed_kwh > 0.5 ? fmt(100 * (1 - r.energy_kwh / r.fixed_kwh), 0) + ' %' : '–'], ['al', r.alarms ? String(r.alarms) : '–']]) T(c[k], v);
+        ['sv', r.saving_pct !== null ? fmt(r.saving_pct, 0) + ' %' : '–'], ['al', r.alarms ? String(r.alarms) : '–']]) T(c[k], v);
       c.tr.classList.toggle('stale', stale);
       c.p.classList.toggle('bad', Number.isFinite(r.p) && r.online && (r.p > 4.0)); c.pc.classList.toggle('bad', Number.isFinite(r.p_crit) && r.p_crit < 1.4 && r.online);
       c.al.classList.toggle('bad', r.crit > 0);
@@ -189,7 +189,7 @@ export class PerfScreen {
     const net = f.app.net, tariff = f.app.cfg.fleet.tariff_vnd_per_kwh, t = f.tot;
     const sum = net.smart.map((s) => s.kpi.summary(s.plant)), fs = net.fixed.map((s) => s.kpi.summary(s.plant));
     const S = (xs, k) => xs.reduce((a, x) => a + (x[k] ?? 0), 0);
-    const ready = net.t >= 900; // dưới 15 phút mô phỏng các tỉ lệ chưa có nghĩa
+    const ready = net.t >= SAVINGS_MIN_S; // so với lịch cố định chỉ có nghĩa khi đủ dài (lịch cố định tắt bơm ban đêm)
     const eS = S(sum, 'energy_kwh'), eF = S(fs, 'energy_kwh'), dS = S(sum, 'delivered_m3'), dF = S(fs, 'delivered_m3');
     const band = (xs) => xs.reduce((a, x) => a + x.pct_in_band, 0) / xs.length;
     const inc = (xs) => { const all = xs.flatMap((x) => x.incidents), det = all.filter((i) => i.detected !== null); return { n: all.length, det: det.length, avg: det.length ? det.reduce((a, i) => a + (i.detected - i.t), 0) / det.length / 60 : null }; };
@@ -200,7 +200,7 @@ export class PerfScreen {
       this._k = k;
       const card = (label, big, sub, cls = '') => h('div', { class: 'fl-tile ' + cls }, h('span', { class: 'lbl' }, label), h('b', {}, big), h('small', {}, sub));
       this.tiles.replaceChildren(
-        card('Điện năng tiết kiệm', ready ? fmt(saved, 0) + ' kWh' : '–', ready ? `${fmt(t.saved_pct, 1)} % · ≈ ${fmt(saved * tariff / 1000, 0)} nghìn đ (giá giả định)` : 'cần ≥ 15 phút mô phỏng', 'good'),
+        card('Điện năng tiết kiệm', ready ? fmt(saved, 0) + ' kWh' : '–', ready ? `${fmt(t.saved_pct, 1)} % · ≈ ${fmt(saved * tariff / 1000, 0)} nghìn đ (giá giả định)` : 'cần ≥ 6 giờ mô phỏng (lịch cố định tắt bơm ban đêm)', 'good'),
         card('Suất điện năng', ready ? fmt(dS > 0 ? eS / dS : null, 3) + ' kWh/m³' : '–', ready ? `lịch cố định ${fmt(dF > 0 ? eF / dF : null, 3)} kWh/m³` : ''),
         card('Rò rỉ trên mạng lưới', ready ? fmt(t.smart_nrw_pct, 1) + ' %' : '–', ready ? `lịch cố định ${fmt(t.fixed_nrw_pct, 1)} % · rò rỉ / nước cấp ra` : ''),
         card('Thời gian đạt dải áp', ready ? fmt(band(sum), 1) + ' %' : '–', ready ? `lịch cố định ${fmt(band(fs), 1)} % · trung bình ${sum.length} trạm` : ''),
@@ -208,7 +208,7 @@ export class PerfScreen {
         card('Số lần khởi động bơm', String(S(sum, 'starts_total')), `lịch cố định ${S(fs, 'starts_total')} · vi phạm chất lượng nước ${S(sum, 'quality_episodes')} lần`));
     }
     // thanh tiết kiệm theo trạm
-    const rows = f.rows.map((r) => ({ r, v: r.fixed_kwh > 0.5 ? 100 * (1 - r.energy_kwh / r.fixed_kwh) : null })).sort((x, y) => (y.v ?? -1) - (x.v ?? -1));
+    const rows = f.rows.map((r) => ({ r, v: r.saving_pct })).sort((x, y) => (y.v ?? -1) - (x.v ?? -1));
     const bk = rows.map((x) => x.r.sid + Math.round(x.v ?? -1)).join(',');
     if (bk !== this._bk) {
       this._bk = bk; const mx = Math.max(50, ...rows.map((x) => x.v ?? 0));

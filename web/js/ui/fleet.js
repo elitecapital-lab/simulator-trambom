@@ -72,7 +72,7 @@ export class FleetView {
     K.al.t.classList.toggle('crit', need > 0); K.al.t.classList.toggle('warn', open.length > 0 && !need);
     set(K.q.b, fmt(t.flow, 0)); set(K.q.s, 'm³/h cấp ra mạng lưới');
     set(K.kw.b, fmt(t.kw, 1)); set(K.kw.s, 'kW · ' + fmt(t.smart_kwh, 0) + ' kWh từ đầu');
-    set(K.sv.b, t.fixed_kwh > 1 ? fmt(t.saved_pct, 0) + ' %' : '–'); set(K.sv.s, t.fixed_kwh > 1 ? `${fmt(t.saved_kwh, 0)} kWh so với lịch cố định` : 'so với lịch cố định');
+    set(K.sv.b, t.saved_ready ? fmt(t.saved_pct, 0) + ' %' : '–'); set(K.sv.s, t.saved_ready ? `${fmt(t.saved_kwh, 0)} kWh so với lịch cố định` : 'so với lịch cố định · cần ≥ 6 giờ mô phỏng');
     set(K.hh.b, t.households.toLocaleString('vi-VN')); set(K.hh.s, 'hộ · ' + t.n + ' trạm, DMA riêng');
     for (const [k, b] of Object.entries(this.tabBtns)) { const el = b.querySelector('.fl-badge'); const n = k === 'alarm' ? need : k === 'list' ? bad : 0; set(el, n ? String(n) : ''); el.hidden = !n; }
     const clk = document.getElementById('clock-t')?.textContent, day = document.getElementById('clock-d')?.textContent;

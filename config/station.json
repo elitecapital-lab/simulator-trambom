@@ -248,10 +248,10 @@
     "alternate_daily": true
   },
   "stations": [
-    {"id": "ST-01", "name": "Trạm ST-01 · Khu dân cư A", "zone": "DMA-A", "demand_scale": 1.0, "dz_crit_m": 4.0, "seed_offset": 0, "x": 0.08, "y": 0.3},
-    {"id": "ST-02", "name": "Trạm ST-02 · Khu dân cư B", "zone": "DMA-B", "demand_scale": 0.75, "dz_crit_m": 7.0, "seed_offset": 101, "x": 0.42, "y": 0.1},
-    {"id": "ST-03", "name": "Trạm ST-03 · Khu tái định cư C", "zone": "DMA-C", "demand_scale": 1.25, "dz_crit_m": 2.0, "seed_offset": 202, "x": 0.6, "y": 0.8},
-    {"id": "ST-04", "name": "Trạm ST-04 · Khu nhà phố D", "zone": "DMA-D", "demand_scale": 0.55, "dz_crit_m": 5.0, "seed_offset": 303, "x": 0.2, "y": 0.88}
+    {"id": "ST-01", "name": "Trạm ST-01 · Khu dân cư A", "zone": "DMA-A", "demand_scale": 1.0, "dz_crit_m": 4.0, "seed_offset": 0},
+    {"id": "ST-02", "name": "Trạm ST-02 · Khu dân cư B", "zone": "DMA-B", "demand_scale": 0.75, "dz_crit_m": 7.0, "seed_offset": 101},
+    {"id": "ST-03", "name": "Trạm ST-03 · Khu tái định cư C", "zone": "DMA-C", "demand_scale": 1.25, "dz_crit_m": 2.0, "seed_offset": 202},
+    {"id": "ST-04", "name": "Trạm ST-04 · Khu nhà phố D", "zone": "DMA-D", "demand_scale": 0.55, "dz_crit_m": 5.0, "seed_offset": 303}
   ],
   "hardware": {
     "note": "Thiết bị có/không lắp (để mô phỏng giá trị của từng hạng mục). true = có lắp. Xem docs/07-hien-trang-va-giai-phap.md.",

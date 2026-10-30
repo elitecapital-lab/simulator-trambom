@@ -3,6 +3,7 @@
 import { FLEET_STATUS } from '../sim/fleet.js';
 import { h, fmt } from './dom.js';
 import { MODE_NAME, viNum } from './ops.js';
+import { ico } from './shell.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const S = (tag, attrs = {}, ...kids) => {
@@ -69,7 +70,7 @@ export class StationPanel {
       const hrs = (x) => a.net.t / 3600 + x;
       this.cardSpark = S('svg', { class: 'fd-spark', viewBox: '0 0 240 44', preserveAspectRatio: 'none', 'aria-hidden': 'true' }, S('line', { x1: 0, x2: 240, class: 'lo' }), S('line', { x1: 0, x2: 240, class: 'hi' }), S('polyline', { class: 'ln' }));
       this.cardHead = h('div', { class: 'fd-ch' }, h('div', {}, h('b', {}, `${r.sid} · ${s.area}`), h('small', {}, `${s.district} · ${s.kind} · ${s.households} hộ · ${s.zone}`)), this.cardChip = h('span', { class: 'chip' }),
-        h('button', { class: 'xbtn', type: 'button', 'aria-label': 'Bỏ chọn', onclick: () => f.select(null) }, '×'));
+        h('button', { class: 'xbtn', type: 'button', 'aria-label': 'Bỏ chọn', onclick: () => f.select(null) }, ico('x')));
       this.cardWhy = h('p', { class: 'fd-why' });
       c.replaceChildren(this.cardHead, this.cardWhy,
         h('div', { class: 'fd-mg' }, V('p', 'Áp ra', 'bar'), V('pc', 'Áp bất lợi', 'bar'), V('q', 'Lưu lượng', 'm³/h'), V('lv', 'Mức bể', 'm'), V('kw', 'Công suất', 'kW'), V('wq', 'Clo · đục · pH')),

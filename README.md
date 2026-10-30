@@ -61,7 +61,7 @@ Cách dùng giao diện:
 |---|---|
 | Xem toàn mạng, chọn một trạm | Màn **Mạng lưới**: nhấp thẻ (hoặc dòng trong bảng; nút **Thẻ \| Bảng** đổi kiểu xem), **Mở 3D** / **Mở HMI** |
 | Đổi trạm khi đang xem chi tiết | Ô chọn trạm và nút ‹ › trên thanh trên cùng |
-| Chạy, tạm dừng, tua nhanh, đổi kịch bản | Thanh trên cùng (màn hình hẹp: nút ☰) |
+| Chạy, tạm dừng, tua nhanh, đổi tốc độ, đổi kịch bản | Nút **Giả lập** trên thanh trên cùng: cửa sổ bật lên gồm kịch bản, mức độ, Chạy / Tạm dừng, +1 giờ, Chạy lại, tốc độ (nút cho biết đang chạy hay dừng) |
 | Xem biểu đồ, so sánh với lịch cố định | Nút **Biểu đồ** / **So sánh** trên thanh chức năng (tấm trượt từ dưới lên, cỡ S/M/L); bấm một thẻ chỉ số để mở đúng biểu đồ đó |
 | Điều khiển bơm, van trong 3D | Bấm vào bơm/van (hoặc nút **Điều khiển TAY**) → bảng điều khiển nổi; ở TỰ ĐỘNG các nút lệnh bị khóa cho tới khi chuyển TAY |
 | Xem thông số một thiết bị bất kỳ | Bấm vào thiết bị trong 3D hoặc trong mục **Thiết bị** |

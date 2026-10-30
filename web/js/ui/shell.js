@@ -36,6 +36,12 @@ const ICONS = {
   drop: '<path d="M12 2.5c3.6 4.4 6.5 7.9 6.5 11.6a6.5 6.5 0 0 1-13 0C5.5 10.4 8.4 6.9 12 2.5z"/>',
   cabinet: '<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><path d="M12 2.5v19M9.5 11v2M14.5 11v2"/>',
   city: '<path d="M3 21h18M5 21V8l5-3v16M10 21V10h5v11M15 21v-7h4v7"/>',
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  flask: '<path d="M9 3h6M10 3v6.2L4.6 18.4A2 2 0 0 0 6.3 21.5h11.4a2 2 0 0 0 1.7-3.1L14 9.2V3"/><path d="M7.6 15h8.8"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12.5 9 5 9-5M3 17l9 5 9-5"/>',
+  timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5M9.5 2.5h5"/>',
+  chevL: '<path d="m15 6-6 6 6 6"/>',
+  chevR: '<path d="m9 6 6 6-6 6"/>',
 };
 /** Biểu tượng SVG nét mảnh (viewBox 24). */
 export function ico(k, cls = 'ico') {
@@ -108,6 +114,13 @@ export class Shell {
     $('btn-reset').setAttribute('aria-label', 'Chạy lại');
     $('btn-guide').append(ico('help'), h('span', { class: 'bt' }, 'Hướng dẫn'));
     $('btn-guide').setAttribute('aria-label', 'Hướng dẫn');
+    $('st-prev').replaceChildren(ico('chevL')); $('st-next').replaceChildren(ico('chevR'));
+    // cửa sổ "Giả lập": kịch bản, mức độ, chạy / tạm dừng, tốc độ – chỉ mở khi cần; nút trên thanh trên luôn cho biết đang chạy hay dừng
+    for (const [id, icon] of [['tg-sc', 'flask'], ['tg-lvl', 'layers'], ['tg-run', 'play'], ['tg-speed', 'timer']]) $(id).querySelector('.gl').prepend(ico(icon, 'ico ico-s'));
+    this.popSim = $('pop-sim'); this.simBtn = $('btn-sim');
+    this.simDot = h('i', { class: 'live' }); this.simVal = h('span', { class: 'sim-v' }, 'Dừng');
+    this.simBtn.append(ico('sliders'), h('span', { class: 'sim-t' }, 'Giả lập'), h('span', { class: 'sim-st' }, this.simDot, this.simVal));
+    this.simBtn.addEventListener('click', (e) => this.togglePop(this.popSim, this.simBtn, e));
     this.menuBtn = $('btn-menu');
     this.menuBtn.append(ico('menu'));
     this.menuBtn.setAttribute('aria-label', 'Thêm điều khiển');
@@ -135,10 +148,9 @@ export class Shell {
     const $ = (id) => document.getElementById(id);
     const grp = (id, max) => { const el = $(id), ph = document.createComment(id); el.before(ph); return { el, ph, max, menu: true }; };
     const cls = (el, c, max) => ({ el, c, max });
-    // thứ tự thu gọn: nút +1 giờ / chạy lại và nút phụ vào menu trước; kịch bản, mức độ, tốc độ mô phỏng, ô chọn trạm giữ lại lâu nhất
-    this.steps = [cls($('modes'), 'compact', 1600), cls(this.top.querySelector('.brand-long'), 'tb-hide', 720), grp('tg-run', 900), grp('tg-misc', 900),
-      grp('tg-sc', 720), grp('tg-lvl', 900), grp('tg-speed', 900), grp('tg-st', 720), grp('tg-modes', 720)];
-    const order = ['tg-st', 'tg-sc', 'tg-lvl', 'tg-run', 'tg-speed', 'tg-modes', 'tg-misc'];
+    // thứ tự thu gọn: nút phụ vào menu trước; ô chọn trạm và chế độ gateway giữ lại lâu hơn (điều khiển giả lập đã nằm sẵn trong cửa sổ "Giả lập")
+    this.steps = [cls($('modes'), 'compact', 1600), cls(this.top.querySelector('.brand-long'), 'tb-hide', 720), grp('tg-misc', 900), grp('tg-st', 720), grp('tg-modes', 720)];
+    const order = ['tg-st', 'tg-modes', 'tg-misc'];
     const apply = () => {
       for (const s of this.steps) {
         if (!s.menu) { s.el.classList.toggle(s.c, s.on); continue; }
@@ -184,8 +196,17 @@ export class Shell {
     if (btn._run === running) return;
     btn._run = running;
     btn.replaceChildren(ico(running ? 'pause' : 'play'), h('span', { class: 'bt-play' }, running ? 'Tạm dừng' : 'Chạy'));
-    btn.setAttribute('aria-label', running ? 'Tạm dừng mô phỏng' : 'Chạy mô phỏng');
+    btn.setAttribute('aria-label', running ? 'Tạm dừng giả lập' : 'Chạy giả lập');
     btn.classList.toggle('running', running);
+  }
+  /** Trạng thái trên nút "Giả lập": chấm sáng + tốc độ khi đang chạy, "Dừng" khi tạm dừng. */
+  setSim(running, speed) {
+    const k = running ? '×' + speed : 'Dừng';
+    if (this.simBtn._k === k) return;
+    this.simBtn._k = k;
+    this.simDot.classList.toggle('on', running);
+    T(this.simVal, k);
+    this.simBtn.setAttribute('aria-label', running ? `Giả lập: đang chạy ×${speed}` : 'Giả lập: đang tạm dừng');
   }
   setTheme(btn, kind, label) {
     btn.replaceChildren(ico({ '': 'auto', light: 'sun', dark: 'moon' }[kind]), h('span', { class: 'bt' }, label));
@@ -644,9 +665,12 @@ export class Shell {
   _placePop() {
     const { el, btn } = this.pop, s = el.style;
     s.left = s.right = s.top = s.bottom = '';
-    if (el === this.menu) {
+    if (el === this.menu || el === this.popSim) {
       s.top = (this.top.getBoundingClientRect().bottom + 6) + 'px';
-      if (!this.mqMobile.matches) s.right = Math.max(8, innerWidth - btn.getBoundingClientRect().right) + 'px';
+      if (this.mqMobile.matches) return;
+      const br = btn.getBoundingClientRect();
+      if (el === this.popSim) s.left = Math.max(8, Math.min(br.left, innerWidth - el.offsetWidth - 8)) + 'px';
+      else s.right = Math.max(8, innerWidth - br.right) + 'px';
       return;
     }
     const r = btn.getBoundingClientRect(), d = this.dockEl.getBoundingClientRect();

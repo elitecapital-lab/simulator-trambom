@@ -308,7 +308,7 @@ class App {
     return { sid: this.st.sid, plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
   }
   _syncHeader() {
-    this.shell.setPlay(this.playBtn, this.running);
+    this.shell.setPlay(this.playBtn, this.running); this.shell.setSim(this.running, this.speed);
     document.querySelectorAll('#speed-seg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === this.speed));
     document.querySelectorAll('#lvl-seg button').forEach((b) => b.classList.toggle('on', b.dataset.lvl === this.level));
     if (!this.st) return;

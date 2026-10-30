@@ -152,7 +152,7 @@ body.view-fleet .hud, body.view-fleet .dock, body.view-fleet .side, body.view-fl
 .topbar .gl.m, .topbar .bt { display: none; }
 .topbar .btn { min-height: 34px; }
 #sc-select { width: clamp(130px, 12vw, 260px); text-overflow: ellipsis; }
-#btn-play { width: 116px; justify-content: center; } /* bề rộng cố định: Chạy ↔ Tạm dừng không làm thanh trên xếp lại */
+#btn-play { min-width: 116px; justify-content: center; } /* bề rộng cố định: Chạy ↔ Tạm dừng không làm nút đổi cỡ */
 #btn-play.running { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
 #btn-play.running:hover { border-color: var(--ink-2); }
 #speed-seg button { padding: 5px 6px; font: 500 12.5px var(--f-mono); }
@@ -210,6 +210,17 @@ body.view-hmi .topbar .btn.icon { width: 30px; }
 .menu .modes.compact .mode:not(.on):not(.m-x) { display: inline-block; }
 .btn.icon.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .menu .modes { gap: 4px; }
+/* nút mở cửa sổ "Giả lập" trên thanh trên: biểu tượng + chữ + chấm trạng thái (sáng khi đang chạy) và tốc độ; hẹp thì chỉ còn biểu tượng và chấm */
+.sim-btn { gap: 7px; padding-inline: 10px; }
+.sim-btn .sim-st { display: inline-flex; align-items: center; gap: 6px; }
+.sim-v { min-width: 3.4ch; font: 500 12.5px var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.sim-btn.on .sim-v { color: inherit; }
+/* cửa sổ "Giả lập": mỗi mục có biểu tượng riêng; Chạy / +1 giờ / Chạy lại thành một hàng */
+.ico-s { width: 14px; height: 14px; margin-right: 6px; flex: none; }
+.pop-sim .gl { display: flex; align-items: center; }
+.pop-sim .tb-run { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.pop-sim .tb-run .gl { grid-column: 1 / -1; }
+.pop-sim #btn-play { width: 100%; }
 .cam-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .cam-btn { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--surface); cursor: pointer; min-height: 52px; }
@@ -592,8 +603,7 @@ textarea.code { width: 100%; min-height: 260px; font: 12px/1.45 var(--f-mono); b
   body.view-fleet .brand h1 { display: none; } body:not(.view-fleet) .brand-co { display: none; }
   .brand h1 { padding-left: 0; border-left: 0; }
   .brand h1 { font-size: 18px; }
-  #btn-play { min-width: 0; width: 38px; padding: 0; }
-  .bt-play { display: none; }
+  .sim-btn { padding-inline: 8px; gap: 5px; } .sim-t, .sim-v { display: none; }
   .clock { width: auto; min-width: 0; }
   .clock b { font-size: 14.5px; }
   .clock span { font-size: 10px; }

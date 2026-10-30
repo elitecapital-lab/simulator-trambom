@@ -32,14 +32,8 @@
     <h1><b id="brand-st">ST-01</b><span class="brand-long" id="brand-long"> · Trạm bơm tăng áp</span></h1>
   </button>
   <div class="tb-grp" id="tg-st"><span class="lbl gl m">Trạm đang xem</span><button class="btn icon" id="st-prev" aria-label="Trạm trước" title="Trạm trước">‹</button><select id="st-select" aria-label="Chọn trạm" title="Chọn trạm để xem chi tiết"></select><button class="btn icon" id="st-next" aria-label="Trạm sau" title="Trạm sau">›</button></div>
-  <div class="tb-grp" id="tg-sc"><label class="lbl gl m" for="sc-select">Kịch bản</label><select id="sc-select" aria-label="Kịch bản" title="Chọn kịch bản thí nghiệm"></select></div>
-  <div class="tb-grp" id="tg-lvl"><span class="lbl gl m">Mức độ kịch bản điều khiển</span><div class="seg" id="lvl-seg" role="group" aria-label="Mức độ kịch bản điều khiển"><button data-lvl="basic" title="Điều khiển theo ngưỡng">Cơ bản</button><button data-lvl="advanced" title="Điều khiển dự báo">Nâng cao</button></div></div>
-  <div class="tb-run">
-    <button class="btn primary" id="btn-play"></button>
-    <div class="tb-grp" id="tg-run"><span class="lbl gl m">Mô phỏng</span><button class="btn" id="btn-skip" title="Chạy nhanh thêm 1 giờ mô phỏng"></button><button class="btn" id="btn-reset" title="Chạy lại kịch bản từ đầu"></button></div>
-  </div>
-  <div class="tb-grp" id="tg-speed" title="Tốc độ mô phỏng"><span class="lbl gl m">Tốc độ mô phỏng</span><div class="seg" id="speed-seg" role="group" aria-label="Tốc độ mô phỏng"></div><span class="note" id="speed-real"></span></div>
-  <div class="clock" id="clock" aria-live="off" title="Thời gian mô phỏng"><b id="clock-t">–</b><span id="clock-d"></span></div>
+  <div class="clock" id="clock" aria-live="off" title="Thời gian giả lập"><b id="clock-t">–</b><span id="clock-d"></span></div>
+  <button class="btn sim-btn" id="btn-sim" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pop-sim" title="Giả lập: kịch bản, chạy / tạm dừng, tốc độ"></button>
   <div class="tb-grp" id="tg-modes"><span class="lbl gl m">Chế độ gateway</span>
     <div class="modes" id="modes" aria-label="Chế độ vận hành của gateway">
       <span class="mode m-a" data-m="a" title="(a) Bình thường – có kết nối máy chủ">(a)<span class="mn"> Bình thường</span></span><span class="mode m-b" data-m="b" title="(b) Mất mạng – gateway tự vận hành bằng kịch bản đã lưu">(b)<span class="mn"> Tự vận hành</span></span><span class="mode m-c" data-m="c" title="(c) Đồng bộ sau khi khôi phục kết nối">(c)<span class="mn"> Đồng bộ</span></span><span class="mode m-d" data-m="d" title="(d) Cảnh báo / dừng an toàn">(d)<span class="mn"> Cảnh báo<span class="mn2"> / an toàn</span></span></span><span class="mode m-x" data-m="x" title="Mini PC (edge gateway) ngừng – biến tần tự chạy PID nội">Mini PC lỗi</span>
@@ -50,7 +44,20 @@
   <div class="tb-grp" id="tg-misc"><span class="lbl gl m">Khác</span><button class="btn icon" id="btn-guide" title="Hướng dẫn: sơ đồ khối, bảng ngưỡng, chọn kịch bản"></button><button class="btn icon" id="btn-theme"></button></div>
   <button class="btn icon" id="btn-menu" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Thêm điều khiển"></button>
 </header>
-<div class="pop menu glass" id="menu" hidden role="dialog" aria-label="Điều khiển mô phỏng"></div>
+<div class="pop menu glass" id="menu" hidden role="dialog" aria-label="Thêm điều khiển"></div>
+<div class="pop menu pop-sim glass" id="pop-sim" hidden role="dialog" aria-label="Giả lập">
+  <div class="pop-h">Giả lập</div>
+  <div class="menu-body">
+  <div class="tb-grp" id="tg-sc"><label class="lbl gl m" for="sc-select">Kịch bản</label><select id="sc-select" aria-label="Kịch bản" title="Chọn kịch bản thí nghiệm"></select></div>
+  <div class="tb-grp" id="tg-lvl"><span class="lbl gl m">Mức độ kịch bản điều khiển</span><div class="seg" id="lvl-seg" role="group" aria-label="Mức độ kịch bản điều khiển"><button data-lvl="basic" title="Điều khiển theo ngưỡng">Cơ bản</button><button data-lvl="advanced" title="Điều khiển dự báo">Nâng cao</button></div></div>
+  <div class="tb-run" id="tg-run"><span class="lbl gl m">Chạy</span>
+    <button class="btn primary" id="btn-play"></button>
+    <button class="btn" id="btn-skip" title="Chạy nhanh thêm 1 giờ giả lập"></button>
+    <button class="btn" id="btn-reset" title="Chạy lại kịch bản từ đầu"></button>
+  </div>
+  <div class="tb-grp" id="tg-speed" title="Tốc độ giả lập"><span class="lbl gl m">Tốc độ</span><div class="seg" id="speed-seg" role="group" aria-label="Tốc độ giả lập"></div><span class="note" id="speed-real"></span></div>
+  </div>
+</div>
 
 <div class="banner" id="banner" hidden role="status"></div>
 <div class="hud" id="hud" aria-label="Chỉ số vận hành chính"></div>

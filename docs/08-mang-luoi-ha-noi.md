@@ -21,7 +21,7 @@ HMI y như bản một trạm.
 | Đổi trạm khi đang xem chi tiết | Ô chọn trạm và hai nút ‹ › trên thanh trên |
 | Gây sự cố để xem hệ thống phản ứng | Chọn một thẻ → **Giả lập sự cố tại trạm này** ở cột phải, hoặc mục **Sự cố** ở màn chi tiết |
 
-Tốc độ mặc định ×300 (1 giờ mô phỏng ≈ 12 giây) để thấy hết kịch bản sự cố trong vài phút; chỉnh bằng dải ×1…×3600 trên thanh trên.
+Tốc độ mặc định ×300 (1 giờ mô phỏng ≈ 12 giây) để thấy hết kịch bản sự cố trong vài phút; chỉnh bằng dải ×1…×3600 trong cửa sổ **Giả lập** (nút trên thanh trên, cùng chỗ với Chạy / Tạm dừng, +1 giờ và chọn kịch bản).
 
 ## Bốn màn
 

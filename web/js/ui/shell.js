@@ -51,7 +51,7 @@ export const PANES = {
   equip: ['Thiết bị', 'equip', 'Thiết bị: hiện trạng / giải pháp / khuyến nghị', 'Danh mục thiết bị, thử bỏ bớt thiết bị “nếu không lắp”'],
   fault: ['Sự cố', 'zap', 'Tạo sự cố để thử nghiệm', 'Ngắt 4G, mini PC treo, nước nguồn bẩn, lỗi bơm, lỗi cảm biến…'],
   script: ['Kịch bản', 'code', 'Kịch bản điều khiển & lệnh', 'Tham số kịch bản, lệnh từ trung tâm, kịch bản của học viên'],
-  center: ['Trung tâm', 'server', 'Trung tâm điều hành', 'Dữ liệu máy chủ nhận được từ 4 trạm, cảnh báo tập trung'],
+  center: ['Trung tâm', 'server', 'Trung tâm điều hành', 'Dữ liệu máy chủ nhận được từ các trạm, cảnh báo tập trung'],
   log: ['Nhật ký', 'list', 'Nhật ký sự kiện', 'Nhật ký gateway và máy chủ'],
   lesson: ['Bài học', 'book', 'Bài học & câu hỏi', 'Mục tiêu kịch bản, câu hỏi phân tích, gợi ý quan sát'],
 };
@@ -135,9 +135,10 @@ export class Shell {
     const $ = (id) => document.getElementById(id);
     const grp = (id, max) => { const el = $(id), ph = document.createComment(id); el.before(ph); return { el, ph, max, menu: true }; };
     const cls = (el, c, max) => ({ el, c, max });
-    this.steps = [cls($('modes'), 'compact', 1600), cls(this.top.querySelector('.brand-long'), 'tb-hide', 720), grp('tg-lvl', 900), grp('tg-misc', 900),
-      grp('tg-run', 900), grp('tg-speed', 900), grp('tg-sc', 720), grp('tg-modes', 720)];
-    const order = ['tg-sc', 'tg-lvl', 'tg-run', 'tg-speed', 'tg-modes', 'tg-misc'];
+    // thứ tự thu gọn: nút +1 giờ / chạy lại và nút phụ vào menu trước; kịch bản, mức độ, tốc độ mô phỏng, ô chọn trạm giữ lại lâu nhất
+    this.steps = [cls($('modes'), 'compact', 1600), cls(this.top.querySelector('.brand-long'), 'tb-hide', 720), grp('tg-run', 900), grp('tg-misc', 900),
+      grp('tg-sc', 720), grp('tg-lvl', 900), grp('tg-speed', 900), grp('tg-st', 720), grp('tg-modes', 720)];
+    const order = ['tg-st', 'tg-sc', 'tg-lvl', 'tg-run', 'tg-speed', 'tg-modes', 'tg-misc'];
     const apply = () => {
       for (const s of this.steps) {
         if (!s.menu) { s.el.classList.toggle(s.c, s.on); continue; }

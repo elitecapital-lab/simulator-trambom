@@ -55,9 +55,7 @@
 .hmi .h-bfull b { display: block; font-size: 14.5px; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hmi .h-bshort { display: none; font-size: 15px; letter-spacing: 0.04em; }
 .hmi .h-logo { width: 34px; height: 34px; flex: none; }
-.hmi .h-logo-c { fill: #0d2c4f; stroke: #8ccaff; stroke-width: 1.4; }
-.hmi .h-logo-d { fill: #3cb6ff; }
-.hmi .h-logo-s { fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; }
+.hmi .h-logo { object-fit: contain; }
 .hmi .h-ttl { flex: 1 1 auto; min-width: 0; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 0.07em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
 .hmi .h-ttl small { display: inline-block; font-size: 11px; padding: 1px 5px; margin-right: 9px; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 3px; vertical-align: 2px; letter-spacing: 0.04em; }
 .hmi .h-hright { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }

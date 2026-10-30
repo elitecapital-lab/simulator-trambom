@@ -116,6 +116,7 @@ export class Panels {
   buildFaults(pane) {
     const a = this.app;
     const sel = h('select', { id: 'fault-station' }, ...a.cfg.stations.map((s) => h('option', { value: s.id }, s.name)));
+    sel.value = a.focusId; // mặc định là trạm đang xem
     const ev = (e) => a.event({ ...e, station: sel.value });
     const hrs = (x) => a.st.t / 3600 + x;
     const B = (label, fn, cls = '') => h('button', { class: 'btn ' + cls, onclick: fn }, label);
@@ -156,7 +157,7 @@ export class Panels {
   }
   updateFaults() {
     if (!this.linkBtn) return;
-    const sid = document.getElementById('fault-station')?.value ?? 'ST-01';
+    const sid = document.getElementById('fault-station')?.value ?? this.app.focusId;
     const s = this.app.net.smart[this.app.net.by_id[sid]];
     this.linkBtn.textContent = s.link.up ? 'Ngắt kết nối 4G' : 'Khôi phục kết nối 4G';
     this.linkBtn.className = 'btn ' + (s.link.up ? 'danger' : 'primary');
@@ -193,7 +194,7 @@ export class Panels {
     this.loadParams = load;
     const ov = h('input', { type: 'number', step: '0.05', value: '2.8', id: 'cmd-ov', style: 'width:80px' });
     const ovTtl = h('input', { type: 'number', step: '5', value: '15', id: 'cmd-ttl', style: 'width:70px' });
-    const cmd = (type, args = {}, ttl = 1800) => a.server.sendCommand('ST-01', type, args, a.st.t, ttl);
+    const cmd = (type, args = {}, ttl = 1800) => a.server.sendCommand(a.st.sid, type, args, a.st.t, ttl);
     this.code = h('textarea', { class: 'code', id: 'student-code', spellcheck: 'false' });
     this.code.value = TEMPLATE_TODO;
     this.codeStatus = h('p', { class: 'note' });
@@ -203,7 +204,7 @@ export class Panels {
         h('div', { class: 'row', style: 'margin-bottom:6px' }, h('label', { for: 'p-strategy' }, 'Chiến lược '), this.stratSel), grid,
         h('div', { class: 'row', style: 'margin-top:8px' },
           h('button', { class: 'btn', onclick: () => { const p = patch(); if (!Object.keys(p).length) return a.toast('Chưa thay đổi tham số nào'); a.st.gw.localEdit(p, a.st.t, 'Học viên tại HMI', 'thử nghiệm'); a.toast('Đã sửa tại HMI trạm'); } }, 'Sửa tại HMI trạm'),
-          h('button', { class: 'btn primary', onclick: () => { const p = patch(); const strat = this.stratSel.value !== a.st.gw.script.strategy ? this.stratSel.value : null; if (!Object.keys(p).length && !strat) return a.toast('Chưa thay đổi tham số nào'); a.server.publishScript('ST-01', p, a.st.t, 'Học viên (trung tâm)', 'thử nghiệm', strat); a.toast('Đã phát hành từ trung tâm'); } }, 'Phát hành từ trung tâm'),
+          h('button', { class: 'btn primary', onclick: () => { const p = patch(); const strat = this.stratSel.value !== a.st.gw.script.strategy ? this.stratSel.value : null; if (!Object.keys(p).length && !strat) return a.toast('Chưa thay đổi tham số nào'); a.server.publishScript(a.st.sid, p, a.st.t, 'Học viên (trung tâm)', 'thử nghiệm', strat); a.toast('Đã phát hành từ trung tâm'); } }, 'Phát hành từ trung tâm'),
           h('button', { class: 'btn', onclick: load }, 'Đọc lại')),
         h('p', { class: 'note' }, 'Thử: ngắt mạng ở mục Sự cố, sửa cùng một tham số tại HMI và từ trung tâm với hai giá trị khác nhau, rồi khôi phục mạng để xem luật hợp nhất 3 chiều.')),
       h('div', { class: 'sec' }, h('span', { class: 'lbl' }, 'Lệnh từ trung tâm (có thời hạn)'),
@@ -245,7 +246,7 @@ export class Panels {
     const a = this.app, gw = a.st.gw;
     this.scriptInfo.textContent = `v${gw.script.version} · ${STRAT_TXT[gw.script.strategy] || gw.script.strategy} · tác giả: ${gw.script.author ?? 'máy chủ'} · hash ${gw.script.hash}${gw.script.local_modified ? ' · có chỉnh sửa tại chỗ chưa đồng bộ (' + gw.local_changes.length + ')' : ''}`;
     if (a.studentLoaded && !gw.custom_fn) this.codeStatus.textContent = 'Kịch bản học viên bị lỗi khi chạy – gateway đã chuyển về kịch bản dựng sẵn (xem Nhật ký).';
-    const log = a.server.stations['ST-01'].sync_log;
+    const log = a.server.stations[a.st.sid].sync_log;
     const key = log.length;
     if (key === this._syncKey) return;
     this._syncKey = key;
@@ -261,6 +262,8 @@ export class Panels {
   // ---------------- Trung tâm điều hành ----------------
   buildCenter(pane) {
     this.map = h('div', { class: 'netmap' });
+    if (this.app.fleet) this.map = h('div', { class: 'netmap-go' }, h('button', { class: 'btn primary', onclick: () => this.app.setView('fleet') }, 'Mở màn Mạng lưới (bản đồ Hà Nội)'),
+      h('p', { class: 'note' }, 'Bản đồ, danh sách, báo động tập trung và hiệu quả của toàn mạng. Nhấp một dòng trong bảng dưới đây để xem chi tiết trạm đó.'));
     this.stTable = h('tbody');
     this.totals = h('div', { class: 'hero' });
     this.centralAlarms = h('div');
@@ -277,6 +280,7 @@ export class Panels {
   updateCenter() {
     const a = this.app, srv = a.server, net = a.net;
     const W = 360, H = 220;
+    if (a.fleet) { this._centerRows(); return; }
     const parts = [`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ mạng lưới các trạm"><rect x="0" y="0" width="${W}" height="${H}" rx="8" style="fill:var(--surface-2)"/>`,
       `<text x="14" y="22" style="font:600 12px var(--f-label);fill:var(--muted);letter-spacing:.05em">ỐNG TRUYỀN TẢI THÀNH PHỐ</text>`,
       `<path d="M10 ${H / 2} C 120 ${H / 2 - 40}, 220 ${H / 2 + 40}, ${W - 10} ${H / 2}" style="fill:none;stroke:var(--water);stroke-width:4;opacity:.6"/>`];
@@ -292,6 +296,10 @@ export class Panels {
     }
     parts.push('</svg>');
     this.map.innerHTML = parts.join('');
+    this._centerRows();
+  }
+  _centerRows() {
+    const a = this.app, srv = a.server, net = a.net;
     const tot = net.totals();
     this.totals.replaceChildren(
       h('div', {}, h('b', {}, fmt(tot.smart_kwh, 0)), h('span', {}, `kWh thông minh · lịch cố định ${fmt(tot.fixed_kwh, 0)}`)),
@@ -299,7 +307,7 @@ export class Panels {
       h('div', {}, h('b', {}, fmt(tot.smart_nrw_pct, 1) + ' %'), h('span', {}, `rò rỉ / nước cấp · cố định ${fmt(tot.fixed_nrw_pct, 1)} %`)));
     this.stTable.replaceChildren(...net.smart.map((s) => {
       const st = srv.stations[s.sid], l = st.last || {};
-      return h('tr', {}, h('td', {}, s.sid), h('td', {}, h('span', { class: 'chip ' + (st.online ? ({ a: 'good', b: 'warning', c: 'info', d: 'critical' }[l.mode] || 'good') : 'off') }, ...(st.online ? modeChipTxt('(' + (l.mode || 'a') + ')') : ['mất']))),
+      return h('tr', { class: 'rowgo' + (s.sid === a.focusId ? ' cur' : ''), title: 'Xem chi tiết ' + s.sid, onclick: () => a.focusStation(s.sid) }, h('td', {}, s.sid), h('td', {}, h('span', { class: 'chip ' + (st.online ? ({ a: 'good', b: 'warning', c: 'info', d: 'critical' }[l.mode] || 'good') : 'off') }, ...(st.online ? modeChipTxt('(' + (l.mode || 'a') + ')') : ['mất']))),
         h('td', { class: 'num' }, fmt(l.p, 2)), h('td', { class: 'num' }, fmt(l.q, 1)), h('td', { class: 'num' }, fmt(l.kw, 2)), h('td', { class: 'num' }, fmt(l.kwh, 1)));
     }));
     const al = [...srv.alarms.values()].sort((x, y) => y.t - x.t);
@@ -311,13 +319,13 @@ export class Panels {
         x.acked || x.code === 'STATION_OFFLINE' ? h('span') : h('button', { class: 'btn small', onclick: () => srv.ackAlarm(x.station, x.code, a.st.t) }, 'Xác nhận'))) : [h('p', { class: 'note' }, 'Không có cảnh báo tập trung.')]));
     }
     const up = net.smart.reduce((s, x) => s + x.link.bytes_up, 0), dn = net.smart.reduce((s, x) => s + x.link.bytes_down, 0);
-    this.traffic.textContent = `Lên ${fmt(up / 1e6, 2)} MB · xuống ${fmt(dn / 1e6, 2)} MB (4 trạm). ST-01: ${a.st.gw.comms.stats.generated} bản ghi đo xa, máy chủ nhận ${srv.stations['ST-01'].records}, trong đó ${srv.stations['ST-01'].late} bản ghi đến muộn sau đồng bộ.`;
+    this.traffic.textContent = `Lên ${fmt(up / 1e6, 2)} MB · xuống ${fmt(dn / 1e6, 2)} MB (${net.smart.length} trạm). ${a.st.sid}: ${a.st.gw.comms.stats.generated} bản ghi đo xa, máy chủ nhận ${srv.stations[a.st.sid].records}, trong đó ${srv.stations[a.st.sid].late} bản ghi đến muộn sau đồng bộ.`;
     this.app.setBadge('center', al.filter((x) => !x.acked && x.sev !== 'info').length);
   }
 
   // ---------------- Nhật ký ----------------
   buildLog(pane) {
-    this.logSel = h('select', { id: 'log-filter', onchange: () => { this.logSeen = -1; } }, h('option', { value: 'all' }, 'Gateway + máy chủ'), h('option', { value: 'gw' }, 'Chỉ gateway ST-01'), h('option', { value: 'srv' }, 'Chỉ máy chủ'), h('option', { value: 'alarm' }, 'Chỉ báo động & an toàn'));
+    this.logSel = h('select', { id: 'log-filter', onchange: () => { this.logSeen = -1; } }, h('option', { value: 'all' }, 'Gateway + máy chủ'), h('option', { value: 'gw' }, 'Chỉ gateway trạm đang xem'), h('option', { value: 'srv' }, 'Chỉ máy chủ'), h('option', { value: 'alarm' }, 'Chỉ báo động & an toàn'));
     this.logBox = h('div', { class: 'log' });
     pane.append(h('div', { class: 'row', style: 'margin-bottom:8px' }, this.logSel), this.logBox);
   }

@@ -1,9 +1,11 @@
 // Điểm vào của bản mô phỏng 3D trên trình duyệt.
+import { applyFleet } from './sim/fleet.js';
 import { NetworkSim } from './sim/network.js';
 import { fmtClock } from './sim/util.js';
 import { TimeChart } from './ui/charts.js';
 import { Control3D } from './ui/control3d.js';
 import { h, fmt } from './ui/dom.js';
+import { FleetView } from './ui/fleet.js';
 import { HmiView } from './ui/hmi.js';
 import { Intro } from './ui/intro.js';
 import { COMMS_NAME, CTL_NAME, MODE_NAME, modeSev, stationData, STRAT_NAME, viNum } from './ui/ops.js';
@@ -15,8 +17,9 @@ async function loadData() {
   if (window.__TRAMBOM_DATA__) return window.__TRAMBOM_DATA__;
   const base = new URL('../../config/', import.meta.url);
   const get = async (n) => { const r = await fetch(new URL(n, base)); if (!r.ok) throw new Error(n + ': ' + r.status); return r.json(); };
-  const [station, scen, comps] = await Promise.all([get('station.json'), get('scenarios.json'), get('components.json')]);
-  return { station, scenarios: scen.scenarios, components: comps.components };
+  // hanoi.json là tùy chọn: thiếu thì chỉ còn bản một trạm như trước
+  const [station, scen, comps, hanoi] = await Promise.all([get('station.json'), get('scenarios.json'), get('components.json'), get('hanoi.json').catch(() => null)]);
+  return { station, scenarios: scen.scenarios, components: comps.components, hanoi };
 }
 
 const SPEEDS = [1, 10, 60, 300, 1200, 3600];
@@ -38,10 +41,13 @@ const MODE_BANNER = {
 
 class App {
   constructor(data) {
-    this.baseCfg = data.station; this.cfg = structuredClone(data.station); this.scenarios = data.scenarios; this.components = data.components;
+    // Mạng lưới Hà Nội (config/hanoi.json): ghi đè danh sách trạm và thêm kịch bản H1; thiếu tệp thì chỉ có bản một trạm.
+    this.hanoi = data.hanoi ?? null;
+    this.baseCfg = this.hanoi ? applyFleet(data.station, this.hanoi) : data.station; this.cfg = structuredClone(this.baseCfg);
+    this.scenarios = this.hanoi ? [this.hanoi.scenario, ...data.scenarios] : data.scenarios; this.components = data.components;
     document.getElementById('boot')?.remove();
     this.speed = 60; this.running = false; this.acc = 0; this.win = 86400; this.studentLoaded = false;
-    this.viewMode = '3d'; this.curTab = null;
+    this.viewMode = '3d'; this.curTab = null; this.focusId = 'ST-01'; this.feed = [];
     this.panels = new Panels(this);
     this.shell = new Shell(this);
     this._initHeader();
@@ -51,13 +57,22 @@ class App {
     this.ctl3d = new Control3D(this, vp);
     this.setScope('all');
     this.hmi = new HmiView(vp, this);
+    this.fleet = this.hanoi ? new FleetView(vp, this) : null;
     document.querySelectorAll('#view-seg button').forEach((b) => b.addEventListener('click', () => this.setView(b.dataset.view)));
     this._initCharts();
     this.panels.buildKpi(document.getElementById('kpi'));
     this._initDrawer();
-    this.intro = new Intro(document.getElementById('intro'), this.cfg, this.scenarios, (sc, lvl) => this.start(sc, lvl));
-    const m = location.hash.match(/^#(S\d+B?|S0)(?:-(basic|advanced))?(?:-(hmi|3d))?$/i);
-    if (m) { this.intro.hide(); this.start(m[1].toUpperCase(), m[2] || 'basic'); if (m[3]) this.setView(m[3].toLowerCase()); } else { this.start('S1', 'basic', false); this.intro.show(0); }
+    this.intro = new Intro(document.getElementById('intro'), this.cfg, this.scenarios, (sc, lvl) => { this.start(sc, lvl); if (sc === 'H1') this.setView('fleet'); else if (this.viewMode === 'fleet') this.setView('3d'); });
+    // #H1 / #fleet: màn Mạng lưới · #ST-05 (-hmi): mở thẳng chi tiết một trạm · #S4-advanced (-hmi): kịch bản bài học như trước
+    const m = location.hash.match(/^#(S\d+B?|S0)(?:-(basic|advanced))?(?:-(hmi|3d))?$/i), mf = location.hash.match(/^#(H1|fleet|ST-\d+)(?:-(basic|advanced))?(?:-(hmi|3d))?$/i);
+    if (m) { this.intro.hide(); this.start(m[1].toUpperCase(), m[2] || 'basic'); if (m[3]) this.setView(m[3].toLowerCase()); }
+    else if (this.hanoi) {
+      this.intro.hide();
+      const k = mf ? mf[1].toUpperCase() : 'FLEET';
+      this.start('H1', mf?.[2] || 'advanced');
+      this.speed = 300;
+      if (/^ST-/.test(k) && this.net.by_id[k] !== undefined) { this.focusStation(k); this.setView(mf[3] ? mf[3].toLowerCase() : '3d'); } else this.setView('fleet');
+    } else { this.start('S1', 'basic', false); this.intro.show(0); }
     this._syncView();
     this.shell.refit();
     this._last = performance.now(); this._lastUi = 0; this._lastChart = 0;
@@ -68,7 +83,16 @@ class App {
   _initHeader() {
     const sel = document.getElementById('sc-select');
     for (const s of this.scenarios) sel.append(h('option', { value: s.id }, s.name));
-    sel.addEventListener('change', () => this.start(sel.value, this.level));
+    // bài học (S0…S13) chạy trên ST-01 nên chuyển sang xem chi tiết trạm; H1 là bản đồ mạng lưới
+    sel.addEventListener('change', () => { this.start(sel.value, this.level); if (sel.value !== 'H1' && this.viewMode === 'fleet') this.setView('3d'); else if (sel.value === 'H1' && this.fleet) this.setView('fleet'); });
+    // chuyển nhanh giữa các trạm khi đang xem chi tiết (3D / HMI)
+    const ss = document.getElementById('st-select');
+    for (const s of this.cfg.stations) ss.append(h('option', { value: s.id }, s.site ? `${s.id} · ${s.site.area}` : s.name));
+    ss.addEventListener('change', () => this.focusStation(ss.value));
+    const stepStation = (d) => { const L = this.cfg.stations, i = L.findIndex((s) => s.id === this.focusId); this.focusStation(L[(i + d + L.length) % L.length].id); };
+    document.getElementById('st-prev').addEventListener('click', () => stepStation(-1));
+    document.getElementById('st-next').addEventListener('click', () => stepStation(1));
+    document.getElementById('brand').addEventListener('click', () => { if (this.fleet) this.setView('fleet'); });
     document.querySelectorAll('#lvl-seg button').forEach((b) => b.addEventListener('click', () => this.start(this.scenario.id, b.dataset.lvl)));
     const sp = document.getElementById('speed-seg');
     for (const v of SPEEDS) sp.append(h('button', { 'data-v': v, title: `1 giây thực = ${v} giây mô phỏng`, onclick: () => { this.speed = v; this._syncHeader(); } }, '×' + v));
@@ -105,22 +129,57 @@ class App {
   }
   /** Mở bảng k trong khung nổi bên phải ('charts' / 'kpi' mở bảng biểu đồ). */
   tab(k) {
-    if (this.viewMode === 'hmi') this.setView('3d');
+    if (this.viewMode !== '3d') this.setView('3d');
     if (k === 'charts' || k === 'kpi') { this.shell.openSheet(k); return; }
     this.shell.openPane(k);
     this._updatePanels(true);
   }
   setView(v) {
-    this.viewMode = v === 'hmi' ? 'hmi' : '3d';
-    const hmi = this.viewMode === 'hmi';
-    document.getElementById('vp').classList.toggle('hmi-on', hmi);
-    document.body.classList.toggle('view-hmi', hmi);
+    const was = this.viewMode;
+    this.viewMode = v === 'hmi' ? 'hmi' : v === 'fleet' && this.fleet ? 'fleet' : '3d';
+    const hmi = this.viewMode === 'hmi', fleet = this.viewMode === 'fleet';
+    const vp = document.getElementById('vp');
+    vp.classList.toggle('hmi-on', hmi); vp.classList.toggle('fleet-on', fleet);
+    document.body.classList.toggle('view-hmi', hmi); document.body.classList.toggle('view-fleet', fleet);
     this.shell.closePop();
+    this.closeDrawer(); if (fleet) this.ctl3d?.close();
     this.hmi.show(hmi);
-    if (!hmi) requestAnimationFrame(() => { this.scene3d.resize(); this.shell.update(true); this._labels(); this.updateCharts(); });
+    this.fleet?.show(fleet);
+    if (this.viewMode === '3d') requestAnimationFrame(() => { this.scene3d.resize(); this.shell.update(true); this._labels(); this.updateCharts(); if (was === 'fleet') this.scene3d.flyIn(); });
     this._syncView();
-    // màn HMI tự có đồng hồ và chế độ: thanh trên ẩn các mục trùng (app.css) → xếp lại cho vừa
+    // màn HMI / Mạng lưới tự có đồng hồ và chế độ: thanh trên ẩn các mục trùng (app.css) → xếp lại cho vừa
     this.shell.refit?.(); this.shell._fitHud?.();
+    this._syncHeader();
+  }
+  /**
+   * Chuyển trạm đang xem chi tiết (3D / HMI / bảng bên phải). Mô phỏng của cả mạng không đổi – chỉ đổi trạm mà giao diện
+   * đọc dữ liệu: this.st (trạm thông minh), this.fx (trạm lịch cố định song sinh), biểu đồ, bảng, lệnh điều khiển.
+   */
+  focusStation(sid) {
+    if (!this.net || this.net.by_id[sid] === undefined) return;
+    this._bindStation(sid);
+    this._updatePanels(true); this.updateCharts(); this._syncHeader();
+  }
+  /** Mở chi tiết một trạm từ màn Mạng lưới (view: '3d' | 'hmi'). */
+  openStation(sid, view = '3d') {
+    this.focusStation(sid);
+    this.setView(view);
+  }
+  /** Gắn giao diện chi tiết với trạm sid: st/fx, lịch sử UI, các bảng dựng theo trạm, thẻ và bảng điều khiển đang mở. */
+  _bindStation(sid) {
+    const i = this.net.by_id[sid] ?? 0;
+    this.st = this.net.smart[i]; this.fx = this.net.fixed[i]; this.focusId = this.st.sid; this.uiHist = this.uiHists[this.focusId];
+    this.spans = []; this._spanIdx = 0;
+    this.studentLoaded = Boolean(this.st.gw.custom_fn);
+    this.panes.fault.replaceChildren(); this.panels.buildFaults(this.panes.fault);
+    this.panes.script.replaceChildren(); this.panels.buildScript(this.panes.script);
+    this.panels._alarmKey = this.panels._calKey = this.panels._logKey = this.panels._syncKey = null;
+    this.closeDrawer();
+    this.ctl3d?.close(); this.ctl3d?.setWhere?.('local');
+    this.hmi?.reset?.();
+    this.panels.updateLesson?.();
+    const site = this.st.station.site;
+    this.scene3d?.setSignText(site ? `${this.st.sid} · ${site.area}` : this.st.sid, site ? `${site.district} · Hà Nội` : '');
   }
   /** Nhấp vào thiết bị trong cảnh 3D: thiết bị điều khiển được thì mở bảng điều khiển nổi, còn lại mở thẻ thông tin. */
   onPick(tag) { if (!this.ctl3d.open(tag)) this.openDrawer(tag); }
@@ -153,7 +212,7 @@ class App {
       kw: C({ title: 'Công suất điện', subtitle: 'kW', unit: 'kW', zero: true, series: [{ key: 'kw', label: 'Thông minh', color: '--s-smart' }, { key: 'f_kw', label: 'Lịch cố định', color: '--s-fixed' }] }),
       kwh: C({ title: 'Điện năng lũy kế', subtitle: 'kWh', unit: 'kWh', nd: 1, zero: true, series: [{ key: 'kwh', label: 'Thông minh', color: '--s-smart' }, { key: 'f_kwh', label: 'Lịch cố định', color: '--s-fixed' }] }),
       lv: C({ title: 'Mực nước bể T-01', subtitle: 'm · dừng 0,6 · tiết kiệm 1,2', unit: 'm', yMin: 0, yMax: 4.2, refLines: [{ y: 0.6, label: 'dừng 0,6' }, { y: 1.2, label: '1,2' }], series: [{ key: 'level', label: 'Thông minh', color: '--s-smart' }, { key: 'f_level', label: 'Lịch cố định', color: '--s-fixed' }] }),
-      srv: C({ title: 'Dữ liệu tại máy chủ', subtitle: 'áp đầu ra ST-01 theo phút, bar', unit: 'bar', yMin: 0, yMax: 4.5, series: [{ key: 'srv_live', label: 'Nhận trực tiếp', color: '--s-smart' }, { key: 'srv_late', label: 'Nhận sau đồng bộ (phát lại)', color: '--s-crit' }] }),
+      srv: C({ title: 'Dữ liệu tại máy chủ', subtitle: 'áp đầu ra theo phút (trạm đang xem), bar', unit: 'bar', yMin: 0, yMax: 4.5, series: [{ key: 'srv_live', label: 'Nhận trực tiếp', color: '--s-smart' }, { key: 'srv_late', label: 'Nhận sau đồng bộ (phát lại)', color: '--s-crit' }] }),
       ntu: C({ title: 'Độ đục trong bể', subtitle: 'NTU · QCVN ≤ 2', unit: 'NTU', zero: true, refLines: [{ y: 2.0, label: '2,0' }, { y: 1.0, label: '1,0' }], series: [{ key: 'ntu', label: 'Thông minh', color: '--s-smart' }, { key: 'f_ntu', label: 'Lịch cố định', color: '--s-fixed' }] }),
       cl: C({ title: 'Clo dư trong bể', subtitle: 'mg/L · QCVN 0,2–1,0', unit: 'mg/L', zero: true, refLines: [{ y: 0.2, label: '0,2' }, { y: 0.3, label: '0,3' }], series: [{ key: 'cl', label: 'Thông minh', color: '--s-smart' }, { key: 'f_cl', label: 'Lịch cố định', color: '--s-fixed' }] }),
     };
@@ -166,32 +225,40 @@ class App {
 
   // ---------- mô phỏng ----------
   start(scId, level, run = true) {
+    const prev = this.scenario?.id;
     this.scenario = this.scenarios.find((s) => s.id === scId) || this.scenarios[0];
     this.level = level;
-    this.net = new NetworkSim(this.cfg, level, { withFixed: 'all', events: this.scenario.events.map((e) => ({ ...e, station: 'ST-01' })) });
-    this.server = this.net.server; this.st = this.net.smart[0]; this.fx = this.net.fixed[0];
-    this.uiHist = { t: [], p1: [], p2: [] };
-    this.studentLoaded = false;
-    this.spans = []; this._spanIdx = 0;
+    // sự kiện không ghi trạm (bài học S1…S13) áp dụng cho ST-01; kịch bản H1 ghi rõ trạm cho từng sự kiện
+    this.net = new NetworkSim(this.cfg, level, { withFixed: 'all', events: this.scenario.events.map((e) => ({ ...e, station: e.station ?? 'ST-01' })) });
+    this.server = this.net.server;
+    this.uiHists = Object.fromEntries(this.net.smart.map((s) => [s.sid, { t: [], p1: [], p2: [] }]));
+    this._hookFeed();
+    // đổi kịch bản → về ST-01 (trạm của bài học); chạy lại cùng kịch bản → giữ trạm đang xem
+    this._bindStation(prev === this.scenario.id && this.net.by_id[this.focusId] !== undefined ? this.focusId : 'ST-01');
     { const sel = document.getElementById('sc-select'); sel.value = this.scenario.id; sel.title = this.scenario.name; }
-    this.panes.fault.replaceChildren(); this.panels.buildFaults(this.panes.fault);
-    this.panes.script.replaceChildren(); this.panels.buildScript(this.panes.script);
     this.panes.center.replaceChildren(); this.panels.buildCenter(this.panes.center);
     this.panels.updateLesson();
-    this.panels._alarmKey = this.panels._calKey = this.panels._logKey = this.panels._syncKey = null;
     this.running = run;
+    this.fleet?.reset();
     this._syncHeader();
-    this.closeDrawer();
-    this.ctl3d?.close(); this.ctl3d?.setWhere?.('local');
-    this.hmi?.reset?.();
     this.updateCharts();
     this._updatePanels(true);
     if (this._applyThemeInit) { this._applyThemeInit(); this._applyThemeInit = null; }
   }
+  /** Gom nhật ký của mọi trạm và máy chủ vào một dòng sự kiện chung (màn Mạng lưới: “hệ thống tự xử lý”). */
+  _hookFeed() {
+    this.feed = [];
+    // n: số thứ tự tăng dần – màn Báo động đọc theo n nên không đọc lại khi dòng sự kiện bị cắt bớt phía đầu
+    this._feedN = 0;
+    const push = (e, sid, src) => { this.feed.push({ n: ++this._feedN, t: e.t, sid, level: e.level, text: e.text, src }); if (this.feed.length > 1500) this.feed.splice(0, 300); };
+    for (const s of this.net.smart) s.gw.onLog = (e) => push(e, s.sid, 'gw');
+    this.server.onLog = (e) => push(e, e.station, 'sv');
+  }
   event(ev) {
-    this.net.applyEvent(ev, this.net.t);
+    const sid = ev.station ?? this.focusId;
+    this.net.applyEvent({ ...ev, station: sid }, this.net.t);
     const names = { link_down: 'Ngắt kết nối 4G', link_up: 'Khôi phục kết nối 4G', inflow_quality: 'Thay đổi chất lượng nước nguồn', supply: 'Mất nước nguồn', burst: 'Vỡ ống', demand_scale: 'Nhu cầu tăng', pump_fault: 'Lỗi bơm', pump_repair: 'Sửa bơm', sensor_fault: 'Lỗi cảm biến ' + (ev.tag ?? ''), sensor_repair: 'Sửa cảm biến ' + (ev.tag ?? ''), gateway_fail: 'Mini PC (edge gateway) ngừng hoạt động', gateway_restore: 'Khởi động lại mini PC' };
-    this.toast((names[ev.type] || ev.type) + ' · ' + (ev.station ?? 'ST-01'));
+    this.toast((names[ev.type] || ev.type) + ' · ' + sid);
     this._updatePanels(true);
   }
   skip(sec) {
@@ -200,13 +267,16 @@ class App {
     this.updateCharts(); this._updatePanels(true);
   }
   /**
-   * Một bước mô phỏng. Lịch sử của lõi (hist) chỉ lưu áp ra mạng sau MV-02 (p_out); giao diện cần thêm số đo PT-101/PT-102
-   * (áp ống góp, vẫn còn khi MV-02 đóng) nên ghi kèm vào app.uiHist, cùng chỉ số với hist.data.t.
+   * Một bước mô phỏng của cả mạng. Lịch sử của lõi (hist) chỉ lưu áp ra mạng sau MV-02 (p_out); giao diện cần thêm số đo
+   * PT-101/PT-102 (áp ống góp, vẫn còn khi MV-02 đóng) nên ghi kèm vào app.uiHists[trạm], cùng chỉ số với hist.data.t.
    */
   _step() {
     this.net.step();
-    const H = this.st.hist.data, U = this.uiHist;
-    while (U.t.length < H.t.length) { const sig = this.st.gw.sig || {}; U.t.push(H.t[U.t.length]); U.p1.push(sig.p1 ?? NaN); U.p2.push(sig.p2 ?? NaN); }
+    for (const s of this.net.smart) {
+      const H = s.hist.data, U = this.uiHists[s.sid];
+      while (U.t.length < H.t.length) { const sig = s.gw.sig || {}; U.t.push(H.t[U.t.length]); U.p1.push(sig.p1 ?? NaN); U.p2.push(sig.p2 ?? NaN); }
+    }
+    this.fleet?.sample(this.net.t);
   }
   loop(ts) {
     const realDt = Math.min(0.1, (ts - this._last) / 1000);
@@ -220,7 +290,7 @@ class App {
       if (this.acc > this.speed * 0.5) this.acc = 0;
       this._stepsRate = (this._stepsRate ?? 0) * 0.9 + 0.1 * (steps / Math.max(realDt, 1e-3));
     }
-    if (this.viewMode !== 'hmi') { this.scene3d.update(realDt, this.view()); this.ctl3d.frame(); }
+    if (this.viewMode === '3d') { this.scene3d.update(realDt, this.view()); this.ctl3d.frame(); } // HMI / Mạng lưới: không vẽ 3D
     if (ts - this._lastUi > 250) { this._lastUi = ts; this._updatePanels(false); this._syncHeader(); }
     if (ts - this._lastChart > 600) { this._lastChart = ts; this.updateCharts(); }
     requestAnimationFrame((t) => this.loop(t));
@@ -229,13 +299,14 @@ class App {
   modeSev() { return modeSev(this, stationData(this, 'local')); }
   view() {
     const g = this.st.gw;
-    return { plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
+    return { sid: this.st.sid, plant: this.st.plant, sig: g.sig, installed: g.sig_proc.installed, mode: this.st.gw_dead ? 'x' : g.mode(), ctl: this.st.gw_dead ? 'auto' : g.controlSrc(), comms: g.comms.state, p_set: g.ctrl.p_set, version: g.script.version, strategy: g.ctrl.strategy_used, buffer: g.comms.buf.length };
   }
   _syncHeader() {
     this.shell.setPlay(this.playBtn, this.running);
     document.querySelectorAll('#speed-seg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === this.speed));
     document.querySelectorAll('#lvl-seg button').forEach((b) => b.classList.toggle('on', b.dataset.lvl === this.level));
     if (!this.st) return;
+    this._syncBrand();
     const clk = fmtClock(this.st.t, this.cfg.sim.start_dow), cm = clk.match(/^(.*\S)\s+(\d\d:\d\d:\d\d)$/);
     setText(document.getElementById('clock-t'), cm ? cm[2] : clk); setText(document.getElementById('clock-d'), cm ? cm[1] : '');
     const real = this.running ? Math.round(this._stepsRate ?? 0) : 0;
@@ -254,8 +325,17 @@ class App {
       bn.hidden = false;
       document.documentElement.style.setProperty('--banner-h', bn.offsetHeight + 6 + 'px');
     }
-    this.insets = this._viewInsets();
-    this.scene3d.setInsets(this.insets);
+    if (this.viewMode === '3d') { this.insets = this._viewInsets(); this.scene3d.setInsets(this.insets); } // HMI / Mạng lưới ẩn HUD, dock: không căn lại camera
+  }
+  /** Tên trên thanh trên: màn Mạng lưới ghi tên mạng, màn chi tiết ghi trạm đang xem; ô chọn trạm theo trạm đang xem. */
+  _syncBrand() {
+    const fleet = this.viewMode === 'fleet', site = this.st.station.site, n = this.cfg.stations.length;
+    setText(document.getElementById('brand-st'), fleet ? 'Mạng lưới' : this.st.sid);
+    setText(document.getElementById('brand-long'), fleet ? ` · Hà Nội · ${n} trạm` : site ? ` · ${site.area} · ${site.district}` : ' · Trạm bơm tăng áp');
+    const ss = document.getElementById('st-select');
+    if (ss.value !== this.focusId) ss.value = this.focusId;
+    const title = fleet ? 'SYSTEM · Trung tâm giám sát trạm bơm Hà Nội' : `SYSTEM · ${this.st.station.name}`;
+    if (document.title !== title) document.title = title;
   }
   /** Phần khung 3D bị thanh trên, HUD, dock che – để camera căn giữa vùng còn trống. */
   _viewInsets() {
@@ -268,7 +348,7 @@ class App {
   }
   _updatePanels(force) {
     if (!this.st) return;
-    const P = this.panels, cur = this.viewMode === 'hmi' ? null : this.curTab;
+    const P = this.panels, cur = this.viewMode !== '3d' ? null : this.curTab;
     // bảng Giám sát chỉ dựng khi đang mở; số báo động trên nút dock tính riêng (rẻ) mỗi nhịp
     if (force || cur === 'mon') P.updateMonitor(); else P.updateAlarmBadge();
     if (force || cur === 'fault') P.updateFaults();
@@ -277,10 +357,11 @@ class App {
     if (cur === 'log') P.updateLog();
     if (force || this.shell.kpiVisible()) P.updateKpi();
     if (this.hmi?.visible) this.hmi.update(force);
+    if (this.fleet?.visible) this.fleet.update(force);
     this.ctl3d?.update(force);
     this.shell.update(force);
     if (this.drawerTag) this.openDrawer(this.drawerTag, true);
-    if (this.viewMode !== 'hmi') this._labels();
+    if (this.viewMode === '3d') this._labels();
   }
   _labels() {
     const g = this.st.gw, pl = this.st.plant, sig = g.sig || {}, sc = this.scene3d, A = g.alarms.active;
@@ -360,7 +441,7 @@ class App {
     if (!d.contains(ae)) this._drawerBack = ae && ae !== document.body ? ae : null;
     this.drawerTag = tag; this._drawer = info;
     d.replaceChildren(info.el); d.hidden = false; d.scrollTop = 0;
-    if (this.viewMode !== 'hmi' && !this._ctlOpen()) this.scene3d.highlight(tag);
+    if (this.viewMode === '3d' && !this._ctlOpen()) this.scene3d.highlight(tag);
     if (kbd || d.contains(ae)) info.focusEl.focus({ preventScroll: true });
   }
   closeDrawer() {
@@ -380,7 +461,7 @@ class App {
   showInScene(tag, force = false) {
     const sc = this.scene3d;
     if (!sc?.byTag?.has(tag)) return false;
-    if (this.viewMode === 'hmi') { if (!force) return false; this.setView('3d'); }
+    if (this.viewMode !== '3d') { if (!force) return false; this.setView('3d'); }
     if (!this._ctlOpen()) sc.highlight(tag);
     if (force || this._offView(tag)) sc.focus(tag);
     return true;
@@ -423,7 +504,7 @@ class App {
     const base = { t: H.t, i0, window: [t0, Math.max(t0 + 600, tEnd)], spans: this.spans, series };
     for (const [k, c] of Object.entries(this.charts)) if (k !== 'srv') c.setData(base);
     // dữ liệu máy chủ theo phút
-    const st = this.server.stations['ST-01'];
+    const st = this.server.stations[this.st.sid];
     const m0 = Math.floor(t0 / 60), m1 = Math.floor(this.st.t / 60);
     const ts = [], live = [], late = [];
     for (let m = m0; m <= m1; m++) {

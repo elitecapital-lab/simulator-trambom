@@ -1,4 +1,4 @@
-// Cảnh 3D trạm bơm tăng áp ST-01 (Three.js). Đơn vị: mét. Trục y hướng lên.
+// Cảnh 3D trạm bơm tăng áp (Three.js). Đơn vị: mét. Trục y hướng lên.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/CSS2DRenderer.js';
@@ -86,7 +86,7 @@ export class StationScene {
     this.controls.target.set(-1.5, 1.0, 0);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI * 0.49;
-    this.controls.minDistance = 3; this.controls.maxDistance = 70;
+    this.controls.minDistance = 3; this.controls.maxDistance = 90;
     this.pickables = []; this.labels = {}; this.labelMode = 1; this.flows = {}; this.anim = { rot: [0, 0], t: 0 };
     this.mat = {}; this.focusBox = {};
     this.compName = new Map((components || []).map((c) => [c.tag, c.name]));
@@ -312,9 +312,10 @@ export class StationScene {
   _build() {
     const S = this.scene;
     // nền & sàn
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), this.mat.ground);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(420, 320), this.mat.ground);
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; ground.receiveShadow = true; S.add(ground);
     this.ground = ground;
+    this._environment();
     this._box(13.4, 0.2, 9.4, this.mat.floor, 3.0, -0.1, 0, { cast: false });
     this._box(13.4, 3.2, 0.25, this.mat.concrete, 3.0, 1.6, -4.7);
     this._box(0.25, 3.2, 9.4, this.mat.concrete, 9.7, 1.6, 0);
@@ -547,6 +548,7 @@ export class StationScene {
     this._label('RT-01', V(kx, ky + 1.6, kz + 0.3));
     this._label('UPS-01', V(kx - 0.3, ky - 0.42, kz + 0.25));
     this._label('HMI-01', V(kx - 0.3, ky - 0.25, kz + 0.45));
+    this._brandSigns(kx, ky, kz);
     // ---- khu dân cư (mạng lưới DMA-A) ----
     this.houses = [];
     const hs = [[17, -4, 2], [17, 4, 2], [20.5, -4.5, 1], [20.5, 4, 2], [24, -4, 2], [24, 4.5, 1], [27.5, -3.5, 2], [29, 5, 3]];
@@ -569,7 +571,7 @@ export class StationScene {
     // Trong nhà (pos/target, posP/targetP cho khung dọc): điểm đặt cố định, tia nhìn đi phía trên/sau ống góp đẩy (y 2,2, z 0)
     // để không bị ống che; không lùi theo tỉ lệ khung.
     this.camPresets = {
-      overview: { fit: B3(-14, -0.2, -5.6, 11.2, 6, 5.2), ae: [[1.2, -30, 46], [2.6, -14, 30]], aeP: [-90, 52] },
+      overview: { fit: B3(-12.6, -0.2, -5.0, 10.2, 5.4, 4.9), ae: [[1.2, -31, 42], [2.6, -15, 29]], aeP: [-90, 52] },
       tank: { fit: B3(-14, -0.2, -5.6, -3.5, 5.2, 3.6), ae: [[1.2, -8, 36], [2.6, 0, 28]], aeP: [-20, 48] },
       pumps: { fit: B3(-0.8, -0.1, -2.8, 3.8, 2.4, 2.4), ae: [[1.2, 30, 30], [2.6, 27, 24]], aeP: [60, 42] },
       cabinet: { pos: V(5.7, 3.0, -0.42), target: V(9.0, 1.4, -3.5), posP: V(4.4, 6.6, -0.6), targetP: V(8.9, 1.3, -3.2) },
@@ -578,6 +580,99 @@ export class StationScene {
     };
   }
 
+  /**
+   * Thương hiệu SYSTEM trong cảnh: bảng hiệu trên tường sau (logo, tên công ty, trạm đang xem) và tấm logo nhỏ trên cửa tủ CP-02
+   * (tủ mới thuộc giải pháp). Dùng vật liệu không phụ thuộc đèn để màu logo giữ nguyên ở cả giao diện sáng và tối.
+   */
+  _brandSigns(kx, ky, kz) {
+    const S = this.scene;
+    this.sign = canvasTex(1024, 288);
+    this._signText = ['', ''];
+    this._box(3.9, 1.22, 0.06, this.mat.steel, 0.4, 2.45, -4.58, { cast: false });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.74, 1.05), new THREE.MeshBasicMaterial({ map: this.sign.tex, toneMapped: false }));
+    sign.position.set(0.4, 2.45, -4.545); S.add(sign);
+    this.logoPlate = canvasTex(128, 128);
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), new THREE.MeshBasicMaterial({ map: this.logoPlate.tex, transparent: true, toneMapped: false }));
+    plate.rotation.y = -Math.PI / 2; plate.position.set(kx - 0.178, ky + 0.43, kz + 0.29); S.add(plate);
+    this._logo = new Image();
+    this._logo.onload = () => { this._drawSign(); const { ctx, tex } = this.logoPlate; ctx.clearRect(0, 0, 128, 128); ctx.drawImage(this._logo, 4, 4, 120, 120); tex.needsUpdate = true; };
+    this._logo.src = 'assets/system-logo.png';
+    document.fonts?.ready.then(() => this._drawSign());
+    this._drawSign();
+  }
+  /** Chữ trên bảng hiệu: dòng 1 = tên trạm đang xem (ST-xx · khu vực), dòng 2 = địa danh. */
+  setSignText(l1, l2) { this._signText = [l1, l2]; this._drawSign(); }
+  _drawSign() {
+    const { c, ctx, tex } = this.sign, [l1, l2] = this._signText;
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#f6f8f7'; ctx.beginPath(); (ctx.roundRect ? ctx.roundRect(4, 4, c.width - 8, c.height - 8, 26) : ctx.rect(4, 4, c.width - 8, c.height - 8)); ctx.fill();
+    ctx.strokeStyle = '#cdd5d1'; ctx.lineWidth = 4; ctx.stroke();
+    if (this._logo?.complete && this._logo.naturalWidth) ctx.drawImage(this._logo, 36, 38, 212, 212);
+    const g = ctx.createLinearGradient(290, 0, 760, 0); g.addColorStop(0, '#2f9e44'); g.addColorStop(1, '#2a78d6');
+    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = g; ctx.font = '700 118px "Barlow Condensed", "Arial Narrow", sans-serif';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '12px';
+    ctx.fillText('SYSTEM', 280, 138);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    ctx.fillStyle = '#4a5753'; ctx.font = '500 34px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.fillText('Giám sát & điều khiển trạm bơm thông minh', 282, 186);
+    ctx.fillStyle = '#16201d'; ctx.font = '700 48px "Barlow Condensed", "Arial Narrow", sans-serif';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
+    ctx.fillText(l1 || '', 282, 245);
+    const w1 = ctx.measureText(l1 || '').width;
+    ctx.fillStyle = '#7b8783'; ctx.font = '500 30px "Be Vietnam Pro", system-ui, sans-serif';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    if (l2) ctx.fillText(l2, 282 + w1 + 22, 245, Math.max(60, c.width - 40 - (282 + w1 + 22)));
+    tex.needsUpdate = true;
+  }
+  /**
+   * Khuôn viên quanh trạm: sân sỏi, đường, hàng rào có cổng, cây, cột đèn. Chỉ để cảnh có chiều sâu và có chỗ so sánh cỡ
+   * (không chọn được, không tính vào khung nhìn). Màu theo giao diện ở applyTheme.
+   */
+  _environment() {
+    const S = this.scene, M = this.mat, std = (o) => new THREE.MeshStandardMaterial(o);
+    const flat = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 };
+    M.gravel = std({ color: 0xcfcbbd, roughness: 1, ...flat }); M.asphalt = std({ color: 0x5d6361, roughness: 0.95, ...flat });
+    M.fence = std({ color: 0x8d9692, roughness: 0.6, metalness: 0.5 }); M.leaf = std({ color: 0x5f9a5a, roughness: 0.9, flatShading: true }); M.trunk = std({ color: 0x6b5238, roughness: 1 });
+    M.lane = new THREE.MeshBasicMaterial({ color: 0xf4f1e6 });
+    const add = (m) => { m.userData.nofit = true; S.add(m); return m; };
+    const plane = (w, d, mat, x, z, y) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; return add(m); };
+    // sân sỏi + đường phía trước (vạch kẻ làm bằng một mặt phẳng ghép)
+    const x0 = -19.5, x1 = 13.5, z0 = -8.6, z1 = 9.4;
+    plane(x1 - x0, z1 - z0, M.gravel, (x0 + x1) / 2, (z0 + z1) / 2, -0.012);
+    plane(420, 7, M.asphalt, 0, 14.2, -0.011);
+    // vạch kẻ đường và cây cối dùng InstancedMesh (mỗi loại một lần vẽ) để cảnh không tốn thêm nhiều lượt vẽ
+    const mx = new THREE.Matrix4(), q0 = new THREE.Quaternion(), qy = new THREE.Quaternion(), qf = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)), one = new THREE.Vector3(1, 1, 1);
+    const inst = (geo, mat, n, shadow = false) => { const m = new THREE.InstancedMesh(geo, mat, n); m.castShadow = shadow; return add(m); };
+    const dashes = []; for (let x = -60; x < 60; x += 4.5) dashes.push(x);
+    const lanes = inst(new THREE.PlaneGeometry(2.2, 0.16), M.lane, dashes.length);
+    dashes.forEach((x, i) => { mx.compose(V(x, -0.006, 14.2), qf, one); lanes.setMatrixAt(i, mx); });
+    const kerb = new THREE.Mesh(new THREE.BoxGeometry(420, 0.14, 0.2), M.fence); kerb.position.set(0, 0.04, 10.6); kerb.receiveShadow = true; add(kerb);
+    // hàng rào: cột (InstancedMesh) + hai thanh ngang; chừa cổng ở giữa cạnh trước
+    const posts = [], gate = [1.0, 5.4], H = 1.15;
+    const run = (ax, az, bx, bz) => { const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2.6)); for (let i = 0; i <= n; i++) posts.push([ax + (bx - ax) * i / n, az + (bz - az) * i / n]); };
+    run(x0, z0, x1, z0); run(x0, z0, x0, z1); run(x1, z0, x1, z1); run(x0, z1, gate[0], z1); run(gate[1], z1, x1, z1);
+    const pm = inst(new THREE.BoxGeometry(0.09, H, 0.09), M.fence, posts.length, true);
+    posts.forEach(([x, z], i) => { mx.makeTranslation(x, H / 2, z); pm.setMatrixAt(i, mx); });
+    const rail = (ax, az, bx, bz) => { for (const y of [0.45, 0.95]) { const L = Math.hypot(bx - ax, bz - az), r = new THREE.Mesh(new THREE.BoxGeometry(L, 0.05, 0.04), M.fence); r.position.set((ax + bx) / 2, y, (az + bz) / 2); r.rotation.y = -Math.atan2(bz - az, bx - ax); add(r); } };
+    rail(x0, z0, x1, z0); rail(x0, z0, x0, z1); rail(x1, z0, x1, z1); rail(x0, z1, gate[0], z1); rail(gate[1], z1, x1, z1);
+    for (const gx of gate) { const g = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.9, 0.3), M.concrete); g.position.set(gx, 0.95, z1); g.castShadow = true; add(g); }
+    // cây (thân + hai khối tán) và bụi
+    const trees = [[-23, -7, 1.1], [-22, 2, 1.3], [-21, 8.5, 1], [-14, -12, 1.2], [-6, -12.5, 1.4], [3, -12, 1.1], [10, -12, 1.3], [16, -10, 1.2], [-17.5, 12.5, 1], [-26, -1, 1.2]];
+    const trunk = inst(new THREE.CylinderGeometry(0.1, 0.15, 1.5, 7), M.trunk, trees.length, true), crownA = inst(new THREE.IcosahedronGeometry(1.25, 0), M.leaf, trees.length, true), crownB = inst(new THREE.IcosahedronGeometry(0.9, 0), M.leaf, trees.length, true);
+    trees.forEach(([x, z, k], i) => {
+      qy.setFromEuler(new THREE.Euler(0, i * 1.3, 0));
+      mx.compose(V(x, 0.75 * k, z), q0, new THREE.Vector3(k, k, k)); trunk.setMatrixAt(i, mx);
+      mx.compose(V(x, 2.0 * k, z), qy, new THREE.Vector3(k, 0.85 * k, k)); crownA.setMatrixAt(i, mx);
+      mx.compose(V(x, 2.9 * k, z), qy, new THREE.Vector3(k, 0.85 * k, k)); crownB.setMatrixAt(i, mx);
+    });
+    const bushes = [[-18.2, -7.4, 0.9], [-18.6, 7.8, 0.8], [12.6, 8.2, 0.7], [12.7, -7.5, 0.8]];
+    const bush = inst(new THREE.IcosahedronGeometry(0.55, 0), M.leaf, bushes.length, true);
+    bushes.forEach(([x, z, k], i) => { mx.compose(V(x, 0.38 * k, z), q0, new THREE.Vector3(k, 0.8 * k, k)); bush.setMatrixAt(i, mx); });
+    // cột đèn cạnh cổng
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 5.4, 8), M.fence); pole.position.set(6.4, 2.7, z1 + 0.6); pole.castShadow = true; add(pole);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.06), M.fence); arm.position.set(5.9, 5.3, z1 + 0.6); add(arm);
+    this.lampHead = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.22), new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffe9a8, emissiveIntensity: 0.3 })); this.lampHead.position.set(5.4, 5.25, z1 + 0.6); add(this.lampHead);
+  }
   _dialTexture() {
     const { c, ctx, tex } = canvasTex(128, 128);
     ctx.fillStyle = '#f7f7f2'; ctx.beginPath(); ctx.arc(64, 64, 63, 0, Math.PI * 2); ctx.fill();
@@ -636,6 +731,8 @@ export class StationScene {
     this.mat.ground.color.set(dark ? 0x2b3a2e : 0x9fae95);
     this.mat.floor.color.set(dark ? 0x58605c : 0xc9ccc7);
     this.mat.concrete.color.set(dark ? 0x7e847f : 0xb9bdb8);
+    this.mat.gravel?.color.set(dark ? 0x4a4d49 : 0xcfcbbd); this.mat.asphalt?.color.set(dark ? 0x262b2a : 0x5d6361); this.mat.leaf?.color.set(dark ? 0x2f5a3a : 0x5f9a5a); this.mat.fence?.color.set(dark ? 0x6c7571 : 0x8d9692);
+    if (this.lampHead) this.lampHead.material.emissiveIntensity = dark ? 1.4 : 0.3;
     this.renderer.toneMappingExposure = dark ? 0.85 : 1.0;
     this.dark = dark;
   }
@@ -713,7 +810,7 @@ export class StationScene {
     const add = (x, y, z) => { const k = `${Math.round(x * 10)},${Math.round(y * 10)},${Math.round(z * 10)}`; if (!seen.has(k)) { seen.add(k); pts.push(V(x, y, z)); } };
     this.scene.updateMatrixWorld(true);
     this.scene.traverse((o) => {
-      if (!o.isMesh || o.isInstancedMesh || o === this.ground || o === this.selMesh) return;
+      if (!o.isMesh || o.isInstancedMesh || o === this.ground || o === this.selMesh || o.userData.nofit) return;
       if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
       b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
       if (!region.containsPoint(b.getCenter(c))) return;
@@ -734,7 +831,7 @@ export class StationScene {
     if (!W || !H || !pts.length) return null;
     const I = this.ins || { l: 0, r: 0, t: 0, b: 0 };
     const fw = Math.max(60, W - I.l - I.r), fh = Math.max(60, H - I.t - I.b);
-    const mx = Math.max(12, fw * 0.07), my = Math.max(10, fh * 0.07);
+    const mx = Math.max(14, fw * 0.085), my = Math.max(12, fh * 0.085);
     const FL = I.l + mx, FR = Math.max(FL + 20, W - I.r - mx), FT = I.t + my, FB = Math.max(FT + 20, H - I.b - my);
     const cam = this._fcam || (this._fcam = new THREE.PerspectiveCamera());
     cam.copy(this.camera, false);
@@ -785,6 +882,16 @@ export class StationScene {
     const r = this.renderer.domElement.getBoundingClientRect();
     const tag = this._hitAt(e.clientX - r.left, e.clientY - r.top);
     if (tag && this.onPick) this.onPick(tag);
+  }
+  /** Bay từ xa và cao xuống góc nhìn đang dùng (khi vào chi tiết trạm từ bản đồ mạng lưới). */
+  flyIn() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const v = this._presetView(this.view0 || 'overview');
+    if (!v) return;
+    const off = v[0].clone().sub(v[1]), p0 = v[1].clone().addScaledVector(off, 1.9).add(V(-6, 18, 10));
+    this.camera.position.copy(p0); this.controls.target.copy(v[1]); this.controls.update();
+    this._moved = false; this._rev = null;
+    this.tween = { t: 0, dur: 1.7, p0: p0.clone(), t0: v[1].clone(), p1: v[0], t1: v[1] };
   }
   goto(name) {
     const v = this._presetView(name);
@@ -1140,14 +1247,14 @@ export class StationScene {
     }
     pl.pumps.forEach((pu, k) => draw(this.vfdScreens[k], [[pu.fault ? 'FAULT' : pu.running ? 'RUN' : 'STOP', 22, pu.fault ? '#ff6b6b' : '#9fb3b8'], [fmt(pu.f, 1) + ' Hz', 30], [fmt(pu.amps, 1) + ' A', 20, '#9fb3b8']]));
     if (v.mode === 'x') {
-      draw(this.hmi, [['HMI-01 · ST-01', 24, '#9fb3b8'], ['MẤT KẾT NỐI', 40, '#ff6b6b'], ['BỘ ĐIỀU KHIỂN MPC-01', 28, '#ff6b6b'], ['Biến tần đang chạy PID nội', 24, '#fab219']], '#120808');
+      draw(this.hmi, [['HMI-01 · ' + (v.sid ?? 'ST-01'), 24, '#9fb3b8'], ['MẤT KẾT NỐI', 40, '#ff6b6b'], ['BỘ ĐIỀU KHIỂN MPC-01', 28, '#ff6b6b'], ['Biến tần đang chạy PID nội', 24, '#fab219']], '#120808');
       return;
     }
     const modeName = { a: '(a) BÌNH THƯỜNG', b: '(b) TỰ VẬN HÀNH', c: '(c) ĐỒNG BỘ', d: '(d) CẢNH BÁO/AN TOÀN' }[v.mode];
     const mcol = { a: '#8ef0b0', b: '#fab219', c: '#8fc2ff', d: '#ff6b6b' }[v.mode];
     const ctl = { auto: 'TỰ ĐỘNG', remote: 'TAY · TỪ XA', local: 'TAY · TẠI CHỖ' }[v.ctl ?? 'auto'];
     draw(this.hmi, [
-      ['HMI-01 · ST-01 · ' + ctl, 24, v.ctl && v.ctl !== 'auto' ? '#fab219' : '#9fb3b8'], [modeName, 30, mcol],
+      ['HMI-01 · ' + (v.sid ?? 'ST-01') + ' · ' + ctl, 24, v.ctl && v.ctl !== 'auto' ? '#fab219' : '#9fb3b8'], [modeName, 30, mcol],
       [`P  ${fmt(sig.p_ctrl, 2)} bar  đặt ${fmt(v.p_set, 2)}`, 26], [`Q  ${fmt(sig.q_f, 1)} m³/h`, 26],
       [`Mức ${fmt(sig.level, 2)} m  kW ${fmt(pl.kw, 2)}`, 26],
       [`Kịch bản v${v.version} · ${v.strategy}`, 22, '#9fb3b8'], [`Đệm ${v.buffer} bản ghi`, 22, '#9fb3b8'],

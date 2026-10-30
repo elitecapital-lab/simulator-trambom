@@ -187,9 +187,9 @@ export class Control3D {
   _card(kind, tag) {
     const C = { kind, tag, i: PUMP_OF[tag] ?? null, tx: null, ty: null, editing: false };
     const i = C.i;
-    C.dev = kind === 'pump' ? PUMP_TAG[i] : kind === 'valve' ? 'MV-02' : 'ST-01';
+    C.dev = kind === 'pump' ? PUMP_TAG[i] : kind === 'valve' ? 'MV-02' : this.app.st.sid;
     C.pill = h('span', { class: 'c3d-pill' });
-    const title = kind === 'pump' ? [h('b', {}, PUMP_TAG[i]), ' · ' + PUMP_DESC[i]] : kind === 'valve' ? [h('b', {}, 'MV-02'), ' · Van điện đầu ra'] : [h('b', {}, 'ST-01'), ' · Chế độ trạm'];
+    const title = kind === 'pump' ? [h('b', {}, PUMP_TAG[i]), ' · ' + PUMP_DESC[i]] : kind === 'valve' ? [h('b', {}, 'MV-02'), ' · Van điện đầu ra'] : [h('b', {}, this.app.st.sid), ' · Chế độ trạm'];
     const nw = (x) => h('span', { class: 'c3d-nw' }, x);
     const sub = kind === 'pump' ? (tag.startsWith('VFD') ? ['Mở từ biến tần ', nw(tag), ' · tủ CP-01'] : ['Bơm ly tâm 5,5 kW · biến tần ', nw(`VFD-0${i + 1}`)])
       : kind === 'valve' ? 'Van bướm điện, hành trình 20 s · ra mạng DMA-A' : ['Tủ ', nw('CP-02'), ': mini PC ', nw('MPC-01'), ', màn ', nw('HMI-01')];

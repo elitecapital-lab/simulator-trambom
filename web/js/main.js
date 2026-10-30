@@ -16,9 +16,14 @@ import { ico, PANES, Shell } from './ui/shell.js';
 async function loadData() {
   if (window.__TRAMBOM_DATA__) return window.__TRAMBOM_DATA__;
   const base = new URL('../../config/', import.meta.url);
-  const get = async (n) => { const r = await fetch(new URL(n, base)); if (!r.ok) throw new Error(n + ': ' + r.status); return r.json(); };
-  // hanoi.json là tùy chọn: thiếu thì chỉ còn bản một trạm như trước
-  const [station, scen, comps, hanoi] = await Promise.all([get('station.json'), get('scenarios.json'), get('components.json'), get('hanoi.json').catch(() => null)]);
+  const get = async (n, optional = false) => {
+    const r = await fetch(new URL(n, base));
+    if (optional && r.status === 404) return null;
+    if (!r.ok) throw new Error(n + ': ' + r.status);
+    return r.json();
+  };
+  // hanoi.json là tùy chọn: không có (404) thì chỉ còn bản một trạm như trước; lỗi khác (JSON hỏng, 500…) vẫn báo ra
+  const [station, scen, comps, hanoi] = await Promise.all([get('station.json'), get('scenarios.json'), get('components.json'), get('hanoi.json', true)]);
   return { station, scenarios: scen.scenarios, components: comps.components, hanoi };
 }
 
@@ -71,7 +76,8 @@ class App {
       const k = mf ? mf[1].toUpperCase() : 'FLEET';
       this.start('H1', mf?.[2] || 'advanced');
       this.speed = 300;
-      if (/^ST-/.test(k) && this.net.by_id[k] !== undefined) { this.focusStation(k); this.setView(mf[3] ? mf[3].toLowerCase() : '3d'); } else this.setView('fleet');
+      if (/^ST-/.test(k) && this.net.by_id[k] !== undefined) { this.focusStation(k); this.setView(mf[3] ? mf[3].toLowerCase() : '3d'); }
+      else this.setView(mf?.[3] ? mf[3].toLowerCase() : 'fleet'); // #H1-hmi / #H1-3d: chi tiết ST-01
     } else { this.start('S1', 'basic', false); this.intro.show(0); }
     this._syncView();
     this.shell.refit();

@@ -1,8 +1,8 @@
 # 08 – Mạng lưới trạm bơm SYSTEM tại Hà Nội (màn "Mạng lưới")
 
 Bản web mở đầu bằng **màn Mạng lưới**: trung tâm giám sát của SYSTEM nhìn toàn bộ 16 trạm bơm tăng áp giả lập ở Hà Nội. Mỗi trạm
-là một mô phỏng đầy đủ (vật lý, cảm biến, edge gateway, lớp an toàn, đường truyền 4G) và cùng báo về **một máy chủ** – nên mọi
-con số trên màn này là điều mà trung tâm *thực sự* nhìn thấy, không phải số tô vẽ. Nhấp vào một trạm để xuống màn chi tiết 3D hoặc
+là một mô phỏng đầy đủ (vật lý, cảm biến, edge gateway, lớp an toàn, đường truyền 4G) và cùng báo về **một máy chủ** – nên các số đo
+trên màn này là bản đo xa mà trung tâm *thực sự* nhận được (đứng yên khi trạm mất mạng), không phải số tô vẽ. Nhấp vào một trạm để xuống màn chi tiết 3D hoặc
 HMI y như bản một trạm.
 
 > Toàn bộ vị trí, số hộ, sự cố là **dữ liệu giả lập để trình diễn** (khu vực chỉ mang tính minh họa, không phải điểm triển khai
@@ -83,6 +83,7 @@ Bản web ghép `hanoi.json` vào cấu hình bằng `web/js/sim/fleet.js` (`app
 ## Giả định và giới hạn
 
 - Các trạm cùng một kiểu (2 bơm 5,5 kW, bể ≈ 190 m³); khác nhau ở nhu cầu, độ cao điểm bất lợi và hạt giống ngẫu nhiên.
-- Trung tâm chỉ biết dữ liệu qua MQTT (chu kỳ 10 s); riêng áp điểm bất lợi do logger NB-IoT PL-301 đo độc lập với 4G của gateway.
+- Số đo lấy từ bản đo xa MQTT (chu kỳ 10 s). Hai thông tin đi đường khác: áp điểm bất lợi do logger NB-IoT PL-301 đo (độc lập với 4G
+  của gateway) và việc "mini PC ngừng" (router 4G còn sống nhưng không còn nhịp tim MQTT).
 - "Tiết kiệm điện" so với lịch cố định chạy song song; có thể âm ở trạm mà lịch cố định ngừng cấp nước do sự cố (tốn ít điện hơn nhưng mất dịch vụ).
 - Tiền điện chỉ để minh họa; mô hình chưa có giá điện theo giờ.

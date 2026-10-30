@@ -642,7 +642,7 @@ export class StationScene {
     plane(420, 7, M.asphalt, 0, 14.2, -0.011);
     // vạch kẻ đường và cây cối dùng InstancedMesh (mỗi loại một lần vẽ) để cảnh không tốn thêm nhiều lượt vẽ
     const mx = new THREE.Matrix4(), q0 = new THREE.Quaternion(), qy = new THREE.Quaternion(), qf = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)), one = new THREE.Vector3(1, 1, 1);
-    const inst = (geo, mat, n, shadow = false) => { const m = new THREE.InstancedMesh(geo, mat, n); m.castShadow = shadow; return add(m); };
+    const inst = (geo, mat, n, shadow = false) => { const m = new THREE.InstancedMesh(geo, mat, n); m.castShadow = shadow; m.frustumCulled = false; return add(m); }; // vài chục đối tượng nhỏ: khỏi tính hộp bao
     const dashes = []; for (let x = -60; x < 60; x += 4.5) dashes.push(x);
     const lanes = inst(new THREE.PlaneGeometry(2.2, 0.16), M.lane, dashes.length);
     dashes.forEach((x, i) => { mx.compose(V(x, -0.006, 14.2), qf, one); lanes.setMatrixAt(i, mx); });

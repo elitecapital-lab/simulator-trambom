@@ -9,7 +9,7 @@ import { modeChipTxt } from './panels.js';
 export const CHIP = { ok: 'good', sync: 'info', offline: 'off', warn: 'warning', crit: 'critical' };
 const statusChip = (r) => h('span', { class: 'chip ' + CHIP[r.status] }, FLEET_STATUS[r.status].label);
 const T = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
-const stBtn = (f, sid, label) => h('button', { class: 'linkbtn mono', type: 'button', title: 'Mở chi tiết ' + sid, onclick: () => f.app.openStation(sid) }, label ?? sid);
+const stBtn = (f, sid, label) => h('button', { class: 'linkbtn mono', type: 'button', title: 'Mở chi tiết ' + sid, onclick: (e) => { e.stopPropagation(); f.app.openStation(sid); } }, label ?? sid);
 
 // ============================== Danh sách trạm ==============================
 const COLS = [
@@ -40,7 +40,7 @@ export class ListScreen {
     c.line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline'); c.spark.append(c.line); c.sp.append(c.spark);
     tr.addEventListener('click', () => this.f.select(r.sid));
     tr.addEventListener('dblclick', () => this.f.app.openStation(r.sid));
-    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.f.app.openStation(r.sid); });
+    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === tr) this.f.app.openStation(r.sid); });
     c.tr = tr; return c;
   }
   update(f) {

@@ -30,15 +30,17 @@ export const FLEET_STATUS = {
 const NEAR_CRIT = new Set(['safe_stop', 'trip', 'level_stop']);
 
 /**
- * Tóm tắt một trạm cho màn Mạng lưới. Trung tâm chỉ biết những gì máy chủ nhận được (last = bản đo xa cuối cùng,
- * báo động tập trung); riêng trạng thái "mini PC ngừng" suy ra từ việc máy chủ mất nhịp tim như thực tế.
+ * Tóm tắt một trạm cho màn Mạng lưới. Số đo (áp, lưu lượng, mức, chất lượng, điện năng) là bản đo xa cuối cùng máy chủ nhận
+ * (last) nên đứng yên khi trạm mất kết nối. Trạng thái tổng hợp còn dùng thêm: báo động tập trung, áp điểm bất lợi của logger
+ * NB-IoT PL-301 (độc lập với 4G) và việc "mini PC ngừng" (router 4G còn sống nhưng không còn nhịp tim MQTT).
  */
 export function stationSummary(net, i) {
   const s = net.smart[i], f = net.fixed[i], srv = net.server, S0 = srv.stations[s.sid], last = S0.last || {};
   const alarms = [...srv.alarms.values()].filter((a) => a.station === s.sid);
   const sevN = (v) => alarms.filter((a) => a.sev === v).length;
   const g = s.gw, safety = g.safety;
-  const mode = S0.online ? (last.mode || 'a') : (s.gw_dead ? 'x' : 'b');
+  const dead = Boolean(s.gw_dead && !s.gw_dead.restarted);
+  const mode = S0.online ? (last.mode || 'a') : (dead ? 'x' : 'b');
   let status = 'ok';
   if (!S0.online) status = 'offline';
   else if (last.mode === 'c' || g.comms.state === 'resync') status = 'sync';
@@ -48,11 +50,11 @@ export function stationSummary(net, i) {
   const localWarn = hasActive.length > 0;
   if (S0.online && (NEAR_CRIT.has(safety.state) || critCodes.some((a) => a.code !== 'STATION_OFFLINE'))) status = 'crit';
   else if (S0.online && (localWarn || alarms.some((a) => a.code !== 'STATION_OFFLINE')) && status === 'ok') status = 'warn';
-  if (s.gw_dead && !s.gw_dead.restarted) status = S0.online ? 'crit' : 'offline';
+  if (dead) status = S0.online ? 'crit' : 'offline';
   const unacked = alarms.filter((a) => !a.acked && a.code !== 'STATION_OFFLINE').length;
   const k = s.kpi, fk = f ? f.kpi : null;
   return {
-    sid: s.sid, i, site: s.station.site, status, mode, online: S0.online, dead: Boolean(s.gw_dead && !s.gw_dead.restarted),
+    sid: s.sid, i, site: s.station.site, status, mode, online: S0.online, dead,
     p: last.p, q: last.q, level: last.level, kw: last.kw, kwh: last.kwh, cl: last.cl, ntu: last.ntu, ph: last.ph, t1: last.t1,
     p_crit: s.plant.p_crit, p_set: last.p_set, ctl: last.ctl || 'auto',
     alarms: alarms.length, unacked, crit: sevN('critical') + sevN('alarm'), buffer: g.comms.buf.length,
